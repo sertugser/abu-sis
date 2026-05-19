@@ -21,13 +21,10 @@ public sealed class SameCourseSectionEncoder : IConstraintEncoder
 
         // Plan 10 — Category toggle: admin H8'i "Tercihli" (Soft) yaparsa hard ban skip;
         // SameCourseSectionSoftEncoder devreye girer (penalty mod). Default Hard.
+        // (2026-05-19) Tamamen kapatma için Kısıtlar sayfasından H8'i Pasif yap — eski
+        // Schedule.AllowSameCourseSectionOverlap flag'i kaldırıldı (drift fix).
         var category = ctx.Request.ConstraintCategories.GetValueOrDefault(Code, "Hard");
         if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        // SystemConfig "Schedule.AllowSameCourseSectionOverlap" — admin "şubeler aynı slotta paralel
-        // açılabilsin" derse H8 tamamen kapalı (default false → kural aktif).
-        if (ctx.AllowSameCourseSectionOverlap)
             return;
 
         var byCourse = ctx.Request.Sections.GroupBy(s => s.CourseId);

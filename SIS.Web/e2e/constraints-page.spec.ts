@@ -189,44 +189,41 @@ test('Test 2 — Ağırlık değiştirme SystemConfigs.Schedule.H4Weight key UPS
 // ────────────────────────────────────────────────────────────────
 // TEST 3 — Algoritma Parametreleri sekmesi PUT atıyor, response 200, UI yansıtıyor
 // ────────────────────────────────────────────────────────────────
-test('Test 3 — Algoritma Parametreleri sekmesi config update SystemConfigs cache invalidate ediyor', async ({ page }) => {
-  const all = await fetchJson<SystemConfigDto[]>(token, '/admin/scheduling-algorithm-config');
-  // AmphiThresholdEnabled iyi bir hedef — bool, doğrulanabilir
-  const target = all.find(c => c.key === 'Schedule.AmphiThresholdEnabled');
-  expect(target, 'AmphiThresholdEnabled config bulunamadı').toBeTruthy();
-  const originalValue = target!.value;
-  const newValue = originalValue === 'true' ? 'false' : 'true';
+test('Test 3 — H6 dialog\'undan MaxLabBlockHours güncelleme H6.Parameters JSON\'a yansıyor', async ({ page }) => {
+  // 2026-05-19: Schedule.MaxLabBlockHours SystemConfigs'ten H6.Parameters JSON'a taşındı.
+  // Algoritma Parametreleri sekmesi ve paneli tamamen kaldırıldı. Yeni konum:
+  // Kısıtlar → H6 "Ders Bileşen Çakışması" → Düzenle → "Tek Lab Bloğu Maks. Saat" alanı.
+  const constraints = await fetchJson<ConstraintDto[]>(token, '/constraints');
+  const h6 = constraints.find(c => c.code === 'H6')!;
+  expect(h6.parameters).toBeTruthy();
+  const originalParams = JSON.parse(h6.parameters!) as Record<string, unknown>;
+  const originalValue = Number(originalParams.MaxLabBlockHours);
+  expect(originalValue).toBeGreaterThan(0);
+  // 2..6 aralığında alternatif değer
+  const newValue = originalValue >= 3 ? 2 : 3;
+  const newParams = { ...originalParams, MaxLabBlockHours: newValue };
 
-  await page.goto(CONSTRAINTS_ROUTE);
-  await page.getByRole('tab', { name: 'Algoritma Parametreleri' }).click();
-
-  const putRequests: string[] = [];
-  page.on('request', (req) => {
-    if (req.method() === 'PUT' && /\/admin\/scheduling-algorithm-config\/\d+/.test(req.url())) {
-      putRequests.push(req.url());
-    }
-  });
-
-  // Doğrudan API ile değişikliği yap, UI yansıttığını doğrula
-  const res = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
+  // API ile değişikliği yap → DB'ye yansımayı doğrula
+  await fetchJson(token, `/constraints/${h6.id}/parameters`, {
     method: 'PUT',
-    headers: authHeaders(token),
-    body: JSON.stringify({ value: newValue }),
+    body: JSON.stringify({ parameters: JSON.stringify(newParams) }),
   });
-  expect(res.status, 'PUT response 200 dönmeli').toBe(200);
+  const updated = (await fetchJson<ConstraintDto[]>(token, '/constraints')).find(c => c.code === 'H6')!;
+  const updatedParams = JSON.parse(updated.parameters!) as Record<string, unknown>;
+  expect(Number(updatedParams.MaxLabBlockHours)).toBe(newValue);
 
-  // UI'ı yenile (React Query 60s stale, manuel refetch için sayfayı reload)
-  await page.reload();
-  await page.getByRole('tab', { name: 'Algoritma Parametreleri' }).click();
-
-  // Yeni değer "Evet"/"Hayır" badge'ı olarak görünmeli
-  const expectedBadge = newValue === 'true' ? 'Evet' : 'Hayır';
-  // description ile arama daha güvenilir olabilir; .first() ile genişlet
-  await expect(page.locator('table').getByText(expectedBadge).first()).toBeVisible({ timeout: 10_000 });
+  // UI: H6 dialog'unda yeni değer görünmeli
+  await page.goto(CONSTRAINTS_ROUTE);
+  const h6Row = page.locator('tr', { hasText: h6.name });
+  await h6Row.getByRole('button', { name: 'Düzenle' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('text=Tek Lab Bloğu Maks. Saat')).toBeVisible({ timeout: 5_000 });
+  await expect(dialog.locator(`input[value="${newValue}"]`).first()).toBeVisible();
 
   // CLEANUP
-  await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: originalValue }),
+  await fetchJson(token, `/constraints/${h6.id}/parameters`, {
+    method: 'PUT',
+    body: JSON.stringify({ parameters: JSON.stringify(originalParams) }),
   });
 });
 
@@ -391,9 +388,10 @@ test('Test 7 — Atıl scheduling config keyleri DB\'de yok', async () => {
   expect(keys, 'Schedule.SplittableBlockTypes kaldırılmalı').not.toContain('Schedule.SplittableBlockTypes');
   // S20 Soft → Hard dönüşümüyle ceza puanı atıllaştı, sayfadan kaldırıldı
   expect(keys, 'SoftConstraint.S20.PenaltyPerPair kaldırılmalı (S20 Hard, ceza puanı anlamsız)').not.toContain('SoftConstraint.S20.PenaltyPerPair');
-  // Diğer satırlar yerinde olmalı + yeni MaxLabBlockHours eklendi
-  expect(keys).toContain('Schedule.CurriculumConflictMode');
-  expect(keys).toContain('Schedule.MaxLabBlockHours');
+  // 2026-05-19: Schedule.CurriculumConflictMode SystemConfigs'ten H5.Parameters'a taşındı
+  expect(keys, 'Schedule.CurriculumConflictMode SystemConfigs\'ten kaldırılmalı (H5.Parameters tek otorite)').not.toContain('Schedule.CurriculumConflictMode');
+  // 2026-05-19: Schedule.MaxLabBlockHours SystemConfigs'ten H6.Parameters'a taşındı
+  expect(keys, 'Schedule.MaxLabBlockHours SystemConfigs\'ten kaldırılmalı (H6.Parameters tek otorite)').not.toContain('Schedule.MaxLabBlockHours');
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -401,37 +399,18 @@ test('Test 7 — Atıl scheduling config keyleri DB\'de yok', async () => {
 //   Düzeltme: CpSatSolverEngine bu key'i okuyordu (default 2 fallback) ama DB'de yoktu.
 //   Şimdi seed + UI'da düzenlenebilir, sayı kutusu min/max ile.
 // ────────────────────────────────────────────────────────────────
-test('Test 9 — Schedule.MaxLabBlockHours DB\'de var, validasyonu çalışıyor', async () => {
-  const configs = await fetchJson<Array<{ id: number; key: string; value: string }>>(token, '/admin/scheduling-algorithm-config');
-  const target = configs.find(c => c.key === 'Schedule.MaxLabBlockHours');
-  expect(target, 'MaxLabBlockHours config bulunmalı').toBeTruthy();
-  const originalValue = target!.value;
-
-  // Limits endpoint 2-6 aralığı dönmeli
-  const limits = await fetchJson<Record<string, { min: number; max: number }>>(token, '/admin/scheduling-algorithm-config/limits');
-  expect(limits['Schedule.MaxLabBlockHours']).toEqual({ min: 2, max: 6 });
-
-  // Min/max ihlali reddedilmeli
-  const tooLow = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '1' }),
-  });
-  expect(tooLow.status, '1 reddedilmeli (min 2)').toBe(400);
-
-  const tooHigh = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '7' }),
-  });
-  expect(tooHigh.status, '7 reddedilmeli (max 6)').toBe(400);
-
-  // Aralık içi kabul edilmeli
-  const valid = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: '3' }),
-  });
-  expect(valid.status, '3 kabul edilmeli').toBe(200);
-
-  // CLEANUP
-  await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${target!.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: originalValue }),
-  });
+test('Test 9 — MaxLabBlockHours H6.Parameters JSON\'unda var, default 2', async () => {
+  // 2026-05-19: SystemConfigs'ten H6.Parameters'a taşındı. API endpoint validasyonu
+  // ConstraintController.UpdateParameters tarafına geçti (constraint Parameters JSON).
+  const constraints = await fetchJson<ConstraintDto[]>(token, '/constraints');
+  const h6 = constraints.find(c => c.code === 'H6');
+  expect(h6, 'H6 bulunmalı').toBeTruthy();
+  expect(h6!.parameters, 'H6.Parameters set olmalı').toBeTruthy();
+  const params = JSON.parse(h6!.parameters!) as Record<string, unknown>;
+  expect(params.MaxLabBlockHours, 'MaxLabBlockHours key olmalı').toEqual(expect.any(Number));
+  const value = Number(params.MaxLabBlockHours);
+  expect(value).toBeGreaterThanOrEqual(2);
+  expect(value).toBeLessThanOrEqual(6);
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -439,57 +418,49 @@ test('Test 9 — Schedule.MaxLabBlockHours DB\'de var, validasyonu çalışıyor
 //   Düzeltme: SchedulingAlgorithmConfigController.EnumOptions ile izinli değer kontrolü
 //   + GET /enum-options endpoint frontend dropdown render'ı için seçenek listesi döner.
 // ────────────────────────────────────────────────────────────────
-test('Test 8 — CurriculumConflictMode için enum validasyonu ve UI dropdown davranışı', async ({ page }) => {
-  // Backend: enum-options endpoint 3 seçenek dönüyor (cohort, curriculum, enrollment-disabled)
-  const enumOptions = await fetchJson<Record<string, Array<{ value: string; label: string; disabled: boolean }>>>(
-    token, '/admin/scheduling-algorithm-config/enum-options');
-  const modeOptions = enumOptions['Schedule.CurriculumConflictMode'];
-  expect(modeOptions, 'CurriculumConflictMode enum options gelmeli').toBeTruthy();
-  expect(modeOptions.map(o => o.value)).toEqual(['cohort', 'curriculum', 'enrollment']);
-  expect(modeOptions.find(o => o.value === 'enrollment')?.disabled, 'enrollment disabled olmalı').toBe(true);
-  expect(modeOptions.find(o => o.value === 'cohort')?.disabled).toBe(false);
+test('Test 8 — CurriculumConflictMode H5 dialog dropdown ile yönetilebilmeli', async ({ page }) => {
+  // 2026-05-19: CurriculumConflictMode SystemConfigs'ten H5.Parameters JSON'a taşındı.
+  // Algoritma Parametreleri sekmesi de kaldırıldı. Yeni konum: Kısıtlar → H5 → Düzenle dialog.
 
-  // Backend: geçersiz değer → 400
-  const configs = await fetchJson<Array<{ id: number; key: string; value: string }>>(token, '/admin/scheduling-algorithm-config');
-  const modeConfig = configs.find(c => c.key === 'Schedule.CurriculumConflictMode')!;
-  const originalValue = modeConfig.value;
+  // H5 ConstraintDefinition.Parameters JSON'unda CurriculumConflictMode key'i olmalı.
+  const constraints = await fetchJson<ConstraintDto[]>(token, '/constraints');
+  const h5 = constraints.find(c => c.code === 'H5')!;
+  expect(h5, 'H5 bulunamadı').toBeTruthy();
+  const h5Params = JSON.parse(h5.parameters!) as Record<string, unknown>;
+  expect(h5Params.CurriculumConflictMode, 'H5.Parameters\'ta CurriculumConflictMode olmalı').toEqual(expect.any(String));
+  const originalMode = h5Params.CurriculumConflictMode as string;
 
-  const invalidRes = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: 'asdf' }),
-  });
-  expect(invalidRes.status, 'Geçersiz değer reddedilmeli').toBe(400);
-
-  const disabledRes = await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
-    method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: 'enrollment' }),
-  });
-  expect(disabledRes.status, 'Disabled enrollment reddedilmeli').toBe(400);
-
-  // UI: dropdown render edildi mi (cohort + curriculum + enrollment görünür, enrollment disabled)
+  // UI: H5 dialog'unda dropdown 3 seçenekle render edilmeli
   await page.goto(CONSTRAINTS_ROUTE);
-  await page.getByRole('tab', { name: 'Algoritma Parametreleri' }).click();
-  // CurriculumConflictMode satırını "Cohort (önerilen)" label'ından bul (DataType=string + enum
-  // olduğu için label render ediliyor; description metni güncellenebilir, label stabil).
-  const modeRow = page.locator('tr', { hasText: 'Cohort (önerilen)' });
-  await expect(modeRow).toBeVisible({ timeout: 10_000 });
-  await modeRow.getByRole('button', { name: 'Düzenle' }).click();
+  await expect(page.getByRole('tab', { name: 'Kısıtlar' })).toBeVisible({ timeout: 15_000 });
+
+  const h5Row = page.locator('tr', { hasText: h5.name });
+  await expect(h5Row).toBeVisible({ timeout: 10_000 });
+  await h5Row.getByRole('button', { name: 'Düzenle' }).click();
 
   const dialog = page.getByRole('dialog');
-  // Button locator (dialog içinde 3 seçenek button olarak render edilir)
-  await expect(dialog.getByRole('button', { name: /Cohort \(önerilen\)/ })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: /^Curriculum/ })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: /Enrollment \(desteklenmiyor\)/ })).toBeVisible();
-  // Disabled olan button → disabled attribute
-  await expect(dialog.getByRole('button', { name: /Enrollment \(desteklenmiyor\)/ })).toBeDisabled();
+  await expect(dialog).toBeVisible();
 
-  // Kapat (değer değiştirmeden)
-  await dialog.getByRole('button', { name: 'İptal' }).click();
+  // Çakışma Modu label + dropdown render edildi
+  await expect(dialog.locator('text=Çakışma Modu')).toBeVisible();
 
-  // CLEANUP: orijinal değeri geri yükle (olmazsa bile aynı kalmış olmalı)
-  if (originalValue !== modeConfig.value) {
-    await fetch(`${API_BASE}/admin/scheduling-algorithm-config/${modeConfig.id}`, {
-      method: 'PUT', headers: authHeaders(token), body: JSON.stringify({ value: originalValue }),
-    });
+  // Mevcut seçili değer ("Cohort (önerilen)") dropdown trigger'ında görünmeli.
+  // Eğer dropdown render edilmemişse (eski "text input" bug'ı), value=cohort kelimesi
+  // ham olarak çıkardı. Burada label görünüyorsa Select component'i doğru çalışıyor demektir.
+  if (originalMode === 'cohort') {
+    await expect(dialog.locator('text=Cohort (önerilen)')).toBeVisible({ timeout: 5_000 });
+  } else if (originalMode === 'curriculum') {
+    await expect(dialog.locator('text=Müfredat Bazlı')).toBeVisible({ timeout: 5_000 });
   }
+
+  // Kapat — değişiklik yok (footer "Kapat" butonu; aynı aria-name'li X-close de var)
+  await dialog.getByRole('button', { name: 'Kapat' }).first().click();
+
+  // Sanity: Mod aynı kaldı
+  const after = await fetchJson<ConstraintDto[]>(token, '/constraints');
+  const h5After = after.find(c => c.code === 'H5')!;
+  const afterMode = (JSON.parse(h5After.parameters!) as Record<string, unknown>).CurriculumConflictMode;
+  expect(afterMode).toBe(originalMode);
 });
 
 // ────────────────────────────────────────────────────────────────

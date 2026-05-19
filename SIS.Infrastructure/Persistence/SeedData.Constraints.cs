@@ -28,7 +28,9 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"AmphiThreshold": 100}""",
+                // 2026-05-19: AmphiThresholdEnabled + ClassroomTypeRequirementEnabled alt-toggle'lar
+                // SystemConfigs'ten H4.Parameters JSON'a taşındı (tek otorite = Kısıtlar sayfası).
+                Parameters = """{"AmphiThreshold": 100, "AmphiThresholdEnabled": false, "ClassroomTypeRequirementEnabled": false}""",
                 SortOrder = 2
             },
             new()
@@ -69,6 +71,8 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                // 2026-05-19: CurriculumConflictMode SystemConfigs'ten H5.Parameters JSON'a taşındı.
+                Parameters = """{"CurriculumConflictMode": "cohort", "EnrollmentConflictHardThreshold": 1}""",
                 SortOrder = 6
             },
             new()
@@ -79,6 +83,8 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                // 2026-05-19: MaxLabBlockHours SystemConfigs'ten H6.Parameters JSON'a taşındı.
+                Parameters = """{"MaxLabBlockHours": 2}""",
                 SortOrder = 7
             },
             new()
@@ -146,7 +152,7 @@ public static partial class SeedData
             {
                 Code = "H13",
                 Name = "Öğle Arası Koruması",
-                Description = "Öğle arası saatlerine ders atanmasını engeller (hard mod aktifken).",
+                Description = "Öğle arası saatlerine ders atanmasını engeller.",
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,

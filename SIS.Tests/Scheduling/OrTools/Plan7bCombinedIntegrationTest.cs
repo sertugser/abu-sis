@@ -72,6 +72,8 @@ public class Plan7bCombinedIntegrationTest
             ConstraintFlags = new Dictionary<string, bool>
                 { ["H1"] = true, ["H4"] = true, ["H17"] = true },
             AmphiThreshold = 100,
+            AmphiThresholdEnabled = true,             // 2026-05-19: H4.Parameters yerine direkt request
+            ClassroomTypeRequirementEnabled = true,   // 2026-05-19
             MaxLabBlockHours = 2
         };
 

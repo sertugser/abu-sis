@@ -62,7 +62,6 @@ internal static class TestRuleHelpers
     {
         var cfg = new SchedulingConstraintConfig
         {
-            LunchBreakIsHard = false,
             LunchBreakStart = new TimeOnly(11, 40),
             LunchBreakEnd = new TimeOnly(12, 20),
             MaxConsecutiveHours = 4,

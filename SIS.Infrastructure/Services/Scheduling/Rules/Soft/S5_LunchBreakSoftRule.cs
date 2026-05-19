@@ -3,19 +3,10 @@ using SIS.Application.Scheduling.Rules;
 namespace SIS.Infrastructure.Services.Scheduling.Rules.Soft;
 
 /// <summary>
-/// Plan 12 Faz 9 — S5 Öğle Arası Tercihi (V1 <c>LunchBreakSoftEvaluator</c> portu).
-///
-/// V1 davranışı: <c>config.LunchBreakIsHard</c> true ise skip; aksi halde her
-/// lunch-overlap block için sabit 8 puan.
-///
-/// Code drift fix (2026-05-15): Plan 10'da S5 ConstraintDefinition silindi,
-/// H13 Category toggle tek otorite. Code "S5" → "H13":
-///   • Admin H13 Category="Hard" → DefaultCategory Soft olsa da ResolveCategory
-///     DB'den Hard döner → H13_LunchBreakRule (hard) çalışır, bu predicate skip.
-///   • Admin H13 Category="Soft" → ResolveCategory Soft → bu predicate çalışır,
-///     hard rule skip.
-/// V1 pinning baseline davranışı (S5 her zaman çalışır) Plan 10 mimari spec'inin
-/// dışındaydı — Faz 9'da düzeltildi.
+/// H13 Öğle Arası Tercihi (Soft). Her lunch-overlap block için 8 puan penalty.
+/// Hard/Soft moda geçişi RuleEngine ResolveCategory yönetir:
+/// <c>ConstraintDefinitions["H13"].Category</c> Soft ise bu predicate çağrılır; Hard ise
+/// <see cref="Hard.H13_LunchBreakRule"/> çağrılır. Class adı tarihsel sebeple "S5"; Code "H13".
 /// </summary>
 public sealed class S5_LunchBreakSoftRule : ISoftRulePredicate
 {
@@ -30,7 +21,6 @@ public sealed class S5_LunchBreakSoftRule : ISoftRulePredicate
         var config = ctx.Config;
 
         if (!config.S5Enabled || c.Blocks.Count == 0) return SoftRuleResult.Zero;
-        if (config.LunchBreakIsHard) return SoftRuleResult.Zero;
 
         var lunchStart = config.LunchBreakStart != default ? config.LunchBreakStart : new TimeOnly(11, 40);
         var lunchEnd = config.LunchBreakEnd != default ? config.LunchBreakEnd : new TimeOnly(12, 20);

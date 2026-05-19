@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AlertCircle, Pencil } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToast } from '@/components/ui/global-toast';
 import {
@@ -27,7 +29,6 @@ import {
 import { useUpdateConstraintParameters } from '../hooks/useConstraints';
 import { Input } from '@/components/ui/input';
 import DistributionConstraintPanel from '../components/constraint/DistributionConstraintPanel';
-import AlgorithmParametersPanel from '../components/constraint/AlgorithmParametersPanel';
 import ApprovalPanel from '../components/constraint/ApprovalPanel';
 import type { ConstraintDefinitionDto } from '../types/constraint';
 
@@ -347,22 +348,65 @@ function ConstraintEditDialog({
           {schema.length > 0 && (
             <div className="space-y-2 border-t pt-3">
               <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parametreler</label>
-              {schema.map(field => (
-                <div key={field.key} className="space-y-1">
-                  <label className="text-xs text-muted-foreground">{field.label}</label>
-                  <Input
-                    type={field.type === 'number' ? 'number' : field.type === 'time' ? 'time' : 'text'}
-                    value={paramDraft[field.key] ?? ''}
-                    min={field.min}
-                    max={field.max}
-                    onChange={(e) => setParamDraft(d => ({ ...d, [field.key]: e.target.value }))}
-                    disabled={!canEdit}
-                  />
-                  {field.suffix && (
-                    <p className="text-[10px] text-muted-foreground">Birim: {field.suffix}</p>
-                  )}
-                </div>
-              ))}
+              {schema.map(field => {
+                const currentValue = paramDraft[field.key] ?? '';
+                // boolean → Switch (Evet/Hayır toggle)
+                if (field.type === 'boolean') {
+                  const checked = currentValue === 'true';
+                  return (
+                    <div key={field.key} className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{field.label}</label>
+                      <div className="flex items-center gap-2 h-8">
+                        <Switch
+                          checked={checked}
+                          onCheckedChange={(c) => setParamDraft(d => ({ ...d, [field.key]: c ? 'true' : 'false' }))}
+                          disabled={!canEdit}
+                        />
+                        <span className="text-xs text-muted-foreground">{checked ? 'Evet' : 'Hayır'}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                // select → Dropdown
+                if (field.type === 'select' && field.options) {
+                  return (
+                    <div key={field.key} className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{field.label}</label>
+                      <Select
+                        value={currentValue}
+                        onValueChange={(v) => setParamDraft(d => ({ ...d, [field.key]: v }))}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                }
+                // number / time / default → Input
+                return (
+                  <div key={field.key} className="space-y-1">
+                    <label className="text-xs text-muted-foreground">{field.label}</label>
+                    <Input
+                      type={field.type === 'number' ? 'number' : field.type === 'time' ? 'time' : 'text'}
+                      value={currentValue}
+                      min={field.min}
+                      max={field.max}
+                      onChange={(e) => setParamDraft(d => ({ ...d, [field.key]: e.target.value }))}
+                      disabled={!canEdit}
+                    />
+                    {field.suffix && (
+                      <p className="text-[10px] text-muted-foreground">Birim: {field.suffix}</p>
+                    )}
+                  </div>
+                );
+              })}
               <Button
                 size="sm"
                 onClick={saveParameters}
@@ -401,7 +445,7 @@ export default function ConstraintManagementPage() {
   const canEdit = hasPermission('menu.ders-programi-kisitlamalari.edit');
   const canToggle = hasPermission('menu.ders-programi-kisitlamalari.toggle');
 
-  const [activeTab, setActiveTab] = useState<'constraints' | 'algorithm' | 'pairing'>('constraints');
+  const [activeTab, setActiveTab] = useState<'constraints' | 'pairing'>('constraints');
   const [view, setView] = useState<'all' | 'hard' | 'soft'>('all');
 
   // Default to the active term, fallback to latest
@@ -455,7 +499,6 @@ export default function ConstraintManagementPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <TabsList className="shrink-0">
             <TabsTrigger value="constraints">Kısıtlar</TabsTrigger>
-            {canEdit && <TabsTrigger value="algorithm">Algoritma Parametreleri</TabsTrigger>}
             {canEdit && <TabsTrigger value="pairing">Ders Eşleştirme Kuralları</TabsTrigger>}
           </TabsList>
 
@@ -536,13 +579,11 @@ export default function ConstraintManagementPage() {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
 
-        {canEdit && (
-          <TabsContent value="algorithm" className="mt-3">
-            <AlgorithmParametersPanel />
-          </TabsContent>
-        )}
+          {/* 2026-05-19: Algoritma Parametreleri sekmesi ve içeriği tamamen kaldırıldı.
+              Lab Blok Saati H6.Parameters JSON'a (Ders Bileşen Çakışması kuralı), Çakışma Modu
+              H5.Parameters'a taşındı. Sayfa artık sadece Kısıtlar + Ders Eşleştirme Kuralları. */}
+        </TabsContent>
 
         {canEdit && (
           <TabsContent value="pairing" className="mt-3">

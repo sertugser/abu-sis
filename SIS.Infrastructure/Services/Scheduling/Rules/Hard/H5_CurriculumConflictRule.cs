@@ -25,7 +25,7 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
         var snapshot = ctx.Snapshot;
         var violations = new List<RuleViolation>();
 
-        // Enrollment mode
+        // Enrollment mode — gerçek kayıt verisi, her pair direkt etkilenir, alternatif check yok.
         if (snapshot.EnrollmentConflicts != null)
         {
             foreach (var existing in snapshot.Sections)
@@ -47,7 +47,9 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
             return violations;
         }
 
-        // Cohort mode
+        // Cohort mode — pair'ler CohortBuilder modulo ile. Alternatif kombinasyon check'i:
+        // course pair (X, Y) için en az bir (xSec, ySec) çakışmıyorsa öğrenci için yol var
+        // → uyarı yutulur. Tüm N×M kombinasyon çakışıyorsa gerçek darboğaz, uyarı verilir.
         if (snapshot.CohortConflictPairs.Count > 0)
         {
             foreach (var existing in snapshot.Sections)
@@ -60,6 +62,8 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
                     : (existing.SectionId, c.SectionId);
                 if (!snapshot.CohortConflictPairs.Contains(pair)) continue;
 
+                if (HasAlternativePairing(c, existing, snapshot)) continue;
+
                 AddOverlapViolations(c, existing, "CurriculumConflict",
                     (day, ovS, ovE) => BuildMessage(
                         "Cohort",
@@ -69,13 +73,15 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
             return violations;
         }
 
-        // Curriculum mode (default)
+        // Curriculum mode (default) — aynı alternatif mantığı.
         foreach (var existing in snapshot.Sections)
         {
             if (existing.SectionId == c.SectionId) continue;
             if (existing.CourseId == c.CourseId) continue;
 
             if (!ShareCurriculumDepartment(c, existing)) continue;
+
+            if (HasAlternativePairing(c, existing, snapshot)) continue;
 
             AddOverlapViolations(c, existing, "CurriculumConflict",
                 (day, ovS, ovE) => BuildMessage(
@@ -85,6 +91,39 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// Course pair (X = c.CourseId, Y = existing.CourseId) için öğrencinin alabileceği
+    /// en az bir (xSec, ySec) kombinasyonu çakışmıyorsa true döner. Bu sayede modulo pair
+    /// (sec_1↔sec_1) çakışıyor olsa bile, başka section'lar arası uyumlu bir kombinasyon
+    /// varsa uyarı verilmez (kullanıcı beklentisi: "en az 1 alternatif → sorun değil").
+    /// Atanmamış (Blocks boş) section'lar dikkate alınmaz.
+    /// </summary>
+    private static bool HasAlternativePairing(RuntimeCandidate c, RuntimeCandidate existing, RuntimeSnapshot snapshot)
+    {
+        var sectionsX = snapshot.Sections.Where(s => s.CourseId == c.CourseId && s.Blocks.Count > 0).ToList();
+        var sectionsY = snapshot.Sections.Where(s => s.CourseId == existing.CourseId && s.Blocks.Count > 0).ToList();
+        if (sectionsX.Count == 0 || sectionsY.Count == 0) return false;
+
+        foreach (var x in sectionsX)
+        {
+            foreach (var y in sectionsY)
+            {
+                if (x.SectionId == y.SectionId) continue;
+                if (!HasBlockOverlap(x.Blocks, y.Blocks)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasBlockOverlap(IReadOnlyList<RuntimeBlock> a, IReadOnlyList<RuntimeBlock> b)
+    {
+        foreach (var x in a)
+            foreach (var y in b)
+                if (x.Day == y.Day && x.StartTime < y.EndTime && x.EndTime > y.StartTime)
+                    return true;
+        return false;
     }
 
     private static bool ShareCurriculumDepartment(RuntimeCandidate a, RuntimeCandidate b)

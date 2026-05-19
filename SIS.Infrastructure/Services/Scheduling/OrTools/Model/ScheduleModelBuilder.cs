@@ -72,7 +72,6 @@ public sealed class ScheduleModelBuilder
             AmphiThreshold = request.AmphiThreshold,                                  // Plan 7b — read from SolverRequest
             AmphiThresholdEnabled = request.AmphiThresholdEnabled,                    // Plan 9 Issue 1 — flag-gated rule
             ClassroomTypeRequirementEnabled = request.ClassroomTypeRequirementEnabled,// Plan 9 Issue 6 — flag-gated rule
-            AllowSameCourseSectionOverlap = request.AllowSameCourseSectionOverlap     // Plan 10 — flag-gated H8 rule
         };
 
         // 2-3) Encoder'lar — hard önce, soft sonra; her grupta Code'a göre alfabetik

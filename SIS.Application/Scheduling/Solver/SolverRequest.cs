@@ -80,14 +80,6 @@ public sealed record SolverRequest
     public bool ClassroomTypeRequirementEnabled { get; init; } = false;
 
     /// <summary>
-    /// SystemConfig "Schedule.AllowSameCourseSectionOverlap" (default false). False ise H8 (aynı dersin
-    /// farklı şubeleri çakışmaz) kuralı uygulanır — öğrenci her şubeden birini seçeceği için tüm
-    /// şubelerin saatleri farklı olmalı. True ise admin "şubeler aynı slotta paralel açılsın" diyebilir
-    /// (örn. talep yüksek dersler için iki paralel şube). H8 encoder + V1 evaluator gate'lenir.
-    /// </summary>
-    public bool AllowSameCourseSectionOverlap { get; init; } = false;
-
-    /// <summary>
     /// Plan 7b — SystemConfig "Schedule.MaxLabBlockHours" (default 2). LabHours > value
     /// olan section'lar N intervala bölünür ve farklı günlere yerleştirilir (v1 paritesi).
     /// CpSatSolverEngine yükler.

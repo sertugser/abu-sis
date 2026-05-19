@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace SIS.Application.Scheduling.Constraints;
 
 /// <summary>
@@ -11,14 +13,12 @@ namespace SIS.Application.Scheduling.Constraints;
 public sealed class SchedulingConstraintConfig
 {
     // Hard constraint params
-    public bool LunchBreakIsHard { get; set; }
     public TimeOnly LunchBreakStart { get; set; }
     public TimeOnly LunchBreakEnd { get; set; }
     public int MaxConsecutiveHours { get; set; }
     public int BreakDurationMinutes { get; set; }
     public int AmphiThreshold { get; set; }
     public int TheoryLabSplitThreshold { get; set; }
-    public bool AllowSameCourseSectionOverlap { get; set; }
 
     /// <summary>
     /// Plan 11 Faz 1.2 — Hoca günlük max ders saati. V2 DailyLoadEncoder ile ortak kaynak.
@@ -34,6 +34,21 @@ public sealed class SchedulingConstraintConfig
     /// False iken Capacity ≥ AmphiThreshold zorunluluğu kaldırılır (V2'de zaten flag-gated).
     /// </summary>
     public bool AmphiThresholdEnabled { get; set; } = false;
+
+    /// <summary>
+    /// H4 alt-kural 4 flag'i — Course.RequiredTheoryClassroomType / RequiredLabClassroomType
+    /// override'ı validator tarafında devreye alır. V2 ClassroomTypeEncoder ile parite
+    /// (2026-05-19'a kadar yalnızca solver okuyordu, validator boştu).
+    /// SystemConfig: <c>Schedule.ClassroomTypeRequirementEnabled</c> (default false).
+    /// </summary>
+    public bool ClassroomTypeRequirementEnabled { get; set; } = false;
+
+    /// <summary>
+    /// H6 alt-parametre — Tek bir lab bloğunun maksimum saat sayısı (2026-05-19'da
+    /// SystemConfigs'ten H6.Parameters JSON'a taşındı; eskiden Schedule.MaxLabBlockHours
+    /// SystemConfig key'i, şimdi H6 dialog'unda yönetilir). Default 2.
+    /// </summary>
+    public int MaxLabBlockHours { get; set; } = 2;
 
     // Soft constraint params
     public bool S1Enabled { get; set; }
@@ -78,9 +93,7 @@ public sealed class SchedulingConstraintConfig
         return new SchedulingConstraintConfig
         {
             // Hard — sadece global mod ayarları (kısıt kartında yer almayan)
-            LunchBreakIsHard = GetBool(config, "Schedule.LunchBreak.IsHard", false),
             BreakDurationMinutes = GetInt(config, "Schedule.BreakDurationMinutes", 5),
-            AllowSameCourseSectionOverlap = GetBool(config, "Schedule.AllowSameCourseSectionOverlap", false),
 
             // Default değerler (kısıt kartı Parameters JSON'u override eder)
             LunchBreakStart = new TimeOnly(11, 40),
@@ -89,9 +102,10 @@ public sealed class SchedulingConstraintConfig
             AmphiThreshold = 100,
             TheoryLabSplitThreshold = 4,
 
-            // Plan 11 Faz 1.2 + 1.4 — V2 encoder ile parite kaynaklar
+            // Plan 11 Faz 1.2 — V2 encoder ile parite kaynaklar
             MaxDailyHours = GetInt(config, "Schedule.MaxDailyHoursPerInstructor", 9),
-            AmphiThresholdEnabled = GetBool(config, "Schedule.AmphiThresholdEnabled", false),
+            // 2026-05-19: AmphiThresholdEnabled + ClassroomTypeRequirementEnabled artık
+            // H4.Parameters JSON'undan geliyor; ApplyConstraintStateOverrides(state) ile setlensin.
 
             // Soft — aç/kapat tek otorite ConstraintDefinition.IsEnabled (state.IsDisabled).
             // Evaluator-içi defansif S*Enabled bayrakları daima true.
@@ -112,9 +126,83 @@ public sealed class SchedulingConstraintConfig
             S12MaxImbalancePercent = GetInt(config, "SoftConstraint.S12.MaxImbalancePercent", 20),
             S20Enabled = true,
             S20PenaltyPerPair = GetDouble(config, "SoftConstraint.S20.PenaltyPerPair", 5.0),
-            CurriculumConflictMode = config.TryGetValue("Schedule.CurriculumConflictMode", out var cm) ? cm : "curriculum",
-            EnrollmentConflictHardThreshold = GetInt(config, "Schedule.EnrollmentConflictHardThreshold", 1),
+            // 2026-05-19: CurriculumConflictMode + EnrollmentConflictHardThreshold artık
+            // H5.Parameters JSON'undan ApplyConstraintStateOverrides ile setlenir.
+            CurriculumConflictMode = "curriculum",
+            EnrollmentConflictHardThreshold = 1,
         };
+    }
+
+    /// <summary>
+    /// ConstraintState.Definitions Parameters JSON'larından bool/int override'ları okur.
+    /// 2026-05-19 — H4 alt-toggle'ları (AmphiThresholdEnabled, ClassroomTypeRequirementEnabled)
+    /// SystemConfigs yerine H4 Parameters JSON'unda tutulduğundan FromSystemConfig sonrası
+    /// state ile zenginleştirme: caller hem rawConfig'i (SystemConfig dict) hem state'i bilir,
+    /// burada per-constraint Parameters JSON parse edilip ilgili field'lar üzerine yazılır.
+    /// </summary>
+    public void ApplyConstraintStateOverrides(ConstraintState? state)
+    {
+        if (state == null) return;
+
+        // H4 — Derslik Tipi Uyumu
+        if (state.Definitions.TryGetValue("H4", out var h4) && !string.IsNullOrWhiteSpace(h4.Parameters))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(h4.Parameters!);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("AmphiThresholdEnabled", out var ate) && ate.ValueKind == JsonValueKind.True)
+                    AmphiThresholdEnabled = true;
+                else if (root.TryGetProperty("AmphiThresholdEnabled", out ate) && ate.ValueKind == JsonValueKind.False)
+                    AmphiThresholdEnabled = false;
+
+                if (root.TryGetProperty("ClassroomTypeRequirementEnabled", out var ctr) && ctr.ValueKind == JsonValueKind.True)
+                    ClassroomTypeRequirementEnabled = true;
+                else if (root.TryGetProperty("ClassroomTypeRequirementEnabled", out ctr) && ctr.ValueKind == JsonValueKind.False)
+                    ClassroomTypeRequirementEnabled = false;
+
+                if (root.TryGetProperty("AmphiThreshold", out var thr) && thr.ValueKind == JsonValueKind.Number && thr.TryGetInt32(out var thrInt))
+                    AmphiThreshold = thrInt;
+            }
+            catch (JsonException) { /* malformed JSON → default'ları koru, silent skip */ }
+        }
+
+        // H5 — Müfredat Çakışması: CurriculumConflictMode H5 Parameters JSON'undan
+        // (2026-05-19 dual-channel temizliği). Eski SystemConfigs."Schedule.CurriculumConflictMode"
+        // yolu kaldırıldı.
+        if (state.Definitions.TryGetValue("H5", out var h5) && !string.IsNullOrWhiteSpace(h5.Parameters))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(h5.Parameters!);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("CurriculumConflictMode", out var mode) && mode.ValueKind == JsonValueKind.String)
+                {
+                    var modeStr = mode.GetString();
+                    if (!string.IsNullOrWhiteSpace(modeStr))
+                        CurriculumConflictMode = modeStr;
+                }
+                if (root.TryGetProperty("EnrollmentConflictHardThreshold", out var thr) && thr.ValueKind == JsonValueKind.Number && thr.TryGetInt32(out var thrInt))
+                    EnrollmentConflictHardThreshold = thrInt;
+            }
+            catch (JsonException) { /* silent skip */ }
+        }
+
+        // H6 — Ders Bileşen Çakışması: MaxLabBlockHours (2026-05-19 SystemConfigs → H6.Parameters).
+        if (state.Definitions.TryGetValue("H6", out var h6) && !string.IsNullOrWhiteSpace(h6.Parameters))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(h6.Parameters!);
+                if (doc.RootElement.TryGetProperty("MaxLabBlockHours", out var max)
+                    && max.ValueKind == JsonValueKind.Number
+                    && max.TryGetInt32(out var maxInt) && maxInt > 0)
+                {
+                    MaxLabBlockHours = maxInt;
+                }
+            }
+            catch (JsonException) { /* silent skip */ }
+        }
     }
 
     private static bool GetBool(IReadOnlyDictionary<string, string> config, string key, bool defaultValue) =>

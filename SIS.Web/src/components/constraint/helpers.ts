@@ -124,18 +124,21 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H3': [],
   'H4': [
     { key: 'AmphiThreshold', label: 'Amfi Eşik Kontenjanı', type: 'number', min: 50, max: 500 },
+    { key: 'AmphiThresholdEnabled', label: 'Kalabalık derslerde amfi zorunluluğu', type: 'boolean' },
+    { key: 'ClassroomTypeRequirementEnabled', label: 'Ders kataloğundaki derslik tipi zorunluluğu', type: 'boolean' },
   ],
   'H5': [
     { key: 'CurriculumConflictMode', label: 'Çakışma Modu', type: 'select', options: [
+      { value: 'cohort', label: 'Cohort (önerilen)' },
       { value: 'curriculum', label: 'Müfredat Bazlı' },
       { value: 'enrollment', label: 'Kayıt Bazlı' },
     ]},
     { key: 'EnrollmentConflictHardThreshold', label: 'Kayıt Çakışma Eşiği', type: 'number', min: 1, max: 100 },
   ],
-  'H6': [],
-  'H8': [
-    { key: 'AllowSameCourseSectionOverlap', label: 'Aynı Ders Şube Çakışmasına İzin Ver', type: 'boolean' },
+  'H6': [
+    { key: 'MaxLabBlockHours', label: 'Tek Lab Bloğu Maks. Saat', type: 'number', suffix: 'saat', min: 2, max: 6 },
   ],
+  'H8': [],
   'H10': [],
   'H11': [],
   'H12': [],

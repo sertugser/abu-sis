@@ -74,37 +74,41 @@ export default function AlgorithmParametersPanel() {
     );
   }
 
+  if (flatRows.length === 0) return null;
+
+  // 2026-05-19: Ana Kısıt tablosuyla aynı sütun yapısı (Grup / Parametre / Durum yok /
+  // Kategori yok / Değer / Düzenle). 6 sütunlu Kısıt tablosuna görsel olarak yaklaşıyor.
   return (
-    <div className="space-y-3">
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[800px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-56 text-sm">Grup</TableHead>
-                  <TableHead className="text-sm">Parametre</TableHead>
-                  <TableHead className="w-44 text-sm">Değer</TableHead>
-                  <TableHead className="w-24 text-right text-sm">Düzenle</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {flatRows.map(({ config, groupTitle, badgeClass }) => (
-                  <ParameterRow
-                    key={config.id}
-                    config={config}
-                    groupTitle={groupTitle}
-                    badgeClass={badgeClass}
-                    limits={limits}
-                    enumOptions={enumOptions}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <Card>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[900px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-44 text-sm">Grup</TableHead>
+                <TableHead className="text-sm">Parametre</TableHead>
+                <TableHead className="w-28 text-sm" />
+                <TableHead className="w-32 text-sm" />
+                <TableHead className="w-28 text-sm">Değer</TableHead>
+                <TableHead className="w-24 text-right text-sm">Düzenle</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {flatRows.map(({ config, groupTitle, badgeClass }) => (
+                <ParameterRow
+                  key={config.id}
+                  config={config}
+                  groupTitle={groupTitle}
+                  badgeClass={badgeClass}
+                  limits={limits}
+                  enumOptions={enumOptions}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -143,16 +147,20 @@ function ParameterRow({ config, groupTitle, badgeClass, limits, enumOptions }: P
     return <span className="text-base font-medium">{config.value}</span>;
   }
 
+  // Kısıt tablosuyla aynı 6 sütunlu yapı: Grup | Parametre | (Durum) | (Kategori) | Değer | Düzenle.
+  // Algoritma ayarları için Durum/Kategori anlamsız; placeholder dash gösterilir, görsel hizalama korunur.
   return (
     <TableRow>
-      <TableCell className="w-56">
+      <TableCell className="w-44">
         <Badge variant="outline" className={`text-xs ${badgeClass}`}>{groupTitle}</Badge>
       </TableCell>
       <TableCell>
         <p className="text-base leading-snug">{config.description || config.key}</p>
       </TableCell>
-      <TableCell>{renderDisplayValue()}</TableCell>
-      <TableCell>
+      <TableCell className="w-28 text-center text-muted-foreground">—</TableCell>
+      <TableCell className="w-32 text-center text-muted-foreground">—</TableCell>
+      <TableCell className="w-28">{renderDisplayValue()}</TableCell>
+      <TableCell className="w-24">
         <div className="flex justify-end">
           <Button
             size="icon"

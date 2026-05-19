@@ -110,6 +110,7 @@ public partial class SchedulingService
                     runtimeCandidate.SectionId,
                     section.TermId,
                     cancellationToken);
+                fullCfg.ApplyConstraintStateOverrides(state);
 
                 var conflicts = await _ruleEngine.EvaluateCandidateAsync(
                     runtimeCandidate, runtimeSnapshot, fullCfg, state, cancellationToken);
@@ -168,6 +169,9 @@ public partial class SchedulingService
         var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
             candidate.InstructorId, candidate.DepartmentId, candidate.SectionId, section.TermId, cancellationToken);
 
+        // H4 alt-toggle'ları H4.Parameters JSON'undan oku (2026-05-19 dual-channel temizliği).
+        // fullCfg aşağıda BuildConstraintConfig ile kurulduktan sonra state ile zenginleştirilir.
+
         var runtimeSnapshot = await BuildRuntimeSnapshotAsync(
             section.TermId, section.Id, null, cancellationToken);
 
@@ -175,6 +179,7 @@ public partial class SchedulingService
         result.Notes.AddRange(candidateNotes);
 
         var fullCfg = BuildConstraintConfig(softConfig, hardConfig);
+        fullCfg.ApplyConstraintStateOverrides(constraintState);
 
         var ruleConflicts = await _ruleEngine.EvaluateCandidateAsync(
             candidate, runtimeSnapshot, fullCfg, constraintState, cancellationToken);
@@ -238,6 +243,7 @@ public partial class SchedulingService
         var hardConfig = await LoadHardConstraintConfigAsync(ct);
         var config = BuildConstraintConfig(softConfig, hardConfig);
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, snapshot.TermId, ct);
+        config.ApplyConstraintStateOverrides(state);
 
         // Plan 12 Faz 5 — Hard + soft validation RuleEngine üzerinden. Soft note'lar
         // EvaluateWithBreakdownAsync ConstraintScoreItemDto.SampleViolations'tan toplanır.
@@ -273,6 +279,7 @@ public partial class SchedulingService
         // Plan 12 Faz 7 — V1 ConstraintEvaluationService.EvaluateCandidate yerine RuleEngine
         // delegasyonu. SuggestAsync path'i için kullanılır (manuel slot önerisi).
         var config = BuildConstraintConfig(softConfig, hardConfig);
+        config.ApplyConstraintStateOverrides(state);
 
         var conflicts = (await _ruleEngine.EvaluateCandidateAsync(candidate, snapshot, config, state, ct)).ToList();
 

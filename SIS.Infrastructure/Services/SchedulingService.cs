@@ -54,6 +54,7 @@ public partial class SchedulingService : ISchedulingService
             resolvedTerm.Id, null, null, cancellationToken);
 
         var state = await _constraintStateLoader.LoadConstraintStateAsync(null, null, null, resolvedTerm.Id, cancellationToken);
+        fullCfg.ApplyConstraintStateOverrides(state);
         var conflicts = await _ruleEngine.EvaluateAllExistingAsync(runtimeSnapshot, fullCfg, state, cancellationToken);
         return conflicts.ToList();
     }
@@ -142,18 +143,17 @@ public partial class SchedulingService : ISchedulingService
     {
         return new SchedulingConstraintConfig
         {
-            LunchBreakIsHard = hard?.LunchBreakIsHard ?? false,
             LunchBreakStart = hard?.LunchBreakStart ?? new TimeOnly(11, 40),
             LunchBreakEnd = hard?.LunchBreakEnd ?? new TimeOnly(12, 20),
             MaxConsecutiveHours = hard?.MaxConsecutiveHours ?? 4,
             BreakDurationMinutes = hard?.BreakDurationMinutes ?? 5,
             AmphiThreshold = hard?.AmphiThreshold ?? 100,
             TheoryLabSplitThreshold = hard?.TheoryLabSplitThreshold ?? 4,
-            AllowSameCourseSectionOverlap = hard?.AllowSameCourseSectionOverlap ?? false,
             CurriculumConflictMode = hard?.CurriculumConflictMode ?? "curriculum",
             // Plan 11 — V2 encoder paritesi
             MaxDailyHours = hard?.MaxDailyHours ?? 9,
             AmphiThresholdEnabled = hard?.AmphiThresholdEnabled ?? false,
+            ClassroomTypeRequirementEnabled = hard?.ClassroomTypeRequirementEnabled ?? false,
             S1Enabled = soft.S1Enabled,
             S1MinOccupancy = soft.S1MinOccupancy,
             S1MaxOccupancy = soft.S1MaxOccupancy,

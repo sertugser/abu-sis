@@ -25,13 +25,6 @@ public static class ConstraintParameterMapping
         // ── H4: Derslik Tipi
         [("H4", "AmphiThreshold")] = new("Schedule.AmphiThreshold", "int"),
 
-        // ── H5: Müfredat Çakışması
-        [("H5", "CurriculumConflictMode")] = new("Schedule.CurriculumConflictMode", "string"),
-        [("H5", "EnrollmentConflictHardThreshold")] = new("Schedule.EnrollmentHardThreshold", "int"),
-
-        // ── H8: Aynı Ders Şube
-        [("H8", "AllowSameCourseSectionOverlap")] = new("Schedule.AllowSameCourseSectionOverlap", "bool"),
-
         // ── H13: Öğle Arası
         [("H13", "LunchBreakStart")] = new("Schedule.LunchBreakStart", "string"),
         [("H13", "LunchBreakEnd")] = new("Schedule.LunchBreakEnd", "string"),

@@ -75,26 +75,15 @@ public sealed class RuleEngineIntegrationTests
     }
 
     [Fact]
-    public async Task H13_LunchBreak_HardDisabled_NoConflict()
+    public async Task H13_LunchBreak_DefaultHard_Detected()
     {
+        // H13 DefaultCategory=Hard (state null → predicate.DefaultCategory). RuleEngine
+        // hard path'e gider, predicate öğle arası bloğunu hard ihlal olarak rapor eder.
         var engine = BuildEngine();
         var c = Candidate(id: 1, courseId: 100, theory: 1, lab: 0,
             blocks: Block(day: 1, startHour: 12, durationHours: 1)); // 12:00-13:00 öğle arasıyla çakışır
         var snapshot = Snapshot(c);
-        var config = DefaultConfig(); // LunchBreakIsHard = false (default)
-
-        var conflicts = await engine.EvaluateCandidateAsync(c, snapshot, config, state: null, default);
-        conflicts.Should().NotContain(c => c.ConflictType == "LunchBreakConflict");
-    }
-
-    [Fact]
-    public async Task H13_LunchBreak_HardEnabled_Detected()
-    {
-        var engine = BuildEngine();
-        var c = Candidate(id: 1, courseId: 100, theory: 1, lab: 0,
-            blocks: Block(day: 1, startHour: 12, durationHours: 1));
-        var snapshot = Snapshot(c);
-        var config = DefaultConfig(cfg => cfg.LunchBreakIsHard = true);
+        var config = DefaultConfig();
 
         var conflicts = await engine.EvaluateCandidateAsync(c, snapshot, config, state: null, default);
         conflicts.Should().Contain(c => c.ConflictType == "LunchBreakConflict");

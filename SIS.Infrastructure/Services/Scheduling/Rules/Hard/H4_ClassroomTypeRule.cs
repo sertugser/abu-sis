@@ -4,16 +4,15 @@ using SIS.Domain.Enums;
 namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 
 /// <summary>
-/// Plan 11 Faz 3.4 — H4 Derslik Tipi.
-/// V2 ClassroomTypeEncoder ile parite. 4 alt-kural:
+/// H4 Derslik Tipi. V2 ClassroomTypeEncoder ile parite. 4 alt-kural:
 ///   1. Lab section (LabHours&gt;0, TheoryHours=0) → Lab/Computer kategorisinde olmalı.
 ///   2. Theory section (TheoryHours&gt;0, LabHours=0) → Lab kategorisine yerleştirilmemeli
 ///      (scarce kaynak koruma — V2 lectureOnly default).
 ///   3. Capacity ≥ AmphiThreshold → Amphitheater zorunlu, AmphiThresholdEnabled flag-gated
-///      (Plan 11 Faz 1.4 drift fix; default false).
-///   4. RequiredTheoryClassroomType / RequiredLabClassroomType override — ClassroomTypeRequirementEnabled
-///      flag açıkken aktif (Plan 9 Issue 6); ş u sürümde flag SystemConfig'ten okunmuyor →
-///      bu predicate sadece kural 1/2/3 enforce eder; admin UI Plan 10 ekleyince predicate genişletilir.
+///      (default false).
+///   4. ClassroomTypeRequirementEnabled flag açıkken Course.RequiredTheoryClassroomType /
+///      Course.RequiredLabClassroomType admin override'ı uygulanır (2026-05-19 — predicate'e
+///      eklendi, daha önce yalnızca solver biliyordu).
 /// </summary>
 public sealed class H4_ClassroomTypeRule : IRulePredicate
 {
@@ -28,9 +27,14 @@ public sealed class H4_ClassroomTypeRule : IRulePredicate
 
         var violations = new List<RuleViolation>();
         var primaryBlock = c.Blocks[0];
+        var isLabSection = c.LabHours > 0 && c.TheoryHours == 0;
+        var isTheorySection = c.TheoryHours > 0 && c.LabHours == 0;
+        var requiredType = isLabSection ? c.RequiredLabClassroomType : c.RequiredTheoryClassroomType;
+        var requirementActive = config.ClassroomTypeRequirementEnabled && requiredType.HasValue;
 
         // (1) Lab section → Lab/Computer.
-        if (c.LabHours > 0 && c.TheoryHours == 0
+        // Admin override aktifse (kural 4) bu fallback baypas edilir; admin tek başına karar verir.
+        if (isLabSection && !requirementActive
             && primaryBlock.ClassroomType != ClassroomType.Lab
             && primaryBlock.ClassroomType != ClassroomType.Computer)
         {
@@ -41,7 +45,8 @@ public sealed class H4_ClassroomTypeRule : IRulePredicate
         }
 
         // (2) Theory section LabCategory'e veto.
-        if (c.TheoryHours > 0 && c.LabHours == 0
+        // Admin override aktifse (kural 4) bu lab-veto kalkar; admin lab tipini bilerek setlemişse saygı.
+        if (isTheorySection && !requirementActive
             && primaryBlock.ClassroomType.IsLabCategory())
         {
             violations.Add(new RuleViolation(
@@ -58,6 +63,15 @@ public sealed class H4_ClassroomTypeRule : IRulePredicate
             violations.Add(new RuleViolation(
                 Code: Code, ConflictType: "ClassroomTypeConflict",
                 Message: $"Kontenjanı {c.Capacity} olan ders için Amfi derslik gereklidir.",
+                SectionId: c.SectionId));
+        }
+
+        // (4) Course catalog override — ders kataloğunda tip belirtilmiş ve flag açıksa zorunlu.
+        if (requirementActive && (int)primaryBlock.ClassroomType != requiredType!.Value)
+        {
+            violations.Add(new RuleViolation(
+                Code: Code, ConflictType: "ClassroomTypeConflict",
+                Message: $"Ders kataloğunda ({c.CourseCode}) {(isLabSection ? "lab" : "teori")} bileşeni için belirtilen derslik tipi (kod: {requiredType}) ile mevcut atanan tip ({primaryBlock.ClassroomType}) uyuşmuyor.",
                 SectionId: c.SectionId));
         }
 
