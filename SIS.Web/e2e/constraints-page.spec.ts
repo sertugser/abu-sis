@@ -54,7 +54,6 @@ interface ConstraintDto {
   id: number; code: string; name: string; isEnabled: boolean;
   category: string; parameters: string | null; weight: number;
 }
-interface SystemConfigDto { id: number; key: string; value: string; }
 interface DistributionConstraintDto {
   id: number; distributionType: string; preferenceLevel: string;
   termId: number; courses: Array<{ courseId: number; courseCode: string; sortOrder: number }>;
