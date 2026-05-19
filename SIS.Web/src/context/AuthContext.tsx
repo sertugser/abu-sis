@@ -1,5 +1,11 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { changePassword as changePasswordApi, login as loginApi } from '../api/auth.api';
+import {
+  clearStoredAuth,
+  readStoredAuth,
+  saveStoredAuth,
+  subscribeToAuthStorageChanges,
+} from '../lib/authStorage';
 import { decodeJwt, extractUser } from '../lib/jwt';
 import { queryClient } from '../lib/queryClient';
 import type { User } from '../types/auth';
@@ -15,59 +21,71 @@ interface AuthState {
   logout: () => void;
 }
 
+interface LocalAuthState {
+  user: User | null;
+  token: string | null;
+}
+
 const AuthContext = createContext<AuthState | undefined>(undefined);
+const PASSWORD_CHANGE_REQUIRED_KEY = 'sis_password_change_required';
+
+function readInitialAuthState(): LocalAuthState {
+  const auth = readStoredAuth({ clearInvalid: true, notify: false });
+  if (auth.status !== 'valid') {
+    return { user: null, token: null };
+  }
+
+  const payload = decodeJwt(auth.session.token);
+  const user = extractUser(payload);
+  if (!user.userId) {
+    clearStoredAuth({ reason: 'invalid', notify: false });
+    return { user: null, token: null };
+  }
+
+  return { user, token: auth.session.token };
+}
+
+function readPasswordChangeRequired() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(PASSWORD_CHANGE_REQUIRED_KEY) === 'true';
+}
+
+function writePasswordChangeRequired(value: boolean) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(PASSWORD_CHANGE_REQUIRED_KEY, value ? 'true' : 'false');
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
-    if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
-      const payload = decodeJwt(storedToken);
-      return extractUser(payload);
+  const [authState, setAuthState] = useState<LocalAuthState>(() => readInitialAuthState());
+  const [passwordChangeRequired, setPasswordChangeRequired] = useState<boolean>(() => readPasswordChangeRequired());
+  const [isLoading] = useState(false);
+
+  useEffect(() => subscribeToAuthStorageChanges((reason) => {
+    if (reason !== 'login') {
+      queryClient.clear();
     }
-    return null;
-  });
-  const [token, setToken] = useState<string | null>(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
-    if (storedToken && expiresAt && new Date(expiresAt) > new Date()) {
-      return storedToken;
-    }
-    return null;
-  });
-  const [passwordChangeRequired, setPasswordChangeRequired] = useState<boolean>(() => {
-    const stored = localStorage.getItem('sis_password_change_required');
-    return stored === 'true';
-  });
-  const [isLoading] = useState(() => {
-    const storedToken = localStorage.getItem('sis_token');
-    const expiresAt = localStorage.getItem('sis_token_expires');
-    if (!storedToken || !expiresAt || new Date(expiresAt) <= new Date()) {
-      localStorage.removeItem('sis_token');
-      localStorage.removeItem('sis_token_expires');
-      localStorage.removeItem('sis_roles');
-      localStorage.removeItem('sis_password_change_required');
-    }
-    return false;
-  });
+    setAuthState(readInitialAuthState());
+    setPasswordChangeRequired(readPasswordChangeRequired());
+  }), []);
 
   const login = async (email: string, password: string): Promise<string | null> => {
-    // Onceki oturumun cache'ini temizle — farkli kullanicilarin verileri karismasin
     queryClient.clear();
 
     const response = await loginApi({ email, password });
     if (response.success) {
-      localStorage.setItem('sis_token', response.token);
-      localStorage.setItem('sis_token_expires', response.expiresAt);
-      localStorage.setItem('sis_roles', JSON.stringify(response.roles));
-      localStorage.setItem('sis_password_change_required', response.passwordChangeRequired ? 'true' : 'false');
+      saveStoredAuth({
+        token: response.token,
+        expiresAt: response.expiresAt,
+        roles: response.roles,
+      });
+      writePasswordChangeRequired(!!response.passwordChangeRequired);
       const payload = decodeJwt(response.token);
       const userData = extractUser(payload);
-      setUser(userData);
-      setToken(response.token);
+      setAuthState({ user: userData, token: response.token });
       setPasswordChangeRequired(!!response.passwordChangeRequired);
       return null;
     }
+
     return response.error || 'Giriş başarısız';
   };
 
@@ -78,32 +96,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     queryClient.clear();
-    localStorage.setItem('sis_token', response.token);
-    localStorage.setItem('sis_token_expires', response.expiresAt);
-    localStorage.setItem('sis_roles', JSON.stringify(response.roles));
-    localStorage.setItem('sis_password_change_required', 'false');
+    saveStoredAuth({
+      token: response.token,
+      expiresAt: response.expiresAt,
+      roles: response.roles,
+    });
+    writePasswordChangeRequired(false);
     const payload = decodeJwt(response.token);
     const userData = extractUser(payload);
-    setUser(userData);
-    setToken(response.token);
+    setAuthState({ user: userData, token: response.token });
     setPasswordChangeRequired(false);
     return null;
   };
 
   const logout = () => {
-    localStorage.removeItem('sis_token');
-    localStorage.removeItem('sis_token_expires');
-    localStorage.removeItem('sis_roles');
-    localStorage.removeItem('sis_password_change_required');
-    setUser(null);
-    setToken(null);
+    clearStoredAuth({ reason: 'logout' });
+    setAuthState({ user: null, token: null });
+    writePasswordChangeRequired(false);
     setPasswordChangeRequired(false);
-    // Tum cache'i temizle — eski kullanicinin verileri kalmasin
     queryClient.clear();
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated: !!token, isLoading, passwordChangeRequired, login, changePassword, logout }}>
+    <AuthContext.Provider
+      value={{
+        user: authState.user,
+        token: authState.token,
+        isAuthenticated: !!authState.token,
+        isLoading,
+        passwordChangeRequired,
+        login,
+        changePassword,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

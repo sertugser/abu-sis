@@ -27,6 +27,8 @@ public class OpenedCourseSectionDto
     public string? DepartmentName { get; set; }
     /// <summary>Cross-list grup ID'si (null = tek başına).</summary>
     public int? CrossListGroupId { get; set; }
+    /// <summary>Z (Zorunlu) / S (Seçmeli) — bölümün aktif müfredatından alınır.</summary>
+    public bool IsCompulsory { get; set; }
 }
 
 public class OpenedCourseListDto
@@ -46,7 +48,7 @@ public class CurriculumCourseForOpeningDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public int SuggestedSemester { get; set; }
     public bool IsCompulsory { get; set; }
@@ -116,7 +118,7 @@ public class PoolCandidateDto
     public string CourseName { get; set; } = "";
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
-    public int? NationalCredit { get; set; }
+    public int NationalCredit { get; set; }
     public int Ects { get; set; }
     public bool AlreadyOpened { get; set; }
     public int ExistingSectionCount { get; set; }
@@ -137,8 +139,24 @@ public class InstructorOptionDto
 {
     public int InstructorId { get; set; }
     public string FullName { get; set; } = "";
+    public int DepartmentId { get; set; }
+    public string DepartmentName { get; set; } = "";
+    public string DepartmentCode { get; set; } = "";
     public int MaxWeeklyHours { get; set; }
     public int AssignedWeeklyHours { get; set; }
+    /// <summary>
+    /// Toplu danışman atamasında bu hocaya verilebilecek maksimum öğrenci sayısı.
+    /// Null = sınırsız.
+    /// </summary>
+    public int? AdvisorAssignmentCapacity { get; set; }
+    /// <summary>
+    /// Toplu danışman atamasına bu hoca dahil edilsin mi?
+    /// </summary>
+    public bool IsAvailableForAdvisorAssignment { get; set; } = true;
+    /// <summary>
+    /// Bu hocaya şu an atanmış öğrenci sayısı (mevcut yük).
+    /// </summary>
+    public int CurrentStudentCount { get; set; }
 }
 
 // ── Request DTOs ──
@@ -172,7 +190,25 @@ public class BulkOpenCoursesResultDto
 {
     public int TotalCoursesOpened { get; set; }
     public int TotalSectionsCreated { get; set; }
+    /// <summary>
+    /// Başarıyla açılan dersler için özet liste — modal'da satır satır gösterilir.
+    /// Hata olursa transaction rollback'i ile bu liste de temizlenir (boş döner).
+    /// </summary>
+    public List<OpenedCourseSummaryDto> OpenedCourses { get; set; } = [];
     public List<string> Errors { get; set; } = [];
+}
+
+public class OpenedCourseSummaryDto
+{
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public int SectionCount { get; set; }
+    /// <summary>Açılan şubelerin numaraları — kullanıcıya "Şube 1, 2, 3" şeklinde gösterilir.</summary>
+    public List<int> SectionNumbers { get; set; } = [];
+    public int TotalCapacity { get; set; }
+    /// <summary>Tüm şubelerde aynı hoca varsa adı, farklıysa null.</summary>
+    public string? InstructorName { get; set; }
 }
 
 public class UpdateOpenedSectionRequest
@@ -220,6 +256,9 @@ public class AssignedSectionDto
     public int SectionId { get; set; }
     public string CourseCode { get; set; } = "";
     public string CourseName { get; set; } = "";
+    public int? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public string? DepartmentCode { get; set; }
     public int SectionNumber { get; set; }
     public int WeeklyHours { get; set; }
     public int Capacity { get; set; }
@@ -288,6 +327,53 @@ public class TransferCourseResultItem
 }
 
 public record CloseAllSectionsResultDto(int ClosedSectionCount, int DroppedRegistrationCount);
+
+public record DeleteAllSectionsResultDto(int DeletedSectionCount, int DeletedRegistrationCount, int DeletedAccessPolicyCount);
+
+// ── Section-to-Section Student Transfer ──
+
+public class TransferStudentsToSectionRequest
+{
+    public int SourceSectionId { get; set; }
+    public int TargetSectionId { get; set; }
+    public List<int> StudentIds { get; set; } = new();
+}
+
+public record TransferStudentsToSectionResultDto(
+    int RequestedCount,
+    int TransferredCount,
+    List<int> TransferredStudentIds);
+
+// ── Auto-Split (Şubelendirme) ──
+
+public enum AutoSplitStrategy
+{
+    /// <summary>Öğrencileri sıralayıp eşit dağıtır (round-robin).</summary>
+    Equal,
+    /// <summary>Tekrar dersi alanları homojen dağıtır, normal öğrencileri sonra dağıtır.</summary>
+    EqualRepeat,
+    /// <summary>Öğrenci numarasının son hanesine göre tek/çift; sadece 2 şube için geçerli.</summary>
+    ModOddEven,
+}
+
+public class AutoSplitCourseRequest
+{
+    public int CourseId { get; set; }
+    public int TermId { get; set; }
+    public int TargetSectionCount { get; set; }
+    public AutoSplitStrategy Strategy { get; set; } = AutoSplitStrategy.Equal;
+    /// <summary>Yeni şubeler oluşturulurken kullanılacak varsayılan kapasite. Null = mevcut kapasite ortalaması.</summary>
+    public int? DefaultCapacityPerSection { get; set; }
+}
+
+public record AutoSplitSectionSummary(int SectionId, int SectionNumber, int AssignedStudentCount);
+
+public record AutoSplitCourseResultDto(
+    int FinalSectionCount,
+    int CreatedSectionCount,
+    int ClosedSectionCount,
+    int RedistributedRegistrationCount,
+    List<AutoSplitSectionSummary> Sections);
 
 // ── External Courses (opened by other departments but in our curriculum) ──
 

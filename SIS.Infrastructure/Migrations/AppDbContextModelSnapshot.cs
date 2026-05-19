@@ -369,6 +369,116 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AdvisorCourseConstraints");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnnouncementId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageFileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnnouncementId");
+
+                    b.ToTable("AnnouncementAttachments");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ColorHex")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IconName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("SortOrder");
+
+                    b.ToTable("AnnouncementCategories");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementRead", b =>
+                {
+                    b.Property<int>("AnnouncementId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AnnouncementId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AnnouncementReads");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
                 {
                     b.Property<int>("Id")
@@ -1088,7 +1198,7 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("NationalCredit")
+                    b.Property<int>("NationalCredit")
                         .HasColumnType("integer");
 
                     b.Property<int?>("OpenType")
@@ -2107,6 +2217,21 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("EvaluationPeriods");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
+                {
+                    b.Property<int>("EvaluationPeriodId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EvaluationQuestionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("EvaluationPeriodId", "EvaluationQuestionId");
+
+                    b.HasIndex("EvaluationQuestionId");
+
+                    b.ToTable("EvaluationPeriodQuestions");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationQuestion", b =>
                 {
                     b.Property<int>("Id")
@@ -2119,6 +2244,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<int>("QuestionType")
@@ -2368,12 +2496,37 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ExamType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Other");
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<decimal?>("MinimumScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Order")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("PrerequisiteGradeComponentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RequiresAttendanceEligibility")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("Weight")
                         .HasPrecision(5, 2)
@@ -2382,6 +2535,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AcademicTermId");
+
+                    b.HasIndex("PrerequisiteGradeComponentId");
 
                     b.HasIndex("CourseId", "AcademicTermId", "Name")
                         .IsUnique();
@@ -2414,6 +2569,13 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("CCMin")
                         .HasColumnType("integer");
+
+                    b.Property<string>("CalculationMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Absolute");
 
                     b.Property<int>("CourseId")
                         .HasColumnType("integer");
@@ -2516,12 +2678,17 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<bool>("AdvisorOptOutRequested")
                         .HasColumnType("boolean");
+                    b.Property<int?>("AdvisorAssignmentCapacity")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("DepartmentId")
                         .HasColumnType("integer");
+
+                    b.Property<bool?>("IsAvailableForAdvisorAssignment")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("MaxWeeklyHours")
                         .HasColumnType("integer");
@@ -2558,10 +2725,19 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasMaxLength(5000)
-                        .HasColumnType("character varying(5000)");
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("plain");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2585,6 +2761,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsPinned")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPopup")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequiresAcknowledgement")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("StartsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2594,19 +2776,36 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("TargetDepartmentId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("TargetFacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetStudentYear")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryId");
+
                     b.HasIndex("TargetAudience");
 
                     b.HasIndex("TargetDepartmentId");
+
+                    b.HasIndex("TargetFacultyId");
+
+                    b.HasIndex("TargetSectionId");
+
+                    b.HasIndex("TargetStudentYear");
 
                     b.HasIndex("IsActive", "StartsAt", "ExpiresAt");
 
@@ -2779,6 +2978,47 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("RegistrationPlans");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ScheduleImportSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FacultyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RowsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsumedAt");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("TermId");
+
+                    b.HasIndex("CreatedByUserId", "FacultyId", "TermId", "ExpiresAt");
+
+                    b.ToTable("ScheduleImportSessions");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ScheduleRun", b =>
@@ -3658,6 +3898,28 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Term");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementAttachment", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.InternalAnnouncement", "Announcement")
+                        .WithMany("Attachments")
+                        .HasForeignKey("AnnouncementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Announcement");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AnnouncementRead", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.InternalAnnouncement", "Announcement")
+                        .WithMany()
+                        .HasForeignKey("AnnouncementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Announcement");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ApprovalStep", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.ConstraintExceptionRequest", "Request")
@@ -4280,6 +4542,25 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Term");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.EvaluationPeriodQuestion", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.EvaluationPeriod", "Period")
+                        .WithMany()
+                        .HasForeignKey("EvaluationPeriodId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.EvaluationQuestion", "Question")
+                        .WithMany()
+                        .HasForeignKey("EvaluationQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Period");
+
+                    b.Navigation("Question");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.EvaluationResponse", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
@@ -4367,9 +4648,16 @@ namespace SIS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SIS.Domain.Entities.GradeComponent", "PrerequisiteGradeComponent")
+                        .WithMany("DependentComponents")
+                        .HasForeignKey("PrerequisiteGradeComponentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AcademicTerm");
 
                     b.Navigation("Course");
+
+                    b.Navigation("PrerequisiteGradeComponent");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.GradingCriteria", b =>
@@ -4410,12 +4698,33 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.InternalAnnouncement", b =>
                 {
+                    b.HasOne("SIS.Domain.Entities.AnnouncementCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SIS.Domain.Entities.Department", "TargetDepartment")
                         .WithMany()
                         .HasForeignKey("TargetDepartmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SIS.Domain.Entities.Faculty", "TargetFaculty")
+                        .WithMany()
+                        .HasForeignKey("TargetFacultyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "TargetSection")
+                        .WithMany()
+                        .HasForeignKey("TargetSectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Category");
+
                     b.Navigation("TargetDepartment");
+
+                    b.Navigation("TargetFaculty");
+
+                    b.Navigation("TargetSection");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>
@@ -4462,6 +4771,25 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Student");
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ScheduleImportSession", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Faculty");
 
                     b.Navigation("Term");
                 });
@@ -4772,6 +5100,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.GradeComponent", b =>
                 {
+                    b.Navigation("DependentComponents");
+
                     b.Navigation("StudentGrades");
                 });
 
@@ -4780,6 +5110,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("AcademicCvActivities");
 
                     b.Navigation("Sections");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.InternalAnnouncement", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>

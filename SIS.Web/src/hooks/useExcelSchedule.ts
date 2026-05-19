@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { exportScheduleExcel, exportSchedulePdf, importScheduleApply, importSchedulePreview } from '../api/scheduleExcel.api';
-import type { ImportPreviewDto } from '../types/scheduleExcel';
 
 export function useExportExcel() {
   return useMutation({
@@ -52,12 +51,14 @@ export function useImportApply() {
     mutationFn: ({
       facultyId,
       termId,
-      rows,
+      importSessionId,
+      rowNumbers,
     }: {
       facultyId: number;
       termId: number;
-      rows: ImportPreviewDto['rows'];
-    }) => importScheduleApply(facultyId, termId, rows),
+      importSessionId: string;
+      rowNumbers: number[];
+    }) => importScheduleApply(facultyId, termId, importSessionId, rowNumbers),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
       qc.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });

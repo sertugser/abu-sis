@@ -47,27 +47,28 @@ public class TimeSlotService : ITimeSlotService
     {
         await EnsureTermEditableAsync(dto.TermId, ct);
         ValidateTimeRange(dto.StartTime, dto.EndTime);
-        await ValidateConfiguredRulesAsync(dto.DayOfWeek, dto.StartTime, dto.EndTime, ct);
-        await EnsureNoOverlapAsync(dto.TermId, dto.DayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: null, ct);
+        var dayOfWeek = (DayOfWeek)dto.DayOfWeek;
+        await ValidateConfiguredRulesAsync(dayOfWeek, dto.StartTime, dto.EndTime, ct);
+        await EnsureNoOverlapAsync(dto.TermId, dayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: null, ct);
 
         var slotOrder = await _context.TimeSlots
-            .Where(ts => ts.TermId == dto.TermId && ts.DayOfWeek == dto.DayOfWeek)
+            .Where(ts => ts.TermId == dto.TermId && ts.DayOfWeek == dayOfWeek)
             .CountAsync(ct) + 1;
 
         var slot = new TimeSlot
         {
             TermId = dto.TermId,
-            DayOfWeek = dto.DayOfWeek,
+            DayOfWeek = dayOfWeek,
             StartTime = dto.StartTime,
             EndTime = dto.EndTime,
             SlotOrder = slotOrder,
-            DisplayName = BuildDisplayName(dto.DayOfWeek, slotOrder, dto.StartTime, dto.EndTime),
+            DisplayName = BuildDisplayName(dayOfWeek, slotOrder, dto.StartTime, dto.EndTime),
             AllowedMode = dto.AllowedMode
         };
 
         _context.TimeSlots.Add(slot);
         await _context.SaveChangesAsync(ct);
-        await ResequenceSlotOrdersAsync(dto.TermId, dto.DayOfWeek, ct);
+        await ResequenceSlotOrdersAsync(dto.TermId, dayOfWeek, ct);
 
         return ToDto(slot);
     }
@@ -79,28 +80,29 @@ public class TimeSlotService : ITimeSlotService
 
         await EnsureTermEditableAsync(slot.TermId, ct);
         ValidateTimeRange(dto.StartTime, dto.EndTime);
-        await ValidateConfiguredRulesAsync(dto.DayOfWeek, dto.StartTime, dto.EndTime, ct);
-        await EnsureNoOverlapAsync(slot.TermId, dto.DayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: id, ct);
+        var dayOfWeek = (DayOfWeek)dto.DayOfWeek;
+        await ValidateConfiguredRulesAsync(dayOfWeek, dto.StartTime, dto.EndTime, ct);
+        await EnsureNoOverlapAsync(slot.TermId, dayOfWeek, dto.StartTime, dto.EndTime, excludeSlotId: id, ct);
 
-        var dayChanged = slot.DayOfWeek != dto.DayOfWeek;
+        var dayChanged = slot.DayOfWeek != dayOfWeek;
         var oldDay = slot.DayOfWeek;
 
-        slot.DayOfWeek = dto.DayOfWeek;
+        slot.DayOfWeek = dayOfWeek;
         slot.StartTime = dto.StartTime;
         slot.EndTime = dto.EndTime;
         slot.AllowedMode = dto.AllowedMode;
-        slot.DisplayName = BuildDisplayName(dto.DayOfWeek, slot.SlotOrder, dto.StartTime, dto.EndTime);
+        slot.DisplayName = BuildDisplayName(dayOfWeek, slot.SlotOrder, dto.StartTime, dto.EndTime);
 
         await _context.SaveChangesAsync(ct);
 
         if (dayChanged)
         {
             await ResequenceSlotOrdersAsync(slot.TermId, oldDay, ct);
-            await ResequenceSlotOrdersAsync(slot.TermId, dto.DayOfWeek, ct);
+            await ResequenceSlotOrdersAsync(slot.TermId, dayOfWeek, ct);
         }
         else
         {
-            await ResequenceSlotOrdersAsync(slot.TermId, dto.DayOfWeek, ct);
+            await ResequenceSlotOrdersAsync(slot.TermId, dayOfWeek, ct);
         }
 
         var refreshed = await _context.TimeSlots.AsNoTracking().FirstAsync(ts => ts.Id == id, ct);
@@ -305,6 +307,6 @@ public class TimeSlotService : ITimeSlotService
     };
 
     private static TimeSlotDto ToDto(TimeSlot s) => new(
-        s.Id, s.TermId, s.DayOfWeek, s.StartTime, s.EndTime,
+        s.Id, s.TermId, (int)s.DayOfWeek, s.StartTime, s.EndTime,
         s.SlotOrder, s.DisplayName, s.AllowedMode);
 }

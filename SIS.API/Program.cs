@@ -1,9 +1,11 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SIS.API.Security;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Admin.Services;
 using SIS.Application.AcademicCalendar.Services;
@@ -27,6 +29,9 @@ using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.FacultyPlanning.Services;
 using SIS.Application.CourseEvaluation.Services;
+using SIS.Application.Announcement.Attachments;
+using SIS.Application.Announcement.Configuration;
+using SIS.Application.Announcement.Security;
 using SIS.Application.Announcement.Services;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
@@ -37,6 +42,11 @@ using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
+StartupSecurityValidator.Validate(builder.Configuration, builder.Environment);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -45,11 +55,39 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 builder.Services.AddScoped<SIS.API.Filters.SensitiveDataAccessFilter>();
+builder.Services.AddScoped<SIS.API.Authorization.IAcademicScopeGuard, SIS.API.Authorization.AcademicScopeGuard>();
 
 // Rate limiting for audit log endpoints
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AuthLogin", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 8,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("PublicRead", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 60,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("PublicAttendanceQr", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 20,
+                QueueLimit = 0,
+            }));
     options.AddPolicy("AuditLogRead", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.User?.Identity?.Name ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
@@ -84,7 +122,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -110,6 +149,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
+var jwtKey = StartupSecurityValidator.GetRequiredJwtKey(builder.Configuration);
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -123,11 +163,47 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        ClockSkew = TimeSpan.FromMinutes(1)
+    };
+
+    // SignalR WebSocket bağlantısı header gönderemez — token query param'dan gelir.
+    // Bu event sadece /hubs/* path'lerinde devreye girer; HTTP API çağrıları
+    // standart Authorization header'ını kullanmaya devam eder.
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
+
+// SignalR — auto-schedule progress, real-time bildirimler vb. için.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleProgressReporter,
+    SIS.API.Hubs.SignalRScheduleProgressReporter>();
+// Cancel registry: aktif auto-schedule run'larının CTS'ini kullanıcı bazında tutar.
+// Singleton — tüm hub instance'ları aynı registry üzerinden çalışır.
+builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleCancelRegistry,
+    SIS.Infrastructure.Services.Scheduling.ScheduleCancelRegistry>();
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -140,6 +216,7 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
@@ -157,6 +234,8 @@ builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
 builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService>();
+builder.Services.AddScoped<SIS.Application.AdvisorInfo.Services.IAdvisorInfoService, SIS.Infrastructure.Services.AdvisorInfoService>();
+builder.Services.AddScoped<SIS.Application.OpenedDepartmentCourses.Services.IOpenedDepartmentCourseService, SIS.Infrastructure.Services.OpenedDepartmentCourseService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
 builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
 builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
@@ -196,17 +275,45 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
 builder.Services.AddScoped<IInternalAnnouncementService, InternalAnnouncementService>();
+builder.Services.AddScoped<IAnnouncementCategoryService, AnnouncementCategoryService>();
+builder.Services.AddScoped<IAnnouncementAttachmentService, AnnouncementAttachmentService>();
+builder.Services.AddScoped<IAnnouncementSettingsProvider, AnnouncementSettingsProvider>();
+builder.Services.AddSingleton<IAnnouncementHtmlSanitizer, AnnouncementHtmlSanitizer>();
+builder.Services.AddSingleton<IAnnouncementAttachmentStorage, FileSystemAnnouncementAttachmentStorage>();
+builder.Services.Configure<AttachmentStorageOptions>(
+    builder.Configuration.GetSection(AttachmentStorageOptions.SectionName));
 
 // Time Provider
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
 var app = builder.Build();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+else
+{
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/problem+json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                type = "about:blank",
+                title = "An unexpected error occurred.",
+                status = StatusCodes.Status500InternalServerError,
+                traceId = context.TraceIdentifier,
+            });
+        });
+    });
+    app.UseHsts();
 }
 
 app.UseMiddleware<SIS.API.Middleware.ErrorLoggingMiddleware>();
@@ -217,6 +324,7 @@ app.UseMiddleware<SIS.API.Middleware.PasswordRotationMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
 
 // Seed database
 if (app.Environment.IsDevelopment())
@@ -226,6 +334,11 @@ if (app.Environment.IsDevelopment())
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
     await SeedData.SeedAsync(context, userManager, roleManager);
+
+    // Auto-schedule algoritma test verisi — Mühendislik fakültesinin gerçek dönem verisi
+    // (Güz 2024-25 + Bahar 2025-26, 162 section, hoca atanmamış). Idempotent — varsa skip.
+    // Memory: project_autoschedule_test_data.md, project_autoschedule_test_disabled_constraints.md
+    await SeedData.SeedAutoScheduleTestDataAsync(context);
 }
 
 app.Run();

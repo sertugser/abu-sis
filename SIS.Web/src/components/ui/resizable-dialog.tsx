@@ -52,11 +52,21 @@ const ResizableDialogContent = React.forwardRef<
     const contentRef = useRef<HTMLDivElement | null>(null);
     const isResizingRef = useRef(false);
     const isDraggingRef = useRef(false);
+    // Çift tıklama tespiti — sürükleme yalnızca son mousedown'dan 400ms içinde
+    // ikinci bir mousedown geldiğinde başlar; tek tıklama görmezden gelinir.
+    const lastMouseDownTimeRef = useRef(0);
 
     // ── Drag to move (direct DOM for performance) ──
     const startDrag = useCallback(
       (e: React.MouseEvent) => {
         if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return;
+
+        const now = Date.now();
+        const elapsed = now - lastMouseDownTimeRef.current;
+        lastMouseDownTimeRef.current = now;
+        // Tek tıklama → görmezden gel; sadece çift tıklamada (≤400ms ardışık iki mousedown) başlar
+        if (elapsed > 400) return;
+
         e.preventDefault();
 
         const el = contentRef.current;
@@ -264,7 +274,8 @@ const ResizableDialogContent = React.forwardRef<
         : {
             width: defaultWidth,
             height: defaultHeight,
-            maxHeight: defaultHeight ?? '85vh',
+            maxWidth: '95vw',
+            maxHeight: '85vh',
           };
 
     // Combine refs
@@ -283,6 +294,7 @@ const ResizableDialogContent = React.forwardRef<
         <DialogPrimitive.Content
           ref={setRefs}
           onOpenAutoFocus={handleOpenAutoFocus}
+          onMouseDown={startDrag}
           className={cn(
             'fixed z-50 border bg-card p-6 shadow-xl rounded-xl overflow-y-auto',
             'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out',
@@ -295,26 +307,22 @@ const ResizableDialogContent = React.forwardRef<
           style={computedStyle}
           {...props}
         >
-          {/* Drag handle — invisible bar at the top for moving, stops before action buttons */}
-          <div
-            className="absolute top-0 left-0 right-[50%] h-10 cursor-move z-[5]"
-            onMouseDown={startDrag}
-          />
-
           {children}
 
-          {/* Close button */}
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+          {/* Close button — footer butonlarıyla eşit boyut (h-8 outline) */}
+          <DialogPrimitive.Close
+            className="absolute right-3 top-3 h-8 w-8 rounded-md inline-flex items-center justify-center border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+          >
             <X className="h-4 w-4" />
             <span className="sr-only">Kapat</span>
           </DialogPrimitive.Close>
 
-          {/* Fullscreen toggle */}
+          {/* Fullscreen toggle — Close ile eşit boyut/stil */}
           {showFullscreenToggle && (
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="absolute right-11 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 h-4 w-4 inline-flex items-center justify-center"
+              className="absolute right-[3.25rem] top-3 h-8 w-8 rounded-md inline-flex items-center justify-center border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
               title={isFullscreen ? 'Küçült' : 'Tam Ekran'}
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}

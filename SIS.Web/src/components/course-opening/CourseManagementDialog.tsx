@@ -256,6 +256,17 @@ export function CourseManagementDialog({
           </span>
         </div>
 
+        {/* ───── Erişim Politikası — modal içinde, sectionlar üzerinde ───── */}
+        <div className="flex items-center justify-between px-3 py-2 rounded-md bg-muted/30 border">
+          <span className="text-xs font-medium text-muted-foreground">Erişim Yetkisi</span>
+          <AccessPolicyPopover
+            courseId={course.courseId}
+            termId={termId}
+            courseDepartmentId={sections[0]?.departmentId ?? null}
+            courseDepartmentName={sections[0]?.departmentName ?? null}
+          />
+        </div>
+
         {/* ───── LIST mode: Şubeler tablosu + aksiyonlar ───── */}
         {mode === 'list' && (
           <div className="space-y-3">
@@ -347,11 +358,11 @@ export function CourseManagementDialog({
                   `Yeni Şube — Şube ${duplicateSourceNumber}'den Çoğaltılıyor`}
               </h3>
               {mode === 'duplicate' && (
-                <div className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50/80 border border-amber-200 px-2 py-1.5 rounded">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/40 border px-2 py-1.5 rounded">
                   <Copy className="h-3 w-3 shrink-0" />
                   <span>
-                    Şube <strong>{duplicateSourceNumber}</strong>'in kapasite, kontenjan ve hocası
-                    yüklendi. İstediğin alanı değiştirip <strong>Çoğalt</strong>'a basınca yeni
+                    Şube <strong className="text-foreground">{duplicateSourceNumber}</strong>'in kapasite, kontenjan ve hocası
+                    yüklendi. İstediğin alanı değiştirip <strong className="text-foreground">Çoğalt</strong>'a basınca yeni
                     şube oluşur.
                   </span>
                 </div>
@@ -447,18 +458,25 @@ export function CourseManagementDialog({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t">
+            <div className="flex items-center gap-1.5 pt-2 border-t">
               <Button
                 variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 px-3"
                 onClick={() => {
                   setMode('list');
                   setDuplicateSourceNumber(null);
                 }}
               >
-                <X className="h-4 w-4 mr-1.5" /> Vazgeç
+                <X className="h-3.5 w-3.5" /> Vazgeç
               </Button>
-              <Button onClick={handleSave} disabled={updatePending || quotaWarning != null}>
-                <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 px-3"
+                onClick={handleSave}
+                disabled={updatePending || quotaWarning != null}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 {updatePending
                   ? 'Kaydediliyor...'
                   : mode === 'add'
@@ -486,11 +504,22 @@ export function CourseManagementDialog({
                 )}
               </AlertDescription>
             </Alert>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setMode('list')}>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={() => setMode('list')}
+              >
                 Vazgeç
               </Button>
-              <Button variant="destructive" onClick={handleCloseConfirmed} disabled={closePending}>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={handleCloseConfirmed}
+                disabled={closePending}
+              >
                 {closePending ? 'Kapatılıyor...' : 'Şubeyi Kapat'}
               </Button>
             </div>
@@ -499,68 +528,61 @@ export function CourseManagementDialog({
 
         </div>
 
-        <div className="px-6 py-3 border-t shrink-0 flex items-center justify-between gap-3 bg-gray-50/40">
-          {/* SOL: list mode aksiyon butonları */}
+        <div className="px-4 py-2.5 border-t shrink-0 flex items-center justify-between gap-2 bg-muted/20">
+          {/* SOL: list mode aksiyon butonları — tümü aynı boyutta (h-8 text-xs gap-1.5 px-3) */}
           {mode === 'list' ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 variant="default"
                 size="sm"
-                className="h-9 gap-1.5"
+                className="h-8 text-xs gap-1.5 px-3"
                 onClick={startAdd}
                 disabled={readOnly}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
                 Yeni Şube
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 gap-1.5"
+                className="h-8 text-xs gap-1.5 px-3"
                 onClick={startEdit}
                 disabled={readOnly || !selectedSection || !selectedSection.isActive}
               >
-                <Edit2 className="h-4 w-4" />
+                <Edit2 className="h-3.5 w-3.5" />
                 Düzenle
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 gap-1.5"
+                className="h-8 text-xs gap-1.5 px-3"
                 onClick={startDuplicate}
                 disabled={readOnly || !selectedSection}
                 title="Seçili şubenin kapasite/hoca değerleriyle yeni şube formu açar"
               >
-                <Copy className="h-4 w-4" />
+                <Copy className="h-3.5 w-3.5" />
                 Çoğalt
               </Button>
-              {/* Erişim — şubeye/derse hangi bölümlerin kayıt olabileceğini yönetir */}
-              <AccessPolicyPopover
-                courseId={course.courseId}
-                termId={termId}
-                courseDepartmentId={sections[0]?.departmentId ?? null}
-                courseDepartmentName={sections[0]?.departmentName ?? null}
-              />
               {selectedSection && !selectedSection.isActive ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+                  className="h-8 text-xs gap-1.5 px-3 text-emerald-700 hover:bg-emerald-50"
                   onClick={() => handleReactivate(selectedSection.sectionId)}
                   disabled={readOnly || reactivating === selectedSection.sectionId}
                 >
-                  <RotateCcw className={cn('h-4 w-4', reactivating === selectedSection.sectionId && 'animate-spin')} />
+                  <RotateCcw className={cn('h-3.5 w-3.5', reactivating === selectedSection.sectionId && 'animate-spin')} />
                   Yeniden Aç
                 </Button>
               ) : (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  className="h-8 text-xs gap-1.5 px-3 text-destructive hover:bg-destructive/10"
                   onClick={() => setMode('closeConfirm')}
                   disabled={readOnly || !selectedSection || !selectedSection.isActive}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                   Şubeyi Kapat
                 </Button>
               )}
@@ -569,12 +591,12 @@ export function CourseManagementDialog({
             <span />
           )}
 
-          {/* SAĞ: Kapat */}
+          {/* SAĞ: Kapat — diğer butonlarla eşit boyutta */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onOpenChange(false)}
-            className="h-9 shrink-0 text-gray-600 hover:text-gray-900"
+            className="h-8 text-xs px-3 shrink-0"
           >
             Kapat
           </Button>
@@ -622,11 +644,11 @@ function ReadonlyField({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
       <div
         className={
-          'h-9 px-3 flex items-center text-sm rounded-md border border-amber-200 bg-amber-50/60 text-gray-800 truncate' +
-          (mono ? ' font-mono font-semibold' : '')
+          'h-9 px-3 flex items-center text-sm rounded-md border bg-muted/30 text-foreground truncate' +
+          (mono ? ' font-mono font-medium' : '')
         }
         title={value}
       >

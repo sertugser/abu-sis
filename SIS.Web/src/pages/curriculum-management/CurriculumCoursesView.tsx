@@ -128,17 +128,21 @@ export default function CurriculumCoursesView({
     if (!detail) return { count: 0, credit: 0, ects: 0 };
     return {
       count: detail.courses.length,
-      credit: detail.courses.reduce((s, c) => s + (c.nationalCredit ?? 0), 0),
+      credit: detail.courses.reduce((s, c) => s + c.nationalCredit, 0),
       ects: detail.courses.reduce((s, c) => s + c.ects, 0),
     };
   }, [detail]);
 
+  // Filtre + aksiyon satırı header kartıyla birleştirildiğinde gösterilir mi?
+  const showFilterRow = Boolean(selectedCurriculumId) && !isLoadingDetail && Boolean(detail);
+
   return (
     <>
-      {/* Breadcrumb + geri butonu + müfredat aksiyonları */}
+      {/* Birleşik başlık kartı — üst: breadcrumb + müfredat aksiyonları, alt: filtreler + aksiyonlar */}
       <Card>
-        <CardContent className="py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <CardContent className="py-0">
+          {/* Üst satır — breadcrumb + müfredat seviyesi aksiyonlar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Button variant="ghost" size="sm" className="h-8" onClick={onBack}>
                 <ChevronLeft className="h-4 w-4 mr-1" /> Müfredat Listesi
@@ -187,114 +191,115 @@ export default function CurriculumCoursesView({
               </div>
             )}
           </div>
+
+          {/* Alt satır — filtreler + Ders Ekle/Grup Ekle/Ek İşlemler. İnce ayraçla üstten ayrılır. */}
+          {showFilterRow && (
+            <div className="border-t py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı) */}
+                <Input
+                  placeholder="Ders Kodu"
+                  className="h-9 w-full sm:w-32 text-sm"
+                  value={searchCode}
+                  onChange={e => onSearchCodeChange(e.target.value)}
+                />
+                <Input
+                  placeholder="Ders Adı"
+                  className="h-9 w-full sm:w-44 text-sm"
+                  value={searchName}
+                  onChange={e => onSearchNameChange(e.target.value)}
+                />
+
+                <Select
+                  value={classFilter?.toString() ?? 'all'}
+                  onValueChange={val => onClassFilterChange(val === 'all' ? null : Number(val))}
+                >
+                  <SelectTrigger className="h-9 w-32 text-sm">
+                    <SelectValue placeholder="Sınıf: Tümü" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Sınıf: Tümü</SelectItem>
+                    <SelectItem value="1">1. Sınıf</SelectItem>
+                    <SelectItem value="2">2. Sınıf</SelectItem>
+                    <SelectItem value="3">3. Sınıf</SelectItem>
+                    <SelectItem value="4">4. Sınıf</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={termTypeFilter}
+                  onValueChange={val => onTermTypeFilterChange(val as TermTypeFilter)}
+                >
+                  <SelectTrigger className="h-9 w-32 text-sm">
+                    <SelectValue placeholder="Dönem: Tümü" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Dönem: Tümü</SelectItem>
+                    <SelectItem value="fall">Güz</SelectItem>
+                    <SelectItem value="spring">Bahar</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <span className="hidden md:inline text-muted-foreground">|</span>
+
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showGroupedCourses}
+                    onChange={e => onShowGroupedCoursesChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                  />
+                  <span>Gruplu Dersleri Göster</span>
+                </label>
+
+                {/* Sağ aksiyonlar — Proliz: Ders Ekle | Grup Ekle | Ek İşlemler */}
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="h-9 text-sm"
+                    onClick={onAddCourse}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Ders Ekle
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-sm"
+                    onClick={onAddPool}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Grup Ekle
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="h-9 text-sm">
+                        <MoreHorizontal className="h-4 w-4 mr-1" />
+                        Ek İşlemler
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem disabled title="Yakında">
+                        <Printer className="h-4 w-4 mr-2" /> Ders Listesi Yazdır
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled title="Yakında">
+                        <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled title="Yakında">
+                        <Layers className="h-4 w-4 mr-2" /> Toplu Gruplandırma
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {!selectedCurriculumId ? null : (
         <>
-          {/* ── Tek satır: Filtreler + Bilgi + Aksiyonlar ── */}
-          {isLoadingDetail ? (
+          {/* Filtreler kartı yukarıdaki birleşik header'a taşındı — burada sadece skeleton kalıyor */}
+          {isLoadingDetail && (
             <Skeleton className="h-16 w-full" />
-          ) : detail && (
-            <Card>
-              <CardContent className="py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Proliz tarzı: iki ayrı arama alanı (Ders Kodu | Ders Adı) */}
-                  <Input
-                    placeholder="Ders Kodu"
-                    className="h-9 w-full sm:w-32 text-sm"
-                    value={searchCode}
-                    onChange={e => onSearchCodeChange(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Ders Adı"
-                    className="h-9 w-full sm:w-44 text-sm"
-                    value={searchName}
-                    onChange={e => onSearchNameChange(e.target.value)}
-                  />
-
-                  <Select
-                    value={classFilter?.toString() ?? 'all'}
-                    onValueChange={val => onClassFilterChange(val === 'all' ? null : Number(val))}
-                  >
-                    <SelectTrigger className="h-9 w-32 text-sm">
-                      <SelectValue placeholder="Sınıf: Tümü" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Sınıf: Tümü</SelectItem>
-                      <SelectItem value="1">1. Sınıf</SelectItem>
-                      <SelectItem value="2">2. Sınıf</SelectItem>
-                      <SelectItem value="3">3. Sınıf</SelectItem>
-                      <SelectItem value="4">4. Sınıf</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={termTypeFilter}
-                    onValueChange={val => onTermTypeFilterChange(val as TermTypeFilter)}
-                  >
-                    <SelectTrigger className="h-9 w-32 text-sm">
-                      <SelectValue placeholder="Dönem: Tümü" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Dönem: Tümü</SelectItem>
-                      <SelectItem value="fall">Güz</SelectItem>
-                      <SelectItem value="spring">Bahar</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <span className="hidden md:inline text-muted-foreground">|</span>
-
-                  <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={showGroupedCourses}
-                      onChange={e => onShowGroupedCoursesChange(e.target.checked)}
-                      className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
-                    />
-                    <span>Gruplu Dersleri Göster</span>
-                  </label>
-
-                  {/* Sağ aksiyonlar — Proliz: Ders Ekle | Grup Ekle | Ek İşlemler */}
-                  <div className="ml-auto flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      className="h-9 text-sm"
-                      onClick={onAddCourse}
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Ders Ekle
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 text-sm"
-                      onClick={onAddPool}
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Grup Ekle
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-9 text-sm">
-                          <MoreHorizontal className="h-4 w-4 mr-1" />
-                          Ek İşlemler
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled title="Yakında">
-                          <Printer className="h-4 w-4 mr-2" /> Ders Listesi Yazdır
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled title="Yakında">
-                          <Package className="h-4 w-4 mr-2" /> Bilgi Paketi
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled title="Yakında">
-                          <Layers className="h-4 w-4 mr-2" /> Toplu Gruplandırma
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           )}
 
           {isLoadingDetail ? (

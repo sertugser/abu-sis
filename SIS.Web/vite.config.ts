@@ -16,6 +16,14 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // SignalR WebSocket bağlantısı — ws: true olmadan vite dev sunucusu
+      // upgrade isteğini forward etmez, frontend "connection refused" görür.
+      '/hubs': {
+        target: 'http://127.0.0.1:5213',
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+      },
     },
   },
 })

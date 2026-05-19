@@ -72,14 +72,21 @@ public class FailureSuggestionDto
     public int Priority { get; set; }
 }
 
+/// <summary>
+/// Auto-schedule sonuç istatistikleri. v2-ortools tek-geçişli CP-SAT — v1'in (Greedy + SA + LNS)
+/// aşama bazlı alanları (ConstructionPlaced/Failed, SA*, vb.) Plan 9 sonrası kaldırıldı.
+/// Frontend bu alanları sonuç dialog'unda kullanır; tüm sayılar backend kanonik kaynaklıdır.
+/// </summary>
 public class AutoScheduleStats
 {
-    public int ConstructionPlaced { get; set; }
-    public int ConstructionFailed { get; set; }
-    public int SAIterations { get; set; }
-    public double SAInitialPenalty { get; set; }
-    public double SAFinalPenalty { get; set; }
+    /// <summary>Solver toplam çalışma süresi (saniye).</summary>
     public double ElapsedSeconds { get; set; }
+
+    /// <summary>İşlenen şubelerin kapsadığı farklı <c>Course</c> sayısı (success + failure birleşik).</summary>
+    public int DistinctCourseCount { get; set; }
+
+    /// <summary>Başarılı atamaların kullandığı farklı <c>Classroom</c> sayısı.</summary>
+    public int UsedClassroomCount { get; set; }
 }
 
 public class ApplyScheduleRequest

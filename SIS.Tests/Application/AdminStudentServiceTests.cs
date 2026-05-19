@@ -28,6 +28,27 @@ public class AdminStudentServiceTests
     public async Task AssignAdvisorAsync_RejectsOptedOutInstructor_WhenSettingEnabled()
     {
         await using var context = CreateContext();
+        context.Departments.Add(new Department { Id = 1, Name = "Bilgisayar", Code = "CENG", FacultyId = 1 });
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 100,
+            DepartmentId = 1,
+            Name = "Bilgisayar Muhendisligi",
+            Code = "CENG",
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240,
+            CreatedAt = DateTime.UtcNow
+        });
+        context.Curricula.Add(new Curriculum
+        {
+            Id = 1000,
+            ProgramId = 100,
+            Version = "2024",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
         context.Instructors.Add(new Instructor
         {
             Id = 10,
@@ -47,6 +68,15 @@ public class AdminStudentServiceTests
             Cgpa = 2.5m,
             Sgpa = 2.5m,
             CompletedSemesters = 2,
+        });
+        context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = 20,
+            ProgramId = 100,
+            CurriculumId = 1000,
+            Type = StudentProgramType.Main,
+            EnrollmentDate = DateTime.UtcNow,
+            IsActive = true
         });
         await context.SaveChangesAsync();
 
@@ -65,6 +95,27 @@ public class AdminStudentServiceTests
     public async Task AssignAdvisorAsync_AllowsOptedOutInstructor_WhenSettingDisabled()
     {
         await using var context = CreateContext();
+        context.Departments.Add(new Department { Id = 1, Name = "Bilgisayar", Code = "CENG", FacultyId = 1 });
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 100,
+            DepartmentId = 1,
+            Name = "Bilgisayar Muhendisligi",
+            Code = "CENG",
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240,
+            CreatedAt = DateTime.UtcNow
+        });
+        context.Curricula.Add(new Curriculum
+        {
+            Id = 1000,
+            ProgramId = 100,
+            Version = "2024",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
         context.Instructors.Add(new Instructor
         {
             Id = 10,
@@ -84,6 +135,15 @@ public class AdminStudentServiceTests
             Cgpa = 2.5m,
             Sgpa = 2.5m,
             CompletedSemesters = 2,
+        });
+        context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = 20,
+            ProgramId = 100,
+            CurriculumId = 1000,
+            Type = StudentProgramType.Main,
+            EnrollmentDate = DateTime.UtcNow,
+            IsActive = true
         });
         await context.SaveChangesAsync();
 

@@ -2,7 +2,10 @@ using System.Text.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using SIS.API.Authorization;
+using SIS.API.Security;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
 using SIS.Application.Common.Services;
@@ -32,6 +35,8 @@ public class AuthController : ControllerBase
 
     [HttpGet("login-settings")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthLogin")]
+    [PublicEndpointJustification("Login settings must be reachable before authentication; response is limited to non-sensitive UI defaults and instructor-specific locale selection.")]
     public async Task<IActionResult> GetLoginSettings([FromQuery] string? email, CancellationToken ct)
     {
         var configuredLanguage = await _systemConfig.GetStringAsync("Localization.DefaultLanguage", "tr-TR", ct);
@@ -64,6 +69,8 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthLogin")]
+    [PublicEndpointJustification("Login must be reachable before authentication; IP rate limiting and audit logging are enforced.")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(loginDto);
@@ -116,6 +123,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("change-password")]
     [Authorize]
+    [RequirePermission("lookup.auth.change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto, CancellationToken ct)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

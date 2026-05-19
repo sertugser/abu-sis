@@ -8,6 +8,8 @@ namespace SIS.Infrastructure.Services;
 
 public class AdminUserService : IAdminUserService
 {
+    private const string SystemAdministratorRole = "SystemAdministrator";
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _context;
 
@@ -144,6 +146,9 @@ public class AdminUserService : IAdminUserService
             ?? throw new KeyNotFoundException($"Kullanıcı bulunamadı: {id}");
 
         var currentRoles = await _userManager.GetRolesAsync(user);
+        if (currentRoles.Contains(SystemAdministratorRole) || dto.Roles.Contains(SystemAdministratorRole))
+            throw new InvalidOperationException("SystemAdministrator rolü kullanıcı yönetimi ekranından atanamaz veya kaldırılamaz.");
+
         await _userManager.RemoveFromRolesAsync(user, currentRoles);
 
         if (dto.Roles.Count > 0)
@@ -154,6 +159,8 @@ public class AdminUserService : IAdminUserService
     {
         var user = await _userManager.FindByIdAsync(id.ToString())
             ?? throw new KeyNotFoundException($"Kullanıcı bulunamadı: {id}");
+
+        await EnsureTargetIsNotProtectedAsync(user);
 
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
         var result = await _userManager.ResetPasswordAsync(user, token, dto.NewPassword);
@@ -170,6 +177,8 @@ public class AdminUserService : IAdminUserService
     {
         var user = await _userManager.FindByIdAsync(id.ToString())
             ?? throw new KeyNotFoundException($"Kullanıcı bulunamadı: {id}");
+
+        await EnsureTargetIsNotProtectedAsync(user);
 
         if (isActive)
         {
@@ -191,5 +200,12 @@ public class AdminUserService : IAdminUserService
             roles.Contains("DepartmentManager") || roles.Contains("AdministrativeStaff"))
             return "Admin";
         return "Other";
+    }
+
+    private async Task EnsureTargetIsNotProtectedAsync(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        if (roles.Contains(SystemAdministratorRole))
+            throw new InvalidOperationException("SystemAdministrator hesabı bu işlemle değiştirilemez.");
     }
 }

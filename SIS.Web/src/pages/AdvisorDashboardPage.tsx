@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, AlertTriangle, BookOpen, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { usePendingApprovals, useApproveStudent, useRejectStudent } from '../hooks/useAdvisor';
 import type { PendingApproval } from '../api/advisor.api';
+import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -359,6 +360,8 @@ export default function AdvisorDashboardPage() {
           ))}
         </div>
       )}
+
+      <DashboardAnnouncementWidget max={5} />
     </div>
   );
 }

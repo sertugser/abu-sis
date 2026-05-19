@@ -80,7 +80,7 @@ function buildContentStream(session: AttendanceSession, qrUrl: string, matrix: b
   });
 
   lines.push(textAt(72, 240, 9, qrUrl));
-  lines.push(textAt(72, 218, 9, 'Bu kodu okutan ogrenciler ad, soyad ve okul numarasi ile yoklamaya katilir.'));
+  lines.push(textAt(72, 218, 9, 'Bu kodu okutan ogrenciler kendi hesaplariyla giris yaparak yoklamaya katilir.'));
 
   return `${lines.join('\n')}\n`;
 }

@@ -38,10 +38,6 @@ export default function CourseEvaluationPage() {
   if (!isOpen || !periodData?.period) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="font-heading text-xl font-bold">Ders Değerlendirme</h1>
-          <p className="text-sm text-muted-foreground">Dönem sonu ders ve öğretim üyesi değerlendirmesi.</p>
-        </div>
         <Alert>
           <Clock className="h-4 w-4" />
           <AlertDescription>
@@ -58,20 +54,15 @@ export default function CourseEvaluationPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-xl font-bold">Ders Değerlendirme</h1>
-        <p className="text-sm text-muted-foreground">
-          {period.termName} · Son tarih: <span className="font-medium">{formatDate(period.closesAt)}</span>
-        </p>
-      </div>
-
       <Card className="border-l-4 border-l-blue-500">
         <CardContent className="p-5 flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <ClipboardCheck className="h-8 w-8 text-blue-600" />
             <div>
-              <p className="text-sm font-semibold">Değerlendirme Durumu</p>
+              <p className="text-sm font-semibold">{period.termName}</p>
               <p className="text-xs text-muted-foreground">
+                Son tarih: <span className="font-medium text-foreground">{formatDate(period.closesAt)}</span>
+                {' · '}
                 {completed}/{total} ders değerlendirildi
               </p>
             </div>

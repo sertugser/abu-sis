@@ -39,7 +39,7 @@ const DEFAULTS: Omit<ScheduleSettings, 'isLoading'> = {
 };
 
 export function useScheduleSettings(): ScheduleSettings {
-  const { data: configs, isLoading } = useSystemConfigs();
+  const { data: configs, isLoading: systemLoading } = useSystemConfigs();
 
   return useMemo(() => {
     const map = new Map((configs ?? []).map(c => [c.key, c.value]));
@@ -82,9 +82,9 @@ export function useScheduleSettings(): ScheduleSettings {
       eveningSlotCount:         getInt('Schedule.EveningSlotCount',          DEFAULTS.eveningSlotCount),
       faceToFaceCutoffTime:     get   ('Schedule.FaceToFaceCutoffTime',      DEFAULTS.faceToFaceCutoffTime),
       weekendOnlineOnly:        getBool('Schedule.WeekendOnlineOnly',        DEFAULTS.weekendOnlineOnly),
-      isLoading,
+      isLoading: systemLoading,
     };
-  }, [configs, isLoading]);
+  }, [configs, systemLoading]);
 }
 
 // ── Zaman yardımcıları ────────────────────────────────────────────────

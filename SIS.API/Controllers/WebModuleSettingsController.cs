@@ -56,7 +56,13 @@ public class WebModuleSettingsController(
 
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Announcements.StudentTopCount"] = (1, 20),
+        ["Announcements.StudentTopCount"]        = (1, 20),
+        ["Announcements.MaxTitleLength"]         = (20, 500),
+        ["Announcements.MaxContentLength"]       = (500, 200_000),
+        ["Announcements.StudentYearFilterMin"]   = (0, 10),
+        ["Announcements.StudentYearFilterMax"]   = (1, 12),
+        ["Announcements.AttachmentMaxSizeMB"]    = (1, 100),
+        ["Announcements.AttachmentMaxCount"]     = (1, 20),
     };
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new()

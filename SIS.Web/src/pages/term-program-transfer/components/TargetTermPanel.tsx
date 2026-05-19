@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Inbox, Eye, Pencil, Plus, Users, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckSquare, Download, HelpCircle, Inbox, Mail, Printer, Square } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +11,7 @@ import { useOpenedCourses } from '../../../hooks/useCourseOpening';
 import { useAdminProgramsByStructure } from '../../../hooks/useAdminAcademicStructure';
 import { semesterToClassLevel, CLASS_LEVELS } from '../types';
 import type { OpenedCourseSectionDto } from '../../../types/courseOpening';
+import { TablePagination } from './TablePagination';
 
 interface DepartmentOption {
   departmentId: number;
@@ -32,10 +34,8 @@ interface TargetTermPanelProps {
   /** Hedef dönem — bağımsız (sağ panel kendi içinde tutuyor). */
   defaultTermId: number | null;
   availableTerms: TermOption[];
-  onDetail: (section: OpenedCourseSectionDto) => void;
-  onEdit: (section: OpenedCourseSectionDto) => void;
-  onAddSection: (section: OpenedCourseSectionDto) => void;
-  onDelete: (section: OpenedCourseSectionDto) => void;
+  /** Çift tık ile şube yönetim penceresini aç (incele/düzenle/çoğalt/erişim/sil). */
+  onManage: (section: OpenedCourseSectionDto) => void;
 }
 
 export function TargetTermPanel({
@@ -46,10 +46,7 @@ export function TargetTermPanel({
   onProgramChange,
   defaultTermId,
   availableTerms,
-  onDetail,
-  onEdit,
-  onAddSection,
-  onDelete,
+  onManage,
 }: TargetTermPanelProps) {
   // Bölüm/Program: parent kontrolünde (çift yönlü sync sol panel ile)
   // Dönem/Sınıf/Arama: bu panele özel
@@ -92,26 +89,156 @@ export function TargetTermPanel({
     return result.sort((a, b) => a.courseCode.localeCompare(b.courseCode) || a.sectionNumber - b.sectionNumber);
   }, [sections, classLevel, searchCode, searchName]);
 
-  const selectedSection = useMemo(
-    () => filtered.find((s) => s.sectionId === selectedSectionId) ?? null,
-    [filtered, selectedSectionId],
+  // ── Sayfalama ────────────────────────────────────────────────────────────
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  const safePage = Math.min(page, totalPages);
+  const pageItems = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage, pageSize],
   );
 
+  // ── Toplam Krd / AKTS ve unique ders sayısı (Proliz altbar muadili) ─────────
+  const totals = useMemo(() => {
+    let credits = 0;
+    let ects = 0;
+    const courseIds = new Set<number>();
+    for (const s of filtered) {
+      credits += s.credits;
+      ects += s.ects;
+      courseIds.add(s.courseId);
+    }
+    return { credits, ects, courseCount: courseIds.size };
+  }, [filtered]);
+
+  // ── CSV / Mail / Yazdır ─────────────────────────────────────────────────────
+  const exportCsv = useCallback(() => {
+    if (filtered.length === 0) return;
+    const escape = (v: string | null | undefined) =>
+      `"${(v ?? '').replace(/"/g, '""')}"`;
+    const header = 'Kod,Ad,Şube,Sınıf,Krd,AKTS,Kontenjan,Kayıtlı,Hoca';
+    const rows = filtered.map((s) =>
+      [
+        s.courseCode,
+        escape(s.courseName),
+        s.sectionNumber,
+        semesterToClassLevel(s.suggestedSemester) ?? '',
+        s.credits,
+        s.ects,
+        s.capacity,
+        s.enrolledCount,
+        escape(s.instructorName),
+      ].join(','),
+    );
+    const csv = '﻿' + header + '\n' + rows.join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'hedef-acilan-dersler.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filtered]);
+
+  const mailList = useCallback(() => {
+    const subject = `Açılan Dersler Listesi (${filtered.length} şube)`;
+    const lines = [
+      `Dönem ID: ${termId ?? '—'}`,
+      `Şube Sayısı: ${filtered.length}`,
+      `Toplam Kredi: ${totals.credits}`,
+      `Toplam AKTS: ${totals.ects}`,
+      '',
+      'Kod\tAd\tŞb\tKrd\tAKTS\tHoca',
+      ...filtered
+        .slice(0, 100)
+        .map((s) =>
+          `${s.courseCode}\t${s.courseName}\t${s.sectionNumber}\t${s.credits}\t${s.ects}\t${s.instructorName ?? ''}`,
+        ),
+      filtered.length > 100 ? `… (${filtered.length - 100} şube daha)` : '',
+    ].filter(Boolean);
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+  }, [filtered, termId, totals]);
+
+  const printPanel = useCallback(() => window.print(), []);
+
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden flex flex-col h-full min-h-0">
       {/* Başlık + Filtreler */}
-      <div className="border-b bg-muted/30">
-        <div className="px-4 py-2.5 flex items-center gap-2 border-b border-border/40">
-          <h3 className="text-base font-semibold">Hedef Dönemde Açılmış Dersler</h3>
-          {filtered.length > 0 && (
-            <span className="text-xs text-muted-foreground ml-auto">{filtered.length} şube</span>
-          )}
+      <div className="border-b bg-muted/30 shrink-0">
+        <div className="px-3 py-1.5 flex items-center gap-2 border-b border-border/40">
+          <h3 className="text-sm font-semibold">Hedef Dönemde Açılmış Dersler</h3>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Bu panel hakkında bilgi"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-sm text-xs leading-relaxed">
+                <p className="font-semibold mb-1.5">Aktif dönemde açılmış olan tüm şubeler burada listelenir.</p>
+                <p className="mb-1.5">Bir satıra tıklayarak şu işlemleri yapabilirsin:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>İncele</strong> — şube detaylarını gör.</li>
+                  <li><strong>Düzenle</strong> — kontenjan, hoca ve kotaları güncelle.</li>
+                  <li><strong>Çoğalt</strong> — aynı dersin yeni bir şubesini ekle.</li>
+                  <li><strong>Erişim</strong> — şubenin yetkili fakülte/bölümlerini yönet.</li>
+                  <li><strong>Sil</strong> — şubeyi kaldır (kayıt yoksa).</li>
+                </ul>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  İpucu: Üstteki filtrelerle bölüm, sınıf veya ders kodu / adına göre listeyi daraltabilirsin.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="ml-auto flex items-center gap-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={printPanel}
+              disabled={filtered.length === 0}
+              title="Yazdır"
+            >
+              <Printer className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={mailList}
+              disabled={filtered.length === 0}
+              title="Mail olarak gönder"
+            >
+              <Mail className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              title="CSV / Excel olarak indir"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
-        <div className="px-4 py-3 space-y-2">
+        <div className="px-3 py-2 space-y-1.5">
           <FilterRow label="Dönem">
             <Select value={String(termId ?? '')} onValueChange={(v) => setTermId(Number(v))}>
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="Dönem seçin" />
               </SelectTrigger>
               <SelectContent>
@@ -130,7 +257,7 @@ export function TargetTermPanel({
               onValueChange={(v) => onDepartmentChange(Number(v))}
               disabled={departments.length === 0}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="Bölüm seçin" />
               </SelectTrigger>
               <SelectContent>
@@ -145,7 +272,7 @@ export function TargetTermPanel({
 
           <FilterRow label="Program">
             <Select value={programId == null ? 'all' : String(programId)} onValueChange={(v) => onProgramChange(v === 'all' ? null : Number(v))}>
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="Tüm programlar" />
               </SelectTrigger>
               <SelectContent>
@@ -161,7 +288,7 @@ export function TargetTermPanel({
 
           <FilterRow label="Sınıf">
             <Select value={classLevel == null ? 'all' : String(classLevel)} onValueChange={(v) => setClassLevel(v === 'all' ? null : Number(v))}>
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="Tümü" />
               </SelectTrigger>
               <SelectContent>
@@ -176,103 +303,91 @@ export function TargetTermPanel({
           </FilterRow>
 
           <FilterRow label="Ders Kod">
-            <Input value={searchCode} onChange={(e) => setSearchCode(e.target.value)} className="h-9 text-sm" placeholder="Örn. CENG101" />
+            <Input value={searchCode} onChange={(e) => setSearchCode(e.target.value)} className="h-7 text-xs" placeholder="Örn. CENG101" />
           </FilterRow>
 
           <FilterRow label="Ders Ad">
-            <Input value={searchName} onChange={(e) => setSearchName(e.target.value)} className="h-9 text-sm" placeholder="Ders adında ara..." />
+            <Input value={searchName} onChange={(e) => setSearchName(e.target.value)} className="h-7 text-xs" placeholder="Ders adında ara..." />
           </FilterRow>
         </div>
 
-        {/* Aksiyon barı — bir satır seçili iken görünür */}
-        {selectedSection && (
-          <div className="px-4 py-2 border-t border-border/40 bg-blue-50/50 dark:bg-blue-950/20 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-muted-foreground mr-1">
-              <span className="font-mono text-foreground">{selectedSection.courseCode}</span> Şube{' '}
-              <span className="text-foreground">{selectedSection.sectionNumber}</span>:
-            </span>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => onDetail(selectedSection)}>
-              <Eye className="h-3 w-3" />
-              İncele
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => onEdit(selectedSection)}>
-              <Pencil className="h-3 w-3" />
-              Düzenle
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => onAddSection(selectedSection)}>
-              <Plus className="h-3 w-3" />
-              + Şube Ekle
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled title="Yakında">
-              <Users className="h-3 w-3" />
-              Erişim
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => onDelete(selectedSection)}>
-              <Trash2 className="h-3 w-3" />
-              Sil
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs ml-auto" onClick={() => setSelectedSectionId(null)}>
-              Seçimi Bırak
-            </Button>
-          </div>
-        )}
       </div>
 
-      <CardContent className="p-0">
+      <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
         {isLoading ? (
-          <div className="p-3 space-y-2">
+          <div className="flex-1 p-3 space-y-2">
             <Skeleton className="h-7 w-full" />
             <Skeleton className="h-7 w-full" />
             <Skeleton className="h-7 w-full" />
           </div>
         ) : !departmentId || !termId ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">Bölüm ve hedef dönem seçin.</div>
+          <div className="flex-1 flex items-center justify-center py-12 text-sm text-muted-foreground">
+            Bölüm ve hedef dönem seçin.
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center">
-            <Inbox className="h-9 w-9 text-muted-foreground/30 mx-auto mb-2" />
+          <div className="flex-1 flex flex-col items-center justify-center py-12">
+            <Inbox className="h-9 w-9 text-muted-foreground/30 mb-2" />
             <p className="text-sm text-muted-foreground">
               {sections.length === 0 ? 'Bu dönemde henüz ders açılmamış.' : 'Filtrelerle eşleşen ders yok.'}
             </p>
           </div>
         ) : (
-          <div className="overflow-auto" style={{ maxHeight: '60vh' }}>
-            <table className="w-full text-sm">
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="w-full text-xs">
               <thead className="bg-muted/50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold">Kod</th>
-                  <th className="px-3 py-2 text-left font-semibold">Ad</th>
-                  <th className="px-2 py-2 text-center font-semibold w-10" title="Şube">Şb</th>
-                  <th className="px-2 py-2 text-center font-semibold w-10" title="Sınıf">Sn</th>
-                  <th className="px-2 py-2 text-center font-semibold w-12">Krd</th>
-                  <th className="px-2 py-2 text-center font-semibold w-14">AKTS</th>
-                  <th className="px-2 py-2 text-center font-semibold w-20">Doluluk</th>
-                  <th className="px-3 py-2 text-left font-semibold w-40">Hoca</th>
+                  {/* Sol panel master checkbox'ıyla görsel simetri — seçimi temizler */}
+                  <th className="px-2 py-2 w-8 text-center">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 cursor-pointer"
+                      checked={selectedSectionId !== null}
+                      onChange={() => setSelectedSectionId(null)}
+                      title={selectedSectionId !== null ? 'Seçimi temizle' : 'Bir satıra tıklayarak şube seçin'}
+                      disabled={selectedSectionId === null}
+                    />
+                  </th>
+                  <th className="px-2 py-2 text-left font-semibold">Kod</th>
+                  <th className="px-2 py-2 text-left font-semibold">Ad</th>
+                  <th className="px-1 py-2 text-center font-semibold w-9" title="Şube">Şb</th>
+                  <th className="px-1 py-2 text-center font-semibold w-9" title="Sınıf">Sn</th>
+                  <th className="px-1 py-2 text-center font-semibold w-10">Krd</th>
+                  <th className="px-1 py-2 text-center font-semibold w-12">AKTS</th>
+                  <th className="px-2 py-2 text-left font-semibold w-40">Hoca</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => {
-                  const ratio = s.capacity > 0 ? Math.round((s.enrolledCount / s.capacity) * 100) : 0;
-                  const ratioColor = ratio >= 90 ? 'text-red-600' : ratio >= 70 ? 'text-amber-600' : 'text-emerald-600';
+                {pageItems.map((s, idx) => {
                   const isSelected = selectedSectionId === s.sectionId;
+                  // Zebra striping — göz takibi için tek/çift satır farklı arka plan
+                  const zebra = idx % 2 === 1 ? 'bg-muted/20' : '';
                   return (
                     <tr
                       key={s.sectionId}
                       className={`border-t cursor-pointer transition-colors ${
-                        isSelected ? 'bg-blue-100 dark:bg-blue-950/40' : 'hover:bg-muted/30'
+                        isSelected ? 'bg-blue-100 dark:bg-blue-950/40' : `${zebra} hover:bg-muted/40`
                       }`}
                       onClick={() => setSelectedSectionId(isSelected ? null : s.sectionId)}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        onManage(s);
+                      }}
+                      title="Çift tık: şube yönetim ekranını aç"
                     >
-                      <td className="px-3 py-2 font-mono font-medium">{s.courseCode}</td>
-                      <td className="px-3 py-2 truncate max-w-[260px]" title={s.courseName}>{s.courseName}</td>
-                      <td className="px-2 py-2 text-center">{s.sectionNumber}</td>
-                      <td className="px-2 py-2 text-center text-muted-foreground">{semesterToClassLevel(s.suggestedSemester) || '—'}</td>
-                      <td className="px-2 py-2 text-center">{s.credits}</td>
-                      <td className="px-2 py-2 text-center">{s.ects}</td>
-                      <td className={`px-2 py-2 text-center text-xs ${ratioColor}`}>
-                        <div>{s.enrolledCount}/{s.capacity}</div>
-                        <div className="text-[10px]">%{ratio}</div>
+                      <td className="px-2 py-2 text-center w-8">
+                        {isSelected ? (
+                          <CheckSquare className="h-3.5 w-3.5 text-primary mx-auto" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[160px]" title={s.instructorName ?? '—'}>
+                      <td className="px-2 py-2 font-mono font-medium">{s.courseCode}</td>
+                      <td className="px-2 py-2 truncate max-w-[260px]" title={s.courseName}>{s.courseName}</td>
+                      <td className="px-1 py-2 text-center">{s.sectionNumber}</td>
+                      <td className="px-1 py-2 text-center text-muted-foreground">{semesterToClassLevel(s.suggestedSemester) || '—'}</td>
+                      <td className="px-1 py-2 text-center">{s.credits}</td>
+                      <td className="px-1 py-2 text-center">{s.ects}</td>
+                      <td className="px-2 py-2 text-muted-foreground truncate max-w-[160px]" title={s.instructorName ?? '—'}>
                         {s.instructorName ?? '— Atanmamış —'}
                       </td>
                     </tr>
@@ -282,6 +397,31 @@ export function TargetTermPanel({
             </table>
           </div>
         )}
+
+        {/* Tek altbar: sayfalama + ders sayısı + toplam Krd/AKTS — daima dipte sticky */}
+        {filtered.length > 0 && (
+          <div className="shrink-0 mt-auto">
+            <TablePagination
+              totalCount={filtered.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              itemLabel="şube"
+              extraInfo={
+                <>
+                  <strong className="text-foreground">{totals.courseCount}</strong> ders ·{' '}
+                  Toplam Krd:{' '}
+                  <strong className="text-foreground">{totals.credits}</strong> · AKTS:{' '}
+                  <strong className="text-foreground">{totals.ects}</strong>
+                </>
+              }
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -289,7 +429,7 @@ export function TargetTermPanel({
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[88px_1fr] items-center gap-3">
+    <div className="grid grid-cols-[64px_1fr] items-center gap-2">
       <Label className="text-xs text-muted-foreground font-medium">{label}</Label>
       {children}
     </div>

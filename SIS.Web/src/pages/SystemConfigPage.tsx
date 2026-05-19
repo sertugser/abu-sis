@@ -42,42 +42,6 @@ const URL_CONFIG_KEYS = new Set<string>([
   'Instructor.FaqUrl',
 ]);
 
-const HIDDEN_SYSTEM_CONFIG_KEYS = new Set<string>([
-  'Classroom.AmphiThreshold',
-  'Scheduling.MaxBacktrackingDepth',
-  'SoftConstraint.S1.Enabled',
-  'SoftConstraint.S2.MaxDailyHours',
-  'SoftConstraint.S3.Enabled',
-  'SoftConstraint.S3.MaxSectionsPerSlot',
-  'SoftConstraint.S4.Enabled',
-  'SoftConstraint.S4.MinCoPairThreshold',
-  'SoftConstraint.S7.MaxGapSlots',
-  'SoftConstraint.S8.Enabled',
-  'SoftConstraint.S9.Enabled',
-  'SoftConstraint.S12.Enabled',
-  'SoftConstraint.Weight.S1',
-  'SoftConstraint.Weight.S2',
-  'SoftConstraint.Weight.S3',
-  'SoftConstraint.Weight.S4',
-  'SoftConstraint.Weight.S5',
-  'SoftConstraint.Weight.S7',
-  'SoftConstraint.Weight.S8',
-  'SoftConstraint.Weight.S9',
-  'SoftConstraint.Weight.S12',
-  'Schedule.SA.MaxIterations',
-  'Schedule.SA.InitialTemperature',
-  'Schedule.SA.TimeoutSeconds',
-  'Schedule.SA.StagnationLimit',
-  'Schedule.SA.BacktrackLimit',
-  'Schedule.SA.RelocateWeight',
-  'Schedule.SA.SwapWeight',
-  'Schedule.SA.ChainWeight',
-  'Schedule.MRV.ClassroomWeight',
-  'Schedule.MRV.SlotWeight',
-  'Schedule.MRV.LabWeight',
-  'Schedule.MRV.CapacityWeight',
-]);
-
 export default function SystemConfigPage() {
   const { data: configs, isLoading, isError } = useSystemConfigs();
   const { data: limits } = useConfigLimits();
@@ -135,7 +99,6 @@ export default function SystemConfigPage() {
 
   const sortedConfigs = useMemo(
     () => [...(configs ?? [])]
-      .filter(config => !HIDDEN_SYSTEM_CONFIG_KEYS.has(config.key))
       .sort((left, right) =>
         left.groupLabel.localeCompare(right.groupLabel, 'tr')
         || left.displayOrder - right.displayOrder
@@ -187,7 +150,6 @@ export default function SystemConfigPage() {
       </Alert>
     );
   }
-
   return (
     <div className="space-y-4">
       {notice && (

@@ -31,14 +31,22 @@ public class RegistrationCleanupJob : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try { await RunOnceAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "RegistrationCleanupJob hatası.");
+                try { await RunOnceAsync(stoppingToken); }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "RegistrationCleanupJob hatası.");
+                }
+                await Task.Delay(Interval, stoppingToken);
             }
-            await Task.Delay(Interval, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown — Task.Delay(..., stoppingToken) cancel'a TaskCanceledException fırlatır.
+            // BackgroundServiceExceptionBehavior=StopHost (default .NET 8+) uygulamayı çakmasın.
         }
     }
 

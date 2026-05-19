@@ -1,17 +1,17 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Solver;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Scheduling;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Hard;
-using SIS.Infrastructure.Services.Scheduling.Evaluators.Soft;
 
 namespace SIS.Tests.Application;
 
@@ -32,77 +32,24 @@ public class FacultyPlanningServiceTests : IDisposable
             .Options;
 
         _context = new AppDbContext(options);
-        var constraintService = CreateConstraintEvaluationService();
-        var autoScheduleEngine = new AutoScheduleEngine(_context, constraintService, new NullSystemConfigProvider());
-        _service = new FacultyPlanningService(_context, new SchedulingService(_context, constraintService), new HttpContextAccessor(), autoScheduleEngine);
+        var stateLoader = new ConstraintStateLoader(_context);
+        var autoScheduleEngine = new AutoScheduleEngine(_context, new NullSystemConfigProvider(), Mock.Of<ISolverEngine>());
+        var scheduleWriter = new ScheduleWriter(_context);
+        var ruleEngine = SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine();
+        _service = new FacultyPlanningService(
+            _context,
+            new SchedulingService(_context, stateLoader, scheduleWriter, ruleEngine),
+            new HttpContextAccessor(),
+            autoScheduleEngine,
+            scheduleWriter,
+            new NullSystemConfigProvider());
 
         SeedBaseData();
     }
 
-    [Fact]
-    public async Task AutoSchedulePreviewAsync_PrefersHigherScoringPrimeTimeSlotOverFirstAvailable()
-    {
-        SeedMondayTimeSlots(); // Real 50-min slots needed for auto-scheduler
-        AddClassroom(1, "C101", 30);
-        var course = AddCourse(1, "CENG101", theoryHours: 2);
-        AddSection(1, course.Id, instructorId: null, capacity: 25);
-
-        var result = await _service.AutoSchedulePreviewAsync(new AutoScheduleRequest
-        {
-            FacultyId = FacultyId,
-            TermId = TermId
-        }, "1");
-
-        result.SuccessCount.Should().Be(1);
-        result.Assignments.Should().ContainSingle();
-
-        var assignment = result.Assignments[0];
-        assignment.ScheduleSlots.Should().ContainSingle();
-        assignment.ScheduleSlots[0].Day.Should().Be(DayOfWeek.Monday);
-        // Real slots: slot 1 = 09:00-09:50, slot 2 = 09:55-10:45
-        assignment.ScheduleSlots[0].StartTime.Should().Be(new TimeOnly(9, 0));
-        assignment.ScheduleSlots[0].EndTime.Should().Be(new TimeOnly(10, 45));
-        // AutoScheduleEngine does not yet compute per-section FitScore (always 0)
-        assignment.FitScore.Should().BeGreaterThanOrEqualTo(0);
-        assignment.FitScore.Should().BeLessThanOrEqualTo(1);
-    }
-
-    [Fact]
-    public async Task AutoSchedulePreviewAsync_DoesNotDoubleCountPreviewInstructorHours()
-    {
-        SeedMondayTimeSlots(); // Real 50-min slots needed for auto-scheduler
-        AddClassroom(1, "C101", 50);
-        var instructor = AddInstructor(1, 101);
-        var longCourse = AddCourse(1, "CENG201", theoryHours: 4);
-        var shortCourse = AddCourse(2, "CENG202", theoryHours: 2);
-
-        AddSection(1, longCourse.Id, instructor.Id, capacity: 40);
-        AddSection(2, shortCourse.Id, instructor.Id, capacity: 30);
-
-        var result = await _service.AutoSchedulePreviewAsync(new AutoScheduleRequest
-        {
-            FacultyId = FacultyId,
-            TermId = TermId
-        }, "1");
-
-        result.SuccessCount.Should().Be(2);
-        result.FailedCount.Should().Be(0);
-
-        var firstAssignment = result.Assignments.Single(a => a.SectionId == 1);
-        var secondAssignment = result.Assignments.Single(a => a.SectionId == 2);
-
-        firstAssignment.ScheduleSlots.Should().ContainSingle();
-        secondAssignment.ScheduleSlots.Should().ContainSingle();
-
-        // 4-slot course: slots 1-4 = 09:00-12:20 (skips lunch gap, takes morning slots)
-        // But with lunch gap at 11:40, only 3 consecutive morning slots available (09:00-11:40)
-        // So 4-slot course must span across lunch or start after lunch
-        // The algorithm should find 4 consecutive slots that fit
-        firstAssignment.ScheduleSlots[0].Day.Should().Be(DayOfWeek.Monday);
-
-        // Both should be scheduled (no double-counting of instructor hours)
-        secondAssignment.ScheduleSlots.Should().ContainSingle();
-    }
+    // Plan 9 sonrası v1 engine silindi. AutoSchedulePreviewAsync v2-only (CP-SAT) artık;
+    // bu testler v1 path'in deterministik MRV+SA placement davranışını assert ediyordu —
+    // v2 testleri OR-Tools test paketinde (EngineDispatchTests, Plan9CombinedIntegrationTest, vd.).
 
     [Fact]
     public async Task AssignSectionAsync_WritesSectionSchedules_AndMarksSectionAsScheduled()
@@ -122,7 +69,7 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -147,7 +94,7 @@ public class FacultyPlanningServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_ExposesDailyLoadConflict()
+    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_RejectsDailyLoadConflict()
     {
         var classroom = AddClassroom(1, "C101", 50);
         var instructor = AddInstructor(1, 101);
@@ -167,7 +114,7 @@ public class FacultyPlanningServiceTests : IDisposable
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 55), new TimeOnly(17, 45), 10);
         var candidateSection = AddSection(2, candidateCourse.Id, instructor.Id, capacity: 35);
 
-        await _service.AssignSectionAsync(new AssignSectionRequest
+        var act = async () => await _service.AssignSectionAsync(new AssignSectionRequest
         {
             SectionId = candidateSection.Id,
             ClassroomId = classroom.Id,
@@ -175,21 +122,85 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(16, 0),
                     EndTime = new TimeOnly(17, 45)
                 }
             ]
         }, "999");
 
-        var conflicts = await _service.GetConflictsAsync(FacultyId, TermId);
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*sert kisit ihlali*");
 
-        conflicts.Should().Contain(conflict =>
-            conflict.SectionId == candidateSection.Id
-            && conflict.ConflictType == "DailyLoadConflict");
+        var writtenSchedules = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == candidateSection.Id)
+            .ToListAsync();
 
-        var sectionPage = await _service.GetSectionsAsync(FacultyId, TermId);
-        sectionPage.Items.Single(item => item.SectionId == candidateSection.Id).Status.Should().Be("Conflicted");
+        writtenSchedules.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignSectionAsync_MoveToDifferentSlots_RewritesSectionSchedules()
+    {
+        // Regresyon: SchedulingEditorPage drag-drop ile atanmış section başka boş hücreye taşındığında
+        // backend slot kayıtlarını güncellemeli. Önceki guard "aynı classroom + yeni slot" senaryosunu
+        // kaçırıyordu; endpoint 200 dönüyor ama SectionSchedules eski yerinde kalıyordu.
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(10, 0), 1);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(11, 0), 2);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(13, 0), new TimeOnly(14, 0), 3);
+        AddTimeSlot(TermId, DayOfWeek.Tuesday, new TimeOnly(14, 0), new TimeOnly(15, 0), 4);
+
+        var classroom = AddClassroom(1, "C101", 30);
+        var course = AddCourse(1, "CENG201", theoryHours: 2);
+        var section = AddSection(1, course.Id, instructorId: null, capacity: 25);
+
+        // 1. atama — Pazartesi 09:00-11:00
+        var firstAssign = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Monday,
+                    StartTime = new TimeOnly(9, 0),
+                    EndTime = new TimeOnly(11, 0)
+                }
+            ]
+        }, "999");
+        firstAssign.Success.Should().BeTrue();
+
+        // Taşıma — aynı classroom, farklı slotlar (Sal 13:00-15:00). Frontend SchedulingEditorPage'in
+        // gönderdiği payload ile birebir aynı: classroomId aynı, scheduleSlots yeni hücreyi tarif eder.
+        var moveResult = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = section.Id,
+            ClassroomId = classroom.Id,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Tuesday,
+                    StartTime = new TimeOnly(13, 0),
+                    EndTime = new TimeOnly(15, 0)
+                }
+            ]
+        }, "999");
+        moveResult.Success.Should().BeTrue();
+
+        var writtenSchedules = await _context.SectionSchedules
+            .Include(ss => ss.TimeSlot)
+            .Where(ss => ss.CourseSectionId == section.Id)
+            .OrderBy(ss => ss.TimeSlot.StartTime)
+            .ToListAsync();
+
+        writtenSchedules.Should().HaveCount(2);
+        writtenSchedules.Should().OnlyContain(ss => ss.TimeSlot.DayOfWeek == DayOfWeek.Tuesday,
+            because: "taşıma sonrası tüm slot kayıtları yeni güne ait olmalı");
+        writtenSchedules.Select(ss => ss.TimeSlot.StartTime)
+            .Should().Equal(new TimeOnly(13, 0), new TimeOnly(14, 0));
     }
 
     [Fact]
@@ -211,7 +222,7 @@ public class FacultyPlanningServiceTests : IDisposable
             [
                 new ScheduleSlotDto
                 {
-                    Day = DayOfWeek.Monday,
+                    Day = (int)DayOfWeek.Monday,
                     StartTime = new TimeOnly(9, 0),
                     EndTime = new TimeOnly(11, 0)
                 }
@@ -484,37 +495,8 @@ public class FacultyPlanningServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private ConstraintEvaluationService CreateConstraintEvaluationService()
-    {
-        var evaluators = new IConstraintEvaluator[]
-        {
-            new CapacityEvaluator(),
-            new ClassroomTypeEvaluator(),
-            new FacultyClassroomEvaluator(),
-            new ClassroomConflictEvaluator(),
-            new InstructorConflictEvaluator(),
-            new CurriculumConflictEvaluator(),
-            new CourseComponentEvaluator(),
-            new SameCourseSectionEvaluator(),
-            new WeeklyLoadEvaluator(),
-            new DailyLoadEvaluator(),
-            new NoDayOffEvaluator(),
-            new CorequisiteEvaluator(),
-            new CreditHourEvaluator(),
-            new LunchBreakEvaluator(),
-            new MaxConsecutiveHoursEvaluator(),
-            new OccupancyEvaluator(),
-            new DailyLoadSoftEvaluator(),
-            new SlotCongestionEvaluator(),
-            new CoEnrollmentEvaluator(),
-            new LunchBreakSoftEvaluator(),
-            new StudentGapEvaluator(),
-            new InstructorDaySpreadEvaluator(),
-            new EarlyLateEvaluator(),
-            new WeekdayBalanceEvaluator(),
-        };
-        return new ConstraintEvaluationService(evaluators, _context, Microsoft.Extensions.Logging.Abstractions.NullLogger<ConstraintEvaluationService>.Instance);
-    }
+    // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
+    // ConstraintStateLoader + RuleEngine ile kuruluyor.
 
     public void Dispose()
     {

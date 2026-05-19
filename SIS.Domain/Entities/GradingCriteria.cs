@@ -12,7 +12,10 @@ public class GradingCriteria
     public int AcademicTermId { get; set; }
     public AcademicTerm AcademicTerm { get; set; } = null!;
 
-    // Varsayılan aralıklar (hoca değiştirmezse bunlar geçerli)
+    // Absolute = mutlak değerlendirme, Relative = bağıl değerlendirme / çan eğrisi
+    public string CalculationMethod { get; set; } = "Absolute";
+
+    // Varsayılan aralıklar
     public int AAMin { get; set; } = 91;
     public int BAMin { get; set; } = 81;
     public int BBMin { get; set; } = 71;
@@ -20,7 +23,7 @@ public class GradingCriteria
     public int CCMin { get; set; } = 55;
     public int DCMin { get; set; } = 50;
     public int DDMin { get; set; } = 45;
-    // FF = DDMin altı — ayrı field gerekmiyor
+    // FF = DDMin altı
 
     public GradeCode ResolveGrade(int score) => score switch
     {

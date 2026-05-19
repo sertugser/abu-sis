@@ -87,7 +87,7 @@ public class AuthService : IAuthService
         // Basic refresh token implementation
         // Validate the existing token and issue a new one
         var jwtSettings = _configuration.GetSection("Jwt");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetRequiredJwtKey()));
 
         var tokenHandler = new JwtSecurityTokenHandler();
         try
@@ -98,9 +98,12 @@ public class AuthService : IAuthService
                 ValidateAudience = true,
                 ValidateLifetime = false, // Lifetime kontrolü aşağıda manuel yapılır
                 ValidateIssuerSigningKey = true,
+                RequireExpirationTime = true,
+                RequireSignedTokens = true,
                 ValidIssuer = jwtSettings["Issuer"],
                 ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = key
+                IssuerSigningKey = key,
+                ClockSkew = TimeSpan.FromMinutes(1)
             }, out var validatedToken);
 
             // Güvenlik: Süresi çok eski token'larla sonsuz yenilemeyi engelle
@@ -211,7 +214,7 @@ public class AuthService : IAuthService
     private string GenerateJwtToken(ApplicationUser user, IList<string> roles, bool passwordChangeRequired)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetRequiredJwtKey()));
 
         var claims = new List<Claim>
         {
@@ -232,4 +235,7 @@ public class AuthService : IAuthService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private string GetRequiredJwtKey() =>
+        _configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key configuration is required.");
 }

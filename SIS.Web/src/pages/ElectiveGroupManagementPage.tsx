@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, FolderOpen, Loader2, Plus, RotateCcw } from 'lucide-react';
+import {
+  AlertCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  FolderOpen, Loader2, RotateCcw,
+} from 'lucide-react';
+
+const PAGE_SIZE = 10;
+
+/** Create dialog state'i parent'ta yaşar (ElectiveConfigurationPage), butona
+ * tab şeridinin sağında erişilir. */
+interface ElectiveGroupManagementPageProps {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}
 import {
   useElectiveGroupList,
   useCreateElectiveGroup,
@@ -142,115 +155,148 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Yeni Seçmeli Ders Grubu</DialogTitle>
+      <ResizableDialogContent
+        defaultWidth={880} defaultHeight={600} minWidth={640} minHeight={480}
+        className="flex flex-col p-0 gap-0"
+      >
+        <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b">
+          <DialogTitle className="text-lg">Yeni Seçmeli Ders Grubu</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="ceg-name">Grup Adı</Label>
-            <Input id="ceg-name" value={name} onChange={e => setName(e.target.value)} placeholder="örneğin: Teknik Seçmeli Grup A" />
-          </div>
-          <div>
-            <Label htmlFor="ceg-code">Kod</Label>
-            <Input id="ceg-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="örneğin: TE-A" />
-          </div>
-          <div>
-            <Label>Tip</Label>
-            <Select
-              value={subtypeId !== null ? String(subtypeId) : ''}
-              onValueChange={handleSubtypeChange}
-              disabled={subtypesLoading || !subtypes || subtypes.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={subtypesLoading ? 'Yükleniyor...' : 'Tip seçin...'} />
-              </SelectTrigger>
-              <SelectContent>
-                {(subtypes ?? []).map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!subtypesLoading && subtypes && subtypes.length === 0 && (
-              <p className="text-[10px] text-amber-700 mt-1">
-                Tanımlı aktif tip yok. Önce "Seçmeli Tipleri" sayfasından tip ekleyin.
-              </p>
-            )}
-          </div>
-
-          {!facultyDisabled && (
-            <div>
-              <Label>
-                Fakülte{selectedSubtype?.requiresFaculty ? '' : ' (opsiyonel)'}
-              </Label>
-              <Select
-                value={facultyId || '__none__'}
-                onValueChange={v => handleFacultyChange(v === '__none__' ? '' : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Fakülte seçin..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {!selectedSubtype?.requiresFaculty && (
-                    <SelectItem value="__none__">— Seçilmedi —</SelectItem>
-                  )}
-                  {faculties?.map(f => (
-                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* İki kolon yatay layout: sol (Ad + Kod + Tip), sağ (Fakülte + Bölüm).
+              Açıklama altta full-width. Mobilde tek kolon — md ve üstünde 2 kolon. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* ── Sol kolon ── */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="ceg-name" className="text-sm font-medium">Grup Adı</Label>
+                <Input
+                  id="ceg-name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="örneğin: Teknik Seçmeli Grup A"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ceg-code" className="text-sm font-medium">Kod</Label>
+                <Input
+                  id="ceg-code"
+                  value={code}
+                  onChange={e => setCode(e.target.value.toUpperCase())}
+                  placeholder="örneğin: TE-A"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Tip</Label>
+                <Select
+                  value={subtypeId !== null ? String(subtypeId) : ''}
+                  onValueChange={handleSubtypeChange}
+                  disabled={subtypesLoading || !subtypes || subtypes.length === 0}
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder={subtypesLoading ? 'Yükleniyor...' : 'Tip seçin...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(subtypes ?? []).map(s => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!subtypesLoading && subtypes && subtypes.length === 0 && (
+                  <p className="text-sm text-amber-700 mt-1">
+                    Tanımlı aktif tip yok. Önce "Seçmeli Tipleri" sayfasından tip ekleyin.
+                  </p>
+                )}
+              </div>
             </div>
-          )}
 
-          {!departmentDisabled && (
-            <div className="space-y-1">
-              <Label className="text-xs">
-                Bölüm{selectedSubtype?.requiresDepartment ? '' : ' (opsiyonel)'}
-              </Label>
-              <Select
-                value={departmentId || '__all__'}
-                onValueChange={v => setDepartmentId(v === '__all__' ? '' : v)}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="(Tüm fakülte)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {!selectedSubtype?.requiresDepartment && (
-                    <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
-                  )}
-                  {(departments ?? []).map(d => (
-                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                Boş bırakırsanız fakültenin tüm bölümleri kullanabilir.
-              </p>
+            {/* ── Sağ kolon ── */}
+            <div className="space-y-4">
+              {!facultyDisabled && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">
+                    Fakülte{selectedSubtype?.requiresFaculty ? '' : ' (opsiyonel)'}
+                  </Label>
+                  <Select
+                    value={facultyId || '__none__'}
+                    onValueChange={v => handleFacultyChange(v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="Fakülte seçin..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!selectedSubtype?.requiresFaculty && (
+                        <SelectItem value="__none__">— Seçilmedi —</SelectItem>
+                      )}
+                      {faculties?.map(f => (
+                        <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {!departmentDisabled && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">
+                    Bölüm{selectedSubtype?.requiresDepartment ? '' : ' (opsiyonel)'}
+                  </Label>
+                  <Select
+                    value={departmentId || '__all__'}
+                    onValueChange={v => setDepartmentId(v === '__all__' ? '' : v)}
+                  >
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="(Tüm fakülte)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!selectedSubtype?.requiresDepartment && (
+                        <SelectItem value="__all__">(Tüm fakülte)</SelectItem>
+                      )}
+                      {(departments ?? []).map(d => (
+                        <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    Boş bırakırsanız fakültenin tüm bölümleri kullanabilir.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-
-          <div>
-            <Label htmlFor="ceg-desc">Açıklama</Label>
-            <Textarea id="ceg-desc" value={description} onChange={e => setDescription(e.target.value)} rows={3} />
           </div>
+
+          {/* Açıklama — full width altta */}
+          <div className="mt-5 space-y-1.5">
+            <Label htmlFor="ceg-desc" className="text-sm font-medium">Açıklama</Label>
+            <Textarea
+              id="ceg-desc"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              className="text-sm"
+            />
+          </div>
+
+          {/* Validation hataları */}
+          {validationError && (
+            <p className="text-sm text-destructive mt-3">{validationError}</p>
+          )}
+          {createMutation.isError && !validationError && (
+            <p className="text-sm text-destructive mt-3">Grup oluşturulamadı.</p>
+          )}
         </div>
 
-        {validationError && (
-          <p className="text-xs text-destructive mt-1">{validationError}</p>
-        )}
-        {createMutation.isError && !validationError && (
-          <p className="text-xs text-destructive mt-1">Grup oluşturulamadı.</p>
-        )}
-
-        <DialogFooter>
+        <DialogFooter className="px-6 py-3 border-t shrink-0 gap-2">
           <Button variant="outline" onClick={() => handleOpenChange(false)}>İptal</Button>
           <Button onClick={handleCreate} disabled={!canSubmit || createMutation.isPending}>
             {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Oluştur
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResizableDialogContent>
     </Dialog>
   );
 }
@@ -260,7 +306,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
 function SubtypeBadge({ subtype }: { subtype: ElectiveSubtypeDto | null }) {
   if (!subtype) {
     return (
-      <Badge variant="outline" className="text-[10px] font-medium bg-slate-50 text-slate-500 border-slate-200">
+      <Badge variant="outline" className="text-xs font-medium px-2.5 py-0.5 bg-slate-50 text-slate-500 border-slate-200">
         ?
       </Badge>
     );
@@ -268,7 +314,7 @@ function SubtypeBadge({ subtype }: { subtype: ElectiveSubtypeDto | null }) {
   return (
     <Badge
       variant="outline"
-      className={`text-[10px] font-medium whitespace-nowrap ${getSubtypeColorByCode(subtype.code)}`}
+      className={`text-xs font-medium px-2.5 py-0.5 whitespace-nowrap ${getSubtypeColorByCode(subtype.code)}`}
       title={subtype.name}
     >
       {subtype.name}
@@ -278,7 +324,10 @@ function SubtypeBadge({ subtype }: { subtype: ElectiveSubtypeDto | null }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────
 
-export default function ElectiveGroupManagementPage() {
+export default function ElectiveGroupManagementPage({
+  createOpen,
+  onCreateOpenChange,
+}: ElectiveGroupManagementPageProps) {
   // Faz B B3c-3: subtypeFilter artık subtypeId ('all' veya numerik string).
   // Custom subtype'lar da filter dropdown'a düşer; faculty/department filter
   // subtype'tan bağımsız aktif (eski hardcoded 'TechnicalElective' check kalktı).
@@ -286,8 +335,8 @@ export default function ElectiveGroupManagementPage() {
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: faculties } = useAdminFaculties();
   const facultyFilterIdNum = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
@@ -307,6 +356,24 @@ export default function ElectiveGroupManagementPage() {
 
   const hasActiveFilters = subtypeFilter !== 'all' || facultyFilter !== 'all' || departmentFilter !== 'all' || statusFilter !== 'all';
 
+  const totalCount = groups?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const pagedGroups = useMemo(
+    () => (groups ?? []).slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [groups, currentPage],
+  );
+
+  // Filtre değiştiğinde veya toplam sayfa azaldığında geçerli sayfayı sıfırla.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentPage(1);
+  }, [subtypeFilter, facultyFilter, departmentFilter, statusFilter]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   function resetFilters() {
     setSubtypeFilter('all');
     setFacultyFilter('all');
@@ -315,116 +382,115 @@ export default function ElectiveGroupManagementPage() {
   }
 
   return (
-    <div className="space-y-5">
-
+    <>
       {/* ── Error ── */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Gruplar yüklenirken hata oluştu.</AlertDescription>
-        </Alert>
+        <div className="px-4 pt-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Gruplar yüklenirken hata oluştu.</AlertDescription>
+          </Alert>
+        </div>
       )}
 
-      {/* ── Single Container ── */}
-      <div className="bg-background border border-border rounded-xl overflow-hidden">
-
-        {/* ── Toolbar: Filters + Action ── */}
-        <div className="flex flex-wrap gap-3 items-end px-4 py-3 border-b border-border bg-muted/40">
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Tip</span>
-            <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
-              <SelectTrigger className="w-[200px] h-9 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {(filterSubtypes ?? []).map(s => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Fakülte</span>
-            <Select
-              value={facultyFilter}
-              onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
-            >
-              <SelectTrigger className="w-[180px] h-9 bg-white">
-                <SelectValue placeholder="Tümü" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {faculties?.map(f => (
-                  <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Bölüm</span>
-            <Select
-              value={departmentFilter}
-              onValueChange={setDepartmentFilter}
-              disabled={facultyFilter === 'all'}
-            >
-              <SelectTrigger className="w-[180px] h-9 bg-white">
-                <SelectValue placeholder="Tümü" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                {(filterDepartments ?? []).map(d => (
-                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Durum</span>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[120px] h-9 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tümü</SelectItem>
-                <SelectItem value="active">Aktif</SelectItem>
-                <SelectItem value="inactive">Pasif</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={resetFilters}>
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Sıfırla
-            </Button>
-          )}
-
-          <Button onClick={() => setCreateOpen(true)} className="h-9 ml-auto">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Yeni Grup
-          </Button>
+      {/* ── Toolbar: Filters + Action (simetrik: tüm dropdown 200px, padding px-4 py-4) ── */}
+      <div className="flex flex-col gap-3 px-4 py-4 border-b border-border/80 bg-card sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-sm font-medium text-muted-foreground">Tip</span>
+          <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {(filterSubtypes ?? []).map(s => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* ── Table ── */}
-        <table className="w-full">
-          <thead className="bg-muted/20 border-b border-border">
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-sm font-medium text-muted-foreground">Fakülte</span>
+          <Select
+            value={facultyFilter}
+            onValueChange={v => { setFacultyFilter(v); setDepartmentFilter('all'); }}
+          >
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue placeholder="Tümü" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {faculties?.map(f => (
+                <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-sm font-medium text-muted-foreground">Bölüm</span>
+          <Select
+            value={departmentFilter}
+            onValueChange={setDepartmentFilter}
+            disabled={facultyFilter === 'all'}
+          >
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue placeholder="Tümü" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              {(filterDepartments ?? []).map(d => (
+                <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5 w-full sm:w-[200px]">
+          <span className="text-sm font-medium text-muted-foreground">Durum</span>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full h-10 bg-white text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tümü</SelectItem>
+              <SelectItem value="active">Aktif</SelectItem>
+              <SelectItem value="inactive">Pasif</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            className="h-10 text-sm text-muted-foreground w-full sm:w-auto sm:ml-auto hover:bg-primary/5 hover:text-primary"
+            onClick={resetFilters}
+          >
+            <RotateCcw className="h-4 w-4 mr-1.5" />
+            Sıfırla
+          </Button>
+        )}
+      </div>
+
+      {/* ── Table — kolonlar 8'in katlarında, tüm padding px-4 py-3.5.
+           Yükseklik adaptif: kart veri kadar büyür, 11+ kayıtta pagination devreye girer. */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px]">
+          <thead className="bg-card border-b border-border/80">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Kod</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Grup Adı</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-32">Tip</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-56">Kapsam</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-16">Ders</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-20">Durum</th>
+              <th className="text-left px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-32">Kod</th>
+              <th className="text-left px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Grup Adı</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-40">Tip</th>
+              <th className="text-left px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-56">Kapsam</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-20">Ders</th>
+              <th className="text-center px-4 py-3.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground w-24">Durum</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="divide-y divide-border/80">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
                   Yükleniyor...
                 </td>
@@ -448,18 +514,18 @@ export default function ElectiveGroupManagementPage() {
               </tr>
             )}
 
-            {!isLoading && groups && groups.map((g: ElectiveGroupListDto) => (
+            {!isLoading && groups && pagedGroups.map((g: ElectiveGroupListDto) => (
               <tr
                 key={g.id}
-                className="cursor-pointer hover:bg-muted/20 transition-colors"
+                className="cursor-pointer hover:bg-primary/5 transition-colors"
                 onClick={() => setSelectedGroupId(g.id)}
               >
-                <td className="px-4 py-3 font-mono text-xs font-medium">{g.code}</td>
-                <td className="px-4 py-3 text-sm font-medium">{g.name}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3.5 font-mono text-sm font-medium">{g.code}</td>
+                <td className="px-4 py-3.5 text-sm font-medium">{g.name}</td>
+                <td className="px-4 py-3.5 text-center">
                   <SubtypeBadge subtype={findSubtypeById(filterSubtypes, g.electiveSubtypeId)} />
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
+                <td className="px-4 py-3.5 text-sm text-muted-foreground">
                   {g.facultyName ? (
                     <>
                       <span>Fakülte: <span className="text-foreground">{g.facultyName}</span></span>
@@ -471,8 +537,8 @@ export default function ElectiveGroupManagementPage() {
                     <span>Okul geneli</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-center text-sm">{g.courseCount}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3.5 text-center text-sm">{g.courseCount}</td>
+                <td className="px-4 py-3.5 text-center">
                   <Badge
                     variant="outline"
                     className={
@@ -488,19 +554,39 @@ export default function ElectiveGroupManagementPage() {
             ))}
           </tbody>
         </table>
-
-        {/* ── Footer ── */}
-        {!isLoading && groups && groups.length > 0 && (
-          <div className="px-4 py-2.5 border-t border-border bg-muted/30">
-            <p className="text-xs text-muted-foreground">
-              Toplam <span className="font-medium text-foreground">{groups.length}</span> grup
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* ── Create Dialog ── */}
-      <CreateElectiveGroupDialog open={createOpen} onOpenChange={setCreateOpen} />
+      {/* ── Footer + Pagination — simetrik: px-4 py-3, butonlar h-9 ── */}
+      {!isLoading && groups && groups.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-border/80 bg-card">
+          <p className="text-sm text-muted-foreground">
+            Toplam <span className="font-medium text-foreground">{totalCount}</span> grup
+            {totalPages > 1 && (
+              <> — Sayfa <span className="font-medium text-foreground">{currentPage}</span>/{totalPages}</>
+            )}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-3 min-w-[2.5rem] text-center text-sm font-medium">{currentPage}</span>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-primary/5 hover:text-primary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Create Dialog (state parent'ta) ── */}
+      <CreateElectiveGroupDialog open={createOpen} onOpenChange={onCreateOpenChange} />
 
       {/* ── Detail Sheet ── */}
       <ElectiveGroupDetailSheet
@@ -508,6 +594,6 @@ export default function ElectiveGroupManagementPage() {
         groupId={selectedGroupId}
         onClose={() => setSelectedGroupId(null)}
       />
-    </div>
+    </>
   );
 }

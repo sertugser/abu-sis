@@ -1,4 +1,4 @@
-export const ROUTES = {
+﻿export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
   AKADEMIK_TAKVIM: '/akademik-takvim',
@@ -18,7 +18,6 @@ export const ROUTES = {
   INSTRUCTOR_ACADEMIC_CALENDAR: '/ogretim-elemani-akademik-takvim',
   ATTENDANCE_ENTRY: '/yoklama-girisi',
   GRADE_ENTRY: '/not-girisi',
-  CLASS_LISTS: '/sinif-listeleri',
   CLASSROOM_DASHBOARD: '/derslik-doluluk-tablosu',
   SCHEDULE_CREATION: '/ders-programi-olusturma',
   CLASSROOM_ASSIGNMENT: '/derslik-fakulte-atamasi',
@@ -38,7 +37,7 @@ export const ROUTES = {
   SYSTEM_CONFIG: '/sistem-ayarlari',
   AUDIT_LOG: '/denetim-kayitlari',
   PROMOTION_RULES: '/mufredat-sinif-donem-tanimlari',
-  // ── Öğrenci İşlemleri (SystemAdmin) ──
+  // â”€â”€ Ã–ÄŸrenci Ä°ÅŸlemleri (SystemAdmin) â”€â”€
   STUDENT_NUMBER_CHANGE: '/ogrenci-no-degistirme',
   STUDENT_PROMOTION: '/sinif-atlatma-islemleri',
   BULK_ADVISOR_ASSIGNMENT: '/toplu-danisman-atama',
@@ -46,17 +45,16 @@ export const ROUTES = {
   BULK_CURRICULUM_ASSIGNMENT: '/toplu-mufredat-atama',
   BULK_COURSE_REGISTRATION: '/toplu-ders-kaydi',
   COURSE_REGISTRATION_EDIT: '/ders-kayit-duzenleme',
-  SECTION_TRANSFER: '/subeler-arasi-ogrenci-transfer',
   COURSE_TRANSFER: '/dersler-arasi-ogrenci-transfer',
   LETTER_GRADE_EDIT: '/harf-notu-duzenleme',
-  // ── Yönetim → Kullanıcı İşlemleri ──
+  // â”€â”€ YÃ¶netim â†’ KullanÄ±cÄ± Ä°ÅŸlemleri â”€â”€
   USER_PERMISSION_GROUPS: '/kullanici-yetki-gruplari',
   USER_REPORT_GROUPS: '/kullanici-rapor-gruplari',
   USER_GROUP_RESTRICTIONS: '/kullanici-grup-sinirlandirmalar',
   USER_REPORT_DESIGN_GROUPS: '/kullanici-rapor-tasarim-gruplari',
   USER_DELEGATION: '/kullanici-vekalet-islemleri',
   PASSWORD_CHANGE: '/sifre-degistir',
-  // ── Yönetim → Genel Ayarlar ──
+  // â”€â”€ YÃ¶netim â†’ Genel Ayarlar â”€â”€
   UNIVERSITY_INFO: '/universite-bilgileri',
   INSTITUTIONAL_INTEGRATION: '/kurumsal-entegrasyon-tanimlari',
   DOCUMENT_RESTRICTIONS: '/belge-sinirlandirmalar',
@@ -75,6 +73,7 @@ export const ROUTES = {
   ELECTIVE_CONFIG_SUBTYPES: '/secmeli-yapilandirma/tipler',
   INSTRUCTOR_COURSES_REPORT: '/ders-veren-ogretim-uyeleri',
   TERM_PROGRAM_TRANSFER: '/donem-programi-aktarim',
+  EXAM_CURRICULUM: '/sinav-mufredati',
   SECTIONING: '/subelendirme-islemleri',
   COURSE_QUOTA: '/ders-kontenjan-islemleri',
   // Course Evaluation
@@ -143,7 +142,7 @@ export const QUERY_KEYS = {
   electiveGroupDetail: (id: number) => ['electiveGroups', 'detail', id] as const,
   curriculumPools: (curriculumId: number) => ['curriculum', 'pools', curriculumId] as const,
   // Academic Calendar
-  studentAcademicCalendar: (termId?: number | null) => ['academicCalendar', 'student', termId] as const,
+  studentAcademicCalendar: (termId?: number | null, includeAllEvents = false) => ['academicCalendar', 'student', termId, includeAllEvents] as const,
   studentAcademicCalendarActive: ['academicCalendar', 'student', 'active'] as const,
   academicCalendarTerms: ['academicCalendar', 'terms'] as const,
   // Course Evaluation
@@ -170,11 +169,11 @@ export const QUERY_KEYS = {
 
 export const STATUS_LABELS: Record<string, string> = {
   Draft: 'Taslak',
-  PendingAdvisorApproval: 'Danışman Onayı Bekleniyor',
+  PendingAdvisorApproval: 'DanÄ±ÅŸman OnayÄ± Bekleniyor',
   Active: 'Aktif',
-  Completed: 'Tamamlandı',
-  Dropped: 'Bırakıldı',
-  Withdrawn: 'Çekildi',
+  Completed: 'TamamlandÄ±',
+  Dropped: 'BÄ±rakÄ±ldÄ±',
+  Withdrawn: 'Ã‡ekildi',
   Rejected: 'Reddedildi',
 };
 
@@ -196,6 +195,8 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/akilli-planlama',
   '/plan',
   '/alinan-dersler',
+  '/danisman-bilgileri',
+  '/acilan-bolum-dersleri',
   '/not-listesi',
   '/devamsizlik-durumu',
   '/donem-ortalamalari',
@@ -207,7 +208,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/not-girisi',
   '/ders-programim',
   '/ogretim-elemani-akademik-takvim',
-  '/sinif-listeleri',
   '/ders-programi-olusturma',
   '/derslik-doluluk-tablosu',
   '/derslik-fakulte-atamasi',
@@ -233,7 +233,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/toplu-mufredat-atama',
   '/toplu-ders-kaydi',
   '/ders-kayit-duzenleme',
-  '/subeler-arasi-ogrenci-transfer',
   '/dersler-arasi-ogrenci-transfer',
   '/harf-notu-duzenleme',
   '/kullanici-yetki-gruplari',
@@ -265,6 +264,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/osym-kayit-takvimi',
   '/program-kontenjan',
   '/ders-saatleri-yonetimi',
+  '/sinav-mufredati',
   '/subelendirme-islemleri',
   '/ders-kontenjan-islemleri',
 ]);
@@ -272,22 +272,22 @@ export const IMPLEMENTED_ROUTES = new Set([
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Active: 'Aktif',
   Passive: 'Pasif',
-  Frozen: 'Dondurulmuş',
-  Suspended: 'Uzaklaştırılmış',
-  Dismissed: 'İlişik Kesilmiş',
+  Frozen: 'DondurulmuÅŸ',
+  Suspended: 'UzaklaÅŸtÄ±rÄ±lmÄ±ÅŸ',
+  Dismissed: 'Ä°liÅŸik KesilmiÅŸ',
   Graduated: 'Mezun',
 };
 
 export const COURSE_LANGUAGE_LABELS: Record<string, string> = {
-  Turkish: 'Türkçe',
-  English: 'İngilizce',
-  French: 'Fransızca',
+  Turkish: 'TÃ¼rkÃ§e',
+  English: 'Ä°ngilizce',
+  French: 'FransÄ±zca',
   German: 'Almanca',
-  Arabic: 'Arapça',
+  Arabic: 'ArapÃ§a',
 };
 
 export const TEACHING_METHOD_LABELS: Record<string, string> = {
-  FaceToFace: 'Yüz Yüze',
+  FaceToFace: 'YÃ¼z YÃ¼ze',
   Online: 'Uzaktan',
   Hybrid: 'Hibrit',
 };
@@ -299,6 +299,9 @@ export const COURSE_STATUS_LABELS: Record<string, string> = {
 
 export const COURSE_LEVEL_LABELS: Record<string, string> = {
   Undergraduate: 'Lisans',
-  Masters: 'Yüksek Lisans',
+  Masters: 'YÃ¼ksek Lisans',
   Doctorate: 'Doktora',
 };
+
+
+

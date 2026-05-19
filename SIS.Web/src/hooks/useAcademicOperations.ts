@@ -1,19 +1,30 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
 import {
+  bulkAssignAdvisors,
+  bulkAssignCurriculum,
   getAcademicOperationsContext,
   getAcademicPlanningSummary,
   getDepartmentAcademicLevels,
   getDepartmentClassLists,
+  getDepartmentCurriculumOptions,
   getDepartmentCurriculumOverview,
+  getDepartmentStudents,
   getGradeLockReadiness,
+  type DepartmentStudentQuery,
 } from '../api/academicOperations.api';
 import { QUERY_KEYS } from '../lib/constants';
+import type { BulkAdvisorAssignmentRequest, BulkCurriculumAssignmentRequest } from '../types/academicOperations';
 
-export function useAcademicOperationsContext() {
+export function useAcademicOperationsContext(enabled = true) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: QUERY_KEYS.academicOperationsContext,
     queryFn: getAcademicOperationsContext,
+    enabled: enabled && isAuthenticated,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 
@@ -50,6 +61,64 @@ export function useDepartmentAcademicLevels(departmentId: number | null, enabled
     queryFn: () => getDepartmentAcademicLevels(departmentId!),
     enabled: enabled && departmentId !== null,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useDepartmentStudents(
+  departmentId: number | null,
+  query: DepartmentStudentQuery = {},
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [
+      'academicOperations',
+      'departmentStudents',
+      departmentId,
+      query.search ?? '',
+      query.status ?? '',
+      query.programId ?? null,
+      query.curriculumId ?? null,
+      query.advisorId ?? null,
+    ],
+    queryFn: () => getDepartmentStudents(departmentId!, query),
+    enabled: enabled && departmentId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useDepartmentCurriculumOptions(departmentId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['academicOperations', 'curriculumOptions', departmentId],
+    queryFn: () => getDepartmentCurriculumOptions(departmentId!),
+    enabled: enabled && departmentId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBulkAdvisorAssignment(departmentId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: BulkAdvisorAssignmentRequest) => bulkAssignAdvisors(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['academicOperations', 'departmentStudents', departmentId] });
+      queryClient.invalidateQueries({ queryKey: ['departmentClassLists', departmentId] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentInstructors(departmentId ?? 0) });
+    },
+  });
+}
+
+export function useBulkCurriculumAssignment(departmentId: number | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: BulkCurriculumAssignmentRequest) => bulkAssignCurriculum(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['academicOperations', 'departmentStudents', departmentId] });
+      queryClient.invalidateQueries({ queryKey: ['academicOperations', 'curriculumOptions', departmentId] });
+      if (departmentId !== null) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId) });
+      }
+    },
   });
 }
 

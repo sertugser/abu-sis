@@ -27,4 +27,8 @@ public interface ICourseEvaluationService
     Task<EvaluationQuestionDto?> UpdateQuestionAsync(int id, UpdateEvaluationQuestionDto dto, CancellationToken ct = default);
 
     Task<bool> DeleteQuestionAsync(int id, CancellationToken ct = default);
+
+    Task<bool> RestoreQuestionAsync(int id, CancellationToken ct = default);
+
+    Task<DepartmentExportDataDto?> GetDepartmentExportDataAsync(int departmentId, int? termId, CancellationToken ct = default);
 }

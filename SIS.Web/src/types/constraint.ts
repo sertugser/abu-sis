@@ -37,26 +37,6 @@ export interface ConstraintDefinitionDetailDto extends Omit<ConstraintDefinition
   exceptions: ConstraintExceptionDto[];
 }
 
-export interface ScoreBreakdownDto {
-  totalHardViolations: number;
-  totalSoftPenalty: number;
-  feasible: boolean;
-  constraints: ConstraintScoreItemDto[];
-}
-
-export interface ConstraintScoreItemDto {
-  code: string;
-  name: string;
-  category: 'Hard' | 'Soft';
-  weight: number;
-  violationCount: number;
-  rawPenalty: number;
-  weightedPenalty: number;
-  percentage: number;
-  affectedSectionCount: number;
-  sampleViolations: string[];
-}
-
 export interface AddExceptionRequest {
   instructorId?: number | null;
   studentId?: number | null;

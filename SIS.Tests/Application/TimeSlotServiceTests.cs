@@ -22,7 +22,7 @@ public class TimeSlotServiceTests
         });
 
         var act = () => service.CreateAsync(
-            new CreateTimeSlotDto(1, DayOfWeek.Saturday, new TimeOnly(9, 0), new TimeOnly(9, 50), TimeSlotAllowedMode.Both));
+            new CreateTimeSlotDto(1, (int)DayOfWeek.Saturday, new TimeOnly(9, 0), new TimeOnly(9, 50), TimeSlotAllowedMode.Both));
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -41,7 +41,7 @@ public class TimeSlotServiceTests
         });
 
         var act = () => service.CreateAsync(
-            new CreateTimeSlotDto(1, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), TimeSlotAllowedMode.Both));
+            new CreateTimeSlotDto(1, (int)DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 50), TimeSlotAllowedMode.Both));
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -63,7 +63,7 @@ public class TimeSlotServiceTests
         });
 
         var act = () => service.CreateAsync(
-            new CreateTimeSlotDto(1, DayOfWeek.Monday, new TimeOnly(11, 30), new TimeOnly(12, 20), TimeSlotAllowedMode.Both));
+            new CreateTimeSlotDto(1, (int)DayOfWeek.Monday, new TimeOnly(11, 30), new TimeOnly(12, 20), TimeSlotAllowedMode.Both));
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -85,7 +85,7 @@ public class TimeSlotServiceTests
         });
 
         var slot = await service.CreateAsync(
-            new CreateTimeSlotDto(1, DayOfWeek.Monday, new TimeOnly(11, 30), new TimeOnly(12, 20), TimeSlotAllowedMode.Both));
+            new CreateTimeSlotDto(1, (int)DayOfWeek.Monday, new TimeOnly(11, 30), new TimeOnly(12, 20), TimeSlotAllowedMode.Both));
 
         slot.Should().NotBeNull();
         slot.StartTime.Should().Be(new TimeOnly(11, 30));

@@ -26,6 +26,7 @@ export interface EvaluationQuestion {
   category: EvaluationQuestionCategory;
   sortOrder: number;
   isActive: boolean;
+  isDeleted: boolean;
 }
 
 export interface CreateEvaluationQuestionPayload {

@@ -2,6 +2,8 @@ namespace SIS.Application.Scheduling.DTOs;
 
 public class ImportPreviewDto
 {
+    public Guid ImportSessionId { get; set; }
+    public DateTime ExpiresAt { get; set; }
     public int TotalRows { get; set; }
     public List<ImportRowDto> Rows { get; set; } = new();
 }
@@ -19,9 +21,6 @@ public class ImportRowDto
     public int Capacity { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
-    public int? SectionId { get; set; }
-    public int? ClassroomId { get; set; }
-    public int? TimeSlotId { get; set; }
 }
 
 public class ImportResultDto
