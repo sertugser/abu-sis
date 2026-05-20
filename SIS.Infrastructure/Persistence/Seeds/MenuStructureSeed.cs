@@ -18,7 +18,10 @@ public static class MenuStructureSeed
     {
         if (await context.MenuModules.AnyAsync(ct))
         {
-            return; // idempotent
+            // Mevcut DB için: yeni eklenen "Menü Yönetimi" item'ı yoksa ekle (merge patch).
+            await EnsureMenuYonetimiItemAsync(context, ct);
+            await EnsureRaporlarModuleAsync(context, ct);
+            return;
         }
 
         var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
@@ -231,6 +234,22 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Derslik-Fakülte Ataması",        "/derslik-fakulte-atamasi",             "derslik-fakulte-atamasi",        2, "menu.derslik-fakulte-atamasi.view"),
         };
 
+        // ─── Modül 10.5: Raporlar (tüm roller — son kullanıcı raporları) ─────────
+        var raporlar = new MenuModule
+        {
+            Slug = "raporlar",
+            Label = "Raporlar",
+            Icon = "FileBarChart",
+            SortOrder = 105, // 10 ile 11 arası
+        };
+        context.MenuModules.Add(raporlar);
+        await context.SaveChangesAsync(ct);
+
+        raporlar.Items = new List<MenuItem>
+        {
+            BuildItem(permissions, "Raporlarım",                     "/raporlarim",                          "raporlarim",                     1, "menu.raporlarim.view"),
+        };
+
         // ─── Modül 11: Duyuru Yönetimi (kayma: 10 → 11) — DUYURULAR LINKİ DE BURADA ─
         var duyuruYonetimi = new MenuModule
         {
@@ -322,6 +341,7 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Sistem Konfigürasyonu",                "/sistem-ayarlari",                      "system-config",                       5, "menu.system-config.view"),
             BuildItem(permissions, "EBYS İmza Yetkilileri",                "/ebys-imza-yetkilileri",                "ebys-imza-yetkilileri",               6, "menu.ebys-imza-yetkilileri.view"),
             BuildItem(permissions, "Fakülte İmza Yükleme İşlemleri",       "/fakulte-imza-yukleme-islemleri",       "fakulte-imza-yukleme",                7, "menu.fakulte-imza-yukleme.view"),
+            BuildItem(permissions, "Menü Yönetimi",                        "/menu-yonetimi",                        "menu-yonetimi",                       8, "menu.menu-yonetimi.view"),
         };
 
         // ─── Modül 14: Personel İşlemleri (top-level, SystemAdmin-only) ──────────
@@ -411,5 +431,96 @@ public static class MenuStructureSeed
 
         return item;
     }
-}
 
+    /// <summary>
+    /// Idempotent merge — mevcut DB'lerde "Menü Yönetimi" item'ı yoksa "Genel Ayarlar"
+    /// modülüne ekler. Yeni kurulumlarda zaten ana seed bloğu içinde tanımlı.
+    /// </summary>
+    private static async Task EnsureMenuYonetimiItemAsync(AppDbContext context, CancellationToken ct)
+    {
+        const string itemSlug = "menu-yonetimi";
+        if (await context.MenuItems.AnyAsync(i => i.Slug == itemSlug, ct)) return;
+
+        var module = await context.MenuModules
+            .FirstOrDefaultAsync(m => m.Slug == "yonetim-genel-ayarlar", ct);
+        if (module is null) return;
+
+        var perm = await context.Permissions
+            .FirstOrDefaultAsync(p => p.Key == "menu.menu-yonetimi.view", ct);
+        if (perm is null) return;
+
+        var maxSort = await context.MenuItems
+            .Where(i => i.ModuleId == module.Id)
+            .Select(i => (int?)i.SortOrder)
+            .MaxAsync(ct) ?? 0;
+
+        var item = new MenuItem
+        {
+            ModuleId = module.Id,
+            Label = "Menü Yönetimi",
+            Route = "/menu-yonetimi",
+            Slug = itemSlug,
+            SortOrder = maxSort + 1,
+            OpenInNewTab = false,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            MenuItemPermissions = new List<MenuItemPermission>
+            {
+                new() { PermissionId = perm.Id },
+            },
+        };
+        context.MenuItems.Add(item);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Idempotent merge — mevcut DB'lerde "Raporlar" modulu + "Raporlarım" item'ı yoksa ekler.
+    /// Yeni kurulumlarda zaten ana seed bloğu içinde tanımlı.
+    /// </summary>
+    private static async Task EnsureRaporlarModuleAsync(AppDbContext context, CancellationToken ct)
+    {
+        const string moduleSlug = "raporlar";
+        const string itemSlug = "raporlarim";
+        const string permissionKey = "menu.raporlarim.view";
+
+        var module = await context.MenuModules.FirstOrDefaultAsync(m => m.Slug == moduleSlug, ct);
+        if (module is null)
+        {
+            module = new MenuModule
+            {
+                Slug = moduleSlug,
+                Label = "Raporlar",
+                Icon = "FileBarChart",
+                SortOrder = 105,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            context.MenuModules.Add(module);
+            await context.SaveChangesAsync(ct);
+        }
+
+        if (await context.MenuItems.AnyAsync(i => i.Slug == itemSlug, ct)) return;
+
+        var perm = await context.Permissions.FirstOrDefaultAsync(p => p.Key == permissionKey, ct);
+        if (perm is null) return;
+
+        context.MenuItems.Add(new MenuItem
+        {
+            ModuleId = module.Id,
+            Label = "Raporlarım",
+            Route = "/raporlarim",
+            Slug = itemSlug,
+            SortOrder = 1,
+            OpenInNewTab = false,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            MenuItemPermissions = new List<MenuItemPermission>
+            {
+                new() { PermissionId = perm.Id },
+            },
+        });
+        await context.SaveChangesAsync(ct);
+    }
+}

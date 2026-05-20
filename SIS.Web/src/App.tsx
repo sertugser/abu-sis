@@ -62,6 +62,7 @@ import LetterGradeEditPage from './pages/LetterGradeEditPage';
 // ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
 import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
 import UserReportGroupsPage from './pages/UserReportGroupsPage';
+import MyReportsPage from './pages/MyReportsPage';
 import UserGroupRestrictionsPage from './pages/UserGroupRestrictionsPage';
 import UserReportDesignGroupsPage from './pages/UserReportDesignGroupsPage';
 import UserDelegationPage from './pages/UserDelegationPage';
@@ -73,6 +74,7 @@ import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
 import WebModuleSettingsPage from './pages/WebModuleSettingsPage';
 import EbysSignatureAuthoritiesPage from './pages/EbysSignatureAuthoritiesPage';
 import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
+import MenuManagementPage from './pages/MenuManagementPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
@@ -307,6 +309,12 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.fakulte-imza-yukleme.view" />}>
                     <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
                   </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.menu-yonetimi.view" />}>
+                    <Route path="menu-yonetimi" element={<MenuManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.raporlarim.view" />}>
+                    <Route path="raporlarim" element={<MyReportsPage />} />
+                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
                     <Route path="derslik-yonetimi" element={<ClassroomManagementAdminPage />} />
                   </Route>
@@ -372,7 +380,7 @@ export default function App() {
                     <Route element={<RoleProtectedRoute permission="system.permission.view" />}>
                       <Route path="__dev/permission-matrix" element={
                         <div className="p-6">
-                          <h1 className="text-xl font-semibold mb-4">RolePermissionMatrix (Dev Test)</h1>
+                          <h1 className="text-xl font-semibold mb-4">Rol Yetki Matrisi</h1>
                           <RolePermissionMatrix />
                         </div>
                       } />
@@ -398,4 +406,3 @@ export default function App() {
     </QueryClientProvider>
   );
 }
-

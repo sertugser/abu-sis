@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Identity.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -12,11 +13,16 @@ public class AdminUserService : IAdminUserService
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AppDbContext _context;
+    private readonly IPermissionService _permissionService;
 
-    public AdminUserService(UserManager<ApplicationUser> userManager, AppDbContext context)
+    public AdminUserService(
+        UserManager<ApplicationUser> userManager,
+        AppDbContext context,
+        IPermissionService permissionService)
     {
         _userManager = userManager;
         _context = context;
+        _permissionService = permissionService;
     }
 
     public async Task<PagedResult<AdminUserListItemDto>> GetUsersAsync(AdminUserFilterDto filter)
@@ -153,6 +159,8 @@ public class AdminUserService : IAdminUserService
 
         if (dto.Roles.Count > 0)
             await _userManager.AddToRolesAsync(user, dto.Roles);
+
+        _permissionService.InvalidateUserCache(id);
     }
 
     public async Task ResetPasswordAsync(int id, AdminResetPasswordDto dto)

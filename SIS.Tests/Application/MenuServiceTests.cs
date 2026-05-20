@@ -33,8 +33,11 @@ public class MenuServiceTests
         var permSvc = new Mock<IPermissionService>();
         permSvc.Setup(p => p.GetUserPermissionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
                .ReturnsAsync(userPerms);
+        var delSvc = new Mock<IPermissionDelegationService>();
+        delSvc.Setup(d => d.GetActiveDelegatedRoleNamesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(Array.Empty<string>());
         var userMgr = CreateUserManagerMock(userRoles);
-        return new MenuService(ctx, permSvc.Object, userMgr.Object);
+        return new MenuService(ctx, permSvc.Object, delSvc.Object, userMgr.Object);
     }
 
     private static (MenuModule mod, MenuItem item, Permission perm) AddSimpleModuleWithItem(

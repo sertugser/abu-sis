@@ -246,6 +246,9 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/web-modul-ayarlari',
   '/ebys-imza-yetkilileri',
   '/fakulte-imza-yukleme-islemleri',
+  '/menu-yonetimi',
+  '/raporlarim',
+  '/__dev/permission-matrix',
   '/program-onayi',
   '/derslik-yonetimi',
   '/ders-programi-kisitlamalari',
@@ -301,6 +304,4 @@ export const COURSE_LEVEL_LABELS: Record<string, string> = {
   Masters: 'Yüksek Lisans',
   Doctorate: 'Doktora',
 };
-
-
 
