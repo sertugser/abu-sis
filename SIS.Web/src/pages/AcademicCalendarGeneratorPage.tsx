@@ -2632,7 +2632,7 @@ export default function AcademicCalendarGeneratorPage() {
         </div>
 
         <Dialog open={!!errorNotice} onOpenChange={(open) => !open && setErrorNotice(null)}>
-          <DialogContent className="max-w-md border-red-200">
+          <DialogContent className="z-[150] max-w-md border-red-200">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-900">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -2652,8 +2652,10 @@ export default function AcademicCalendarGeneratorPage() {
 
         {notice && (
           <div
+            role="status"
+            aria-live="polite"
             className={cn(
-              'rounded-lg border px-4 py-3 text-sm shadow-sm',
+              'fixed right-4 top-4 z-[140] max-h-[40vh] w-[min(calc(100vw-2rem),32rem)] overflow-auto rounded-lg border px-4 py-3 text-sm shadow-xl',
               noticeTone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
               noticeTone === 'error' && 'border-red-200 bg-red-50 text-red-900',
               noticeTone === 'info' && 'border-slate-200 bg-white text-slate-700',
@@ -2671,7 +2673,7 @@ export default function AcademicCalendarGeneratorPage() {
       {renderDraftHistoryDialog()}
 
       {pendingConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/50 px-4 py-6">
           <div
             className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
             role="dialog"

@@ -498,6 +498,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime?>("QrSubmittedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("PresentSlotNumbersCsv")
+                        .HasColumnType("text");
+
                     b.Property<int>("Source")
                         .HasColumnType("integer");
 
@@ -505,6 +508,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalSlotCount")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("UpdatedAt")
