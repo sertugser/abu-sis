@@ -96,6 +96,11 @@ public sealed class CohortBuilder
                 {
                     var sectionsA = byCourse[courseIds[ai]];
                     var sectionsB = byCourse[courseIds[bi]];
+                    // 2026-05-20: Yalnızca her iki tarafı da zorunlu olan ders çiftleri pair'lenir.
+                    // Bir ders seçmeli ise öğrenci ya almaz ya da çakışmayan saatte alternatif
+                    // arar; sistem hard ihlal raporlamaz (komşu yıl pair'i ile simetrik mantık).
+                    if (!sectionsA[0].IsCompulsory) continue;
+                    if (!sectionsB[0].IsCompulsory) continue;
                     AddCoursePairConflicts(conflictPairs, sectionsA, sectionsB);
                 }
             }

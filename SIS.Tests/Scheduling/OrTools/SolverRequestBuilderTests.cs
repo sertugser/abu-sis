@@ -802,8 +802,10 @@ public class SolverRequestBuilderTests
             IsActive = true
         });
         ctx.CurriculumCourses.AddRange(
-            new CurriculumCourse { CurriculumId = 100, CourseId = 100, SuggestedSemester = 3 },
-            new CurriculumCourse { CurriculumId = 100, CourseId = 200, SuggestedSemester = 3 });
+            // 2026-05-20: IsCompulsory=true — CohortBuilder aynı yıl pair filtresi seçmelileri atlar,
+            // bu test cohort conflict pair üretildiğini doğruluyor → ikisi de zorunlu olmalı.
+            new CurriculumCourse { CurriculumId = 100, CourseId = 100, SuggestedSemester = 3, IsCompulsory = true },
+            new CurriculumCourse { CurriculumId = 100, CourseId = 200, SuggestedSemester = 3, IsCompulsory = true });
         ctx.CourseSections.AddRange(
             new CourseSection
             {

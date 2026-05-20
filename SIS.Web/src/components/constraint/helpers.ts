@@ -48,6 +48,8 @@ export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
   // S20 (2026-05-17): soft → hard. Komşu yıl çakışma kuralı section-aware hard
   // pair üretiyor; ağırlık/ceza puanı yerine alttan/üstten alma yolu hard garanti.
   'S20':  'hard-only',
+  // S21 (2026-05-20): Online ders Both slot'a yerleşirse penalty. Doğası soft (esnek tercih).
+  'S21':  'soft-only',
 };
 
 export function getCategoryCapability(code: string): CategoryCapability {
@@ -97,7 +99,7 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'S21', 'DIST'],
   },
 ];
 
@@ -182,6 +184,7 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'S12': [
     { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 }, // gitleaks:allow
   ],
+  'S21': [],
   'DIST': [],
 };
 

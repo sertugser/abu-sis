@@ -142,4 +142,83 @@ public class CohortBuilderAdjacentYearHardTests
         // Mesafe = 2 → komşu yıl kuralı uygulanmaz
         result.ConflictPairs.Should().NotContain((1, 2));
     }
+
+    // ── Aynı yıl seçmeli filtresi (2026-05-20) ────────────────────────────
+    // Sebep: H5 cohort mode'da aynı sınıfın iki SEÇMELI dersini "öğrenci ikisini de alır"
+    // diye işaretliyordu → yanlış pozitif uyarı. Komşu yıl pair'iyle simetrik mantık:
+    // sadece her iki tarafı da zorunlu ders çiftleri pair'lenir.
+
+    [Fact]
+    public void Build_SameYear_BothElective_NoConflictPair()
+    {
+        // Aynı sınıf (year 0) iki seçmeli ders — öğrenci ikisinden birini seçer.
+        var sections = new List<CohortSectionRef>
+        {
+            new(SectionId: 1, SectionNumber: 1, CourseId: 100, IsCompulsory: false),
+            new(SectionId: 2, SectionNumber: 1, CourseId: 200, IsCompulsory: false),
+        };
+        var courseSemesters = new Dictionary<int, Dictionary<int, int>>
+        {
+            [100] = new() { [1] = 1 },
+            [200] = new() { [1] = 1 },
+        };
+        var courseDepts = new Dictionary<int, HashSet<int>>
+        {
+            [100] = new() { 1 },
+            [200] = new() { 1 },
+        };
+
+        var result = new CohortBuilder().Build(sections, courseSemesters, courseDepts);
+        // Seçmeli + seçmeli aynı yıl → conflict pair üretilmemeli
+        result.ConflictPairs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_SameYear_CompulsoryAndElective_NoConflictPair()
+    {
+        // Aynı sınıf: 1 zorunlu + 1 seçmeli — öğrenci seçmeliyi başkasıyla değiştirebilir.
+        var sections = new List<CohortSectionRef>
+        {
+            new(SectionId: 1, SectionNumber: 1, CourseId: 100, IsCompulsory: true),
+            new(SectionId: 2, SectionNumber: 1, CourseId: 200, IsCompulsory: false),
+        };
+        var courseSemesters = new Dictionary<int, Dictionary<int, int>>
+        {
+            [100] = new() { [1] = 1 },
+            [200] = new() { [1] = 1 },
+        };
+        var courseDepts = new Dictionary<int, HashSet<int>>
+        {
+            [100] = new() { 1 },
+            [200] = new() { 1 },
+        };
+
+        var result = new CohortBuilder().Build(sections, courseSemesters, courseDepts);
+        // Karışık (zorunlu + seçmeli) → conflict pair üretilmemeli
+        result.ConflictPairs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_SameYear_BothCompulsory_ProducesConflictPair()
+    {
+        // Aynı sınıf iki zorunlu ders — öğrenci ikisini de almak zorunda → çakışma gerçek sorun.
+        var sections = new List<CohortSectionRef>
+        {
+            new(SectionId: 1, SectionNumber: 1, CourseId: 100, IsCompulsory: true),
+            new(SectionId: 2, SectionNumber: 1, CourseId: 200, IsCompulsory: true),
+        };
+        var courseSemesters = new Dictionary<int, Dictionary<int, int>>
+        {
+            [100] = new() { [1] = 1 },
+            [200] = new() { [1] = 1 },
+        };
+        var courseDepts = new Dictionary<int, HashSet<int>>
+        {
+            [100] = new() { 1 },
+            [200] = new() { 1 },
+        };
+
+        var result = new CohortBuilder().Build(sections, courseSemesters, courseDepts);
+        result.ConflictPairs.Should().Contain((1, 2));
+    }
 }

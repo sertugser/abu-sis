@@ -391,6 +391,9 @@ public sealed class SolverRequestBuilder
         var s20Penalty = await _systemConfigProvider.GetIntAsync("SoftConstraint.S20.PenaltyPerPair", 5, ct);
         var s20Weight = await _systemConfigProvider.GetIntAsync("Schedule.S20Weight", 1, ct);
 
+        // S21 OnlineSlotPreference (2026-05-20)
+        var s21Weight = await _systemConfigProvider.GetIntAsync("Schedule.S21Weight", 5, ct);
+
         // DIST tier weights
         var distDiscWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistDiscouragedWeight", 50, ct);
         var distStrongWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistStronglyDiscouragedWeight", 200, ct);
@@ -428,6 +431,7 @@ public sealed class SolverRequestBuilder
             S12Weight = s12Weight,
             S20PenaltyPerPair = s20Penalty,
             S20Weight = s20Weight,
+            S21Weight = s21Weight,
             DistDiscouragedWeight = distDiscWeight,
             DistStronglyDiscouragedWeight = distStrongWeight,
             H4Weight = h4Weight,

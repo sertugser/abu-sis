@@ -82,4 +82,6 @@ public sealed record SoftThresholds
     public int H16Weight { get; init; } = 5;    // TheoryLabDaySplit (theory + lab on same day above threshold)
     public int HWLWeight { get; init; } = 8;    // WeeklyLoad (instructor weekly excess hours)
     public int HDOWeight { get; init; } = 7;    // NoDayOff (instructor with no day off)
+    // S21 Online Slot Tercihi (2026-05-20): Online ders Both slot'a düşerse her blok için penalty.
+    public int S21Weight { get; init; } = 5;
 }

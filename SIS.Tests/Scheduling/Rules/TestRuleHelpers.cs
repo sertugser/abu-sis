@@ -47,6 +47,7 @@ internal static class TestRuleHelpers
         new S8_InstructorDaySpreadRule(),
         new S12_WeekdayBalanceRule(),
         new S20_AdjacentYearConflictRule(),
+        new S21_OnlineSlotPreferenceRule(),
         new DIST_DistributionRule(),
     };
 

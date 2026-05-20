@@ -280,6 +280,17 @@ public static partial class SeedData
             },
             new()
             {
+                Code = "S21",
+                Name = "Online Ders Slot Tercihi",
+                Description = "Online derslerin OnlineOnly damgalı slotlara (akşam saatleri, hafta sonu vb.) yerleştirilmesini TEŞVİK eder. Online ders Both (her ikisine açık) slot'a yerleşirse her blok için ceza alır; OnlineOnly slot'a yerleşirse ceza yok. Yetersiz OnlineOnly slot durumunda otomatik olarak Both slot'a kayar (esnek, hard değil).",
+                Category = "Soft",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                Parameters = """{"Weight": 5}""",
+                SortOrder = 111
+            },
+            new()
+            {
                 Code = "DIST",
                 Name = "İlişkisel Kısıtlamalar",
                 Description = "Dersler arası ilişkisel kuralları (aynı gün, ardışık, aynı derslik, sıralama) kontrol eder.",
