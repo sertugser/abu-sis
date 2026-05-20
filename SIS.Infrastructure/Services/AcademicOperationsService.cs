@@ -527,16 +527,20 @@ public class AcademicOperationsService : IAcademicOperationsService
             return result;
         }
 
+        var accessibleDepartmentIds = scope.Departments
+            .Select(department => department.DepartmentId)
+            .ToHashSet();
+
         var advisor = await _context.Instructors
             .Include(instructor => instructor.Department)
             .FirstOrDefaultAsync(instructor =>
                 instructor.Id == request.AdvisorId
-                && instructor.DepartmentId == request.DepartmentId,
+                && accessibleDepartmentIds.Contains(instructor.DepartmentId),
                 cancellationToken);
 
         if (advisor == null)
         {
-            result.Errors.Add("Secilen danisman bu bolume ait degil veya bulunamadi.");
+            result.Errors.Add("Secilen danisman erisim kapsaminizda degil veya bulunamadi.");
             return result;
         }
 
