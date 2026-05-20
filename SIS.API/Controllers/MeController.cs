@@ -76,6 +76,7 @@ public class MeController : ControllerBase
     /// Frontend panel switcher availableRoles'u bu endpoint'ten kurar.
     /// </summary>
     [HttpGet("effective-roles")]
+    [RequirePermission("lookup.me")]
     public async Task<ActionResult<EffectiveRolesDto>> GetEffectiveRoles(CancellationToken ct)
     {
         if (!TryGetUserId(out var userId))

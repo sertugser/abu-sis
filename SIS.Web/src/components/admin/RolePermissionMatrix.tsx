@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, Save, RotateCcw, Package } from 'lucide-react';
+import { ChevronDown, ChevronRight, Info, Save, RotateCcw, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getRoleDisplayLabel } from '../../lib/roles';
 import {
@@ -50,43 +50,6 @@ import type { PermissionDto } from '../../api/permissionAdmin.api';
  *   - Diff preview: "+3 / -1"
  *   - Save: useUpdateRolePermissions mutation tetikler, success'te draft = original
  */
-
-const ACTION_LABELS_TR: Record<string, string> = {
-  view: 'Görüntüle',
-  create: 'Oluştur',
-  edit: 'Düzenle',
-  delete: 'Sil',
-  cancel: 'İptal Et',
-  uncancel: 'İptali Geri Al',
-  approve: 'Onayla',
-  reject: 'Reddet',
-  override: 'Override',
-  export: 'Dışa Aktar',
-  import: 'İçe Aktar',
-  assign: 'Ata',
-  publish: 'Yayınla',
-  generate: 'Üret',
-  apply: 'Uygula',
-  rollback: 'Geri Al',
-  simulate: 'Simüle Et',
-  finalize: 'Sonuçlandır',
-  unfinalize: 'Sonucu Geri Al',
-  submit: 'Gönder',
-  'reset-password': 'Şifre Sıfırla',
-  'set-status': 'Durumu Değiştir',
-  'update-roles': 'Rolleri Değiştir',
-  'lock-grades': 'Notları Kilitle',
-  'unlock-grades': 'Not Kilidini Aç',
-  'calculate-gpa': 'GPA Hesapla',
-  'open-new-term': 'Yeni Dönem Aç',
-  promote: 'Sınıf Atlat',
-  regenerate: 'Yeniden Üret',
-  transfer: 'Transfer Et',
-};
-
-function actionLabel(action: string): string {
-  return ACTION_LABELS_TR[action] ?? action;
-}
 
 function resourceLabel(resource: string): string {
   // "akademik-donem" → "Akademik Donem"
@@ -135,6 +98,64 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const EMPTY_NUMBER_ARRAY: readonly number[] = [];
 
+type PermissionBucket = 'view' | 'edit' | 'advanced';
+
+const ADVANCED_ACTIONS = new Set([
+  'access-policy.view',
+  'access-policy.create',
+  'access-policy.delete',
+  'access-rule.view',
+  'access-rule.create',
+  'access-rule.edit',
+  'access-rule.delete',
+  'activate',
+  'apply',
+  'archive',
+  'bulk-open',
+  'close-all',
+  'copy',
+  'critical-path',
+  'cross-list',
+  'difficulty',
+  'equivalency',
+  'export',
+  'forecast',
+  'generate',
+  'import',
+  'override',
+  'prerequisite',
+  'publish',
+  'reactivate',
+  'recommendation',
+  'rollback',
+  'simulate',
+]);
+
+function isViewAction(action: string) {
+  return action === 'view' || action.endsWith('.view');
+}
+
+function permissionBucket(permission: PermissionDto): PermissionBucket {
+  const { action } = parseKey(permission.key);
+  if (isViewAction(action)) return 'view';
+  if (ADVANCED_ACTIONS.has(action)) return 'advanced';
+  return 'edit';
+}
+
+function bucketLabel(bucket: PermissionBucket) {
+  if (bucket === 'view') return 'Görüntüle';
+  if (bucket === 'edit') return 'Düzenle';
+  return 'Gelişmiş İşlemler';
+}
+
+function splitResourcePermissions(perms: PermissionDto[]) {
+  return {
+    view: perms.filter(permission => permissionBucket(permission) === 'view'),
+    edit: perms.filter(permission => permissionBucket(permission) === 'edit'),
+    advanced: perms.filter(permission => permissionBucket(permission) === 'advanced'),
+  };
+}
+
 export function RolePermissionMatrix() {
   const { data: permissionsData, isLoading: permsLoading } = useAllPermissions();
   const { data: rolesData, isLoading: rolesLoading } = useAssignableRoles();
@@ -181,15 +202,6 @@ export function RolePermissionMatrix() {
     return { added, removed, isDirty: added.length > 0 || removed.length > 0 };
   }, [draft, original]);
 
-  function togglePermission(id: number) {
-    setDraft(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   function toggleResourceAll(resourcePerms: PermissionDto[]) {
     const allChecked = resourcePerms.every(p => draft.has(p.id));
     setDraft(prev => {
@@ -198,6 +210,31 @@ export function RolePermissionMatrix() {
         resourcePerms.forEach(p => next.delete(p.id));
       } else {
         resourcePerms.forEach(p => next.add(p.id));
+      }
+      return next;
+    });
+  }
+
+  function setResourceBucket(resourcePerms: PermissionDto[], bucket: PermissionBucket, checked: boolean) {
+    const { view, edit, advanced } = splitResourcePermissions(resourcePerms);
+    setDraft(prev => {
+      const next = new Set(prev);
+      if (bucket === 'view' && checked) {
+        view.forEach(p => next.add(p.id));
+      } else if (bucket === 'view') {
+        view.forEach(p => next.delete(p.id));
+        edit.forEach(p => next.delete(p.id));
+        advanced.forEach(p => next.delete(p.id));
+      } else if (bucket === 'edit' && checked) {
+        view.forEach(p => next.add(p.id));
+        edit.forEach(p => next.add(p.id));
+      } else if (bucket === 'edit') {
+        edit.forEach(p => next.delete(p.id));
+      } else if (bucket === 'advanced' && checked) {
+        view.forEach(p => next.add(p.id));
+        advanced.forEach(p => next.add(p.id));
+      } else {
+        advanced.forEach(p => next.delete(p.id));
       }
       return next;
     });
@@ -247,10 +284,6 @@ export function RolePermissionMatrix() {
               <div className="text-[11px] opacity-70">{role.name}</div>
             </button>
           ))}
-          <p className="pt-3 text-[11px] text-muted-foreground">
-            SystemAdministrator listede yok — kod düzeyinde tüm yetkilere otomatik erişir
-            (Karar 4 — locked).
-          </p>
         </CardContent>
       </Card>
 
@@ -332,8 +365,8 @@ export function RolePermissionMatrix() {
                     category={category}
                     resources={resources}
                     draft={draft}
-                    onTogglePermission={togglePermission}
                     onToggleResourceAll={toggleResourceAll}
+                    onSetResourceBucket={setResourceBucket}
                   />
                 ))}
               </div>
@@ -349,16 +382,16 @@ interface CategoryGroupProps {
   category: string;
   resources: Record<string, PermissionDto[]>;
   draft: Set<number>;
-  onTogglePermission: (id: number) => void;
   onToggleResourceAll: (perms: PermissionDto[]) => void;
+  onSetResourceBucket: (perms: PermissionDto[], bucket: PermissionBucket, checked: boolean) => void;
 }
 
 function CategoryGroup({
   category,
   resources,
   draft,
-  onTogglePermission,
   onToggleResourceAll,
+  onSetResourceBucket,
 }: CategoryGroupProps) {
   const [open, setOpen] = useState(true);
   const label = CATEGORY_LABELS[category] ?? category;
@@ -388,8 +421,8 @@ function CategoryGroup({
               resource={resource}
               perms={perms}
               draft={draft}
-              onTogglePermission={onTogglePermission}
               onToggleResourceAll={onToggleResourceAll}
+              onSetResourceBucket={onSetResourceBucket}
             />
           ))}
       </CollapsibleContent>
@@ -401,20 +434,22 @@ interface ResourceGroupProps {
   resource: string;
   perms: PermissionDto[];
   draft: Set<number>;
-  onTogglePermission: (id: number) => void;
   onToggleResourceAll: (perms: PermissionDto[]) => void;
+  onSetResourceBucket: (perms: PermissionDto[], bucket: PermissionBucket, checked: boolean) => void;
 }
 
 function ResourceGroup({
   resource,
   perms,
   draft,
-  onTogglePermission,
   onToggleResourceAll,
+  onSetResourceBucket,
 }: ResourceGroupProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const checkedCount = perms.filter(p => draft.has(p.id)).length;
   const allChecked = checkedCount === perms.length && perms.length > 0;
   const someChecked = checkedCount > 0 && checkedCount < perms.length;
+  const { advanced } = splitResourcePermissions(perms);
 
   return (
     <div className="border-l-2 border-border/50 pl-3">
@@ -431,29 +466,60 @@ function ResourceGroup({
           ({checkedCount}/{perms.length})
         </span>
       </div>
-      <div className="ml-6 grid grid-cols-2 md:grid-cols-3 gap-1">
-        {perms
-          .sort((a, b) => a.key.localeCompare(b.key, 'tr'))
-          .map(perm => {
-            const { action } = parseKey(perm.key);
-            const checked = draft.has(perm.id);
-            return (
+      <div className="ml-6 grid grid-cols-3 gap-1">
+        {(['view', 'edit', 'advanced'] as PermissionBucket[]).map(bucket => {
+          const bucketPerms = perms.filter(permission => permissionBucket(permission) === bucket);
+          const checked = bucketPerms.length > 0 && bucketPerms.every(permission => draft.has(permission.id));
+          const someCheckedInBucket = bucketPerms.some(permission => draft.has(permission.id)) && !checked;
+          const title = bucketPerms.length > 0
+            ? bucketPerms.map(permission => permission.description ?? permission.key).join('\n')
+            : `Bu başlık için ${bucketLabel(bucket).toLocaleLowerCase('tr-TR')} yetkisi yok.`;
+          return (
+            <div key={bucket} className="flex min-w-0 items-center gap-1.5">
               <label
-                key={perm.id}
-                className="flex items-center gap-1.5 text-xs cursor-pointer hover:text-foreground text-muted-foreground"
-                title={perm.description ?? perm.key}
+                className="flex min-w-0 items-center gap-1.5 text-xs cursor-pointer hover:text-foreground text-muted-foreground"
+                title={title}
               >
                 <input
                   type="checkbox"
                   checked={checked}
-                  onChange={() => onTogglePermission(perm.id)}
-                  className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer"
+                  disabled={bucketPerms.length === 0}
+                  ref={el => { if (el) el.indeterminate = someCheckedInBucket; }}
+                  onChange={event => onSetResourceBucket(perms, bucket, event.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 />
-                {actionLabel(action)}
+                <span className="truncate">{bucketLabel(bucket)}</span>
               </label>
-            );
-          })}
+              {bucket === 'advanced' && bucketPerms.length > 0 && (
+                <button
+                  type="button"
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="Gelişmiş işlemleri göster"
+                  aria-label={`${resourceLabel(resource)} gelişmiş işlemlerini ${advancedOpen ? 'gizle' : 'göster'}`}
+                  onClick={() => setAdvancedOpen(prev => !prev)}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
+      {advancedOpen && (
+        <div className="ml-6 mt-2 rounded-md border bg-muted/30 px-3 py-2">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Gelişmiş işlemler
+          </p>
+          <ul className="space-y-1">
+            {advanced.map(permission => (
+              <li key={permission.key} className="text-[11px] text-muted-foreground">
+                <span className="font-mono text-foreground">{permission.key}</span>
+                {permission.description && <span> — {permission.description}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

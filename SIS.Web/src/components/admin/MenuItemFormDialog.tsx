@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import type { PermissionDto } from '@/api/permissionAdmin.api';
 import type { MenuItemAdminDto } from '@/api/menuAdmin.api';
 
@@ -35,6 +35,77 @@ interface Props {
   errorMessage?: string | null;
 }
 
+type PermissionBucket = 'view' | 'edit' | 'advanced';
+
+const ADVANCED_ACTIONS = new Set([
+  'access-policy.view',
+  'access-policy.create',
+  'access-policy.delete',
+  'access-rule.view',
+  'access-rule.create',
+  'access-rule.edit',
+  'access-rule.delete',
+  'activate',
+  'apply',
+  'archive',
+  'bulk-open',
+  'close-all',
+  'copy',
+  'critical-path',
+  'cross-list',
+  'difficulty',
+  'equivalency',
+  'export',
+  'forecast',
+  'generate',
+  'import',
+  'override',
+  'prerequisite',
+  'publish',
+  'reactivate',
+  'recommendation',
+  'rollback',
+  'simulate',
+]);
+
+function parsePermissionKey(key: string) {
+  const parts = key.split('.');
+  return {
+    namespace: parts[0] ?? 'other',
+    resource: parts[1] ?? 'unknown',
+    action: parts.slice(2).join('.') || 'view',
+  };
+}
+
+function resourceLabel(resource: string) {
+  return resource
+    .split('-')
+    .map(part => part.charAt(0).toLocaleUpperCase('tr-TR') + part.slice(1))
+    .join(' ');
+}
+
+function permissionBucket(permission: PermissionDto): PermissionBucket {
+  const { action } = parsePermissionKey(permission.key);
+  if (action === 'view' || action.endsWith('.view')) return 'view';
+  if (ADVANCED_ACTIONS.has(action)) return 'advanced';
+  return 'edit';
+}
+
+function bucketLabel(bucket: PermissionBucket) {
+  if (bucket === 'view') return 'Görüntüle';
+  if (bucket === 'edit') return 'Düzenle';
+  return 'Gelişmiş İşlemler';
+}
+
+function groupPermissionsByResource(permissions: PermissionDto[]) {
+  const grouped = new Map<string, PermissionDto[]>();
+  for (const permission of permissions) {
+    const { resource } = parsePermissionKey(permission.key);
+    grouped.set(resource, [...(grouped.get(resource) ?? []), permission]);
+  }
+  return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b, 'tr'));
+}
+
 export default function MenuItemFormDialog({
   open,
   onOpenChange,
@@ -52,6 +123,7 @@ export default function MenuItemFormDialog({
   const [isActive, setIsActive] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [permFilter, setPermFilter] = useState('');
+  const [expandedAdvanced, setExpandedAdvanced] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open) return;
@@ -71,6 +143,7 @@ export default function MenuItemFormDialog({
       setSelectedKeys([]);
     }
     setPermFilter('');
+    setExpandedAdvanced(new Set());
   }, [open, item]);
 
   const filteredPerms = useMemo(() => {
@@ -87,6 +160,18 @@ export default function MenuItemFormDialog({
     setSelectedKeys((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
+
+  const setPermissionGroup = (perms: PermissionDto[], bucket: PermissionBucket, checked: boolean) => {
+    const keys = perms
+      .filter(permission => permissionBucket(permission) === bucket)
+      .map(permission => permission.key);
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (checked) keys.forEach(key => next.add(key));
+      else keys.forEach(key => next.delete(key));
+      return Array.from(next);
+    });
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,33 +267,88 @@ export default function MenuItemFormDialog({
             )}
             <ScrollArea className="h-48 rounded-md border">
               <ul className="divide-y">
-                {filteredPerms.map((p) => {
-                  const checked = selectedKeys.includes(p.key);
-                  return (
-                    <li
-                      key={p.id}
-                      className="flex cursor-pointer items-start gap-2 px-3 py-1.5 hover:bg-muted/50"
-                      onClick={() => togglePerm(p.key)}
-                    >
-                      <span
-                        className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                          checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
-                        }`}
-                      >
-                        {checked && <Check className="h-3 w-3" />}
-                      </span>
-                      <div className="min-w-0 flex-1 text-xs">
-                        <div className="font-mono">{p.key}</div>
-                        {p.description && (
-                          <div className="truncate text-muted-foreground">{p.description}</div>
-                        )}
+                {groupPermissionsByResource(filteredPerms).map(([resource, perms]) => (
+                  <li key={resource} className="px-3 py-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold">{resourceLabel(resource)}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {perms.filter(permission => selectedKeys.includes(permission.key)).length}/{perms.length} yetki seçili
+                        </div>
                       </div>
                       <Badge variant="outline" className="text-[10px]">
-                        {p.category}
+                        {perms[0]?.category}
                       </Badge>
-                    </li>
-                  );
-                })}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['view', 'edit', 'advanced'] as PermissionBucket[]).map(bucket => {
+                        const bucketPerms = perms.filter(permission => permissionBucket(permission) === bucket);
+                        const checked = bucketPerms.length > 0 && bucketPerms.every(permission => selectedKeys.includes(permission.key));
+                        const someChecked = bucketPerms.some(permission => selectedKeys.includes(permission.key)) && !checked;
+                        const isAdvanced = bucket === 'advanced';
+                        const advancedOpen = expandedAdvanced.has(resource);
+                        const title = bucketPerms.length > 0
+                          ? bucketPerms.map(permission => `${permission.key}${permission.description ? ` — ${permission.description}` : ''}`).join('\n')
+                          : `${bucketLabel(bucket)} yetkisi yok.`;
+                        return (
+                          <div key={bucket} className="flex min-w-0 items-center gap-1.5">
+                            <label
+                              className="flex min-w-0 cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                              title={title}
+                            >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={bucketPerms.length === 0}
+                              ref={el => { if (el) el.indeterminate = someChecked; }}
+                              onChange={event => setPermissionGroup(perms, bucket, event.target.checked)}
+                              className="h-3.5 w-3.5 rounded border-border accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                              <span className="truncate">{bucketLabel(bucket)}</span>
+                            </label>
+                            {isAdvanced && bucketPerms.length > 0 && (
+                              <button
+                                type="button"
+                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Gelişmiş işlemleri göster"
+                                aria-label={`${resourceLabel(resource)} gelişmiş işlemlerini ${advancedOpen ? 'gizle' : 'göster'}`}
+                                onClick={() => {
+                                  setExpandedAdvanced(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(resource)) next.delete(resource);
+                                    else next.add(resource);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {expandedAdvanced.has(resource) && (
+                      <div className="mt-2 rounded-md border bg-muted/30 px-3 py-2">
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Gelişmiş işlemler
+                        </p>
+                        <ul className="space-y-1">
+                          {perms
+                            .filter(permission => permissionBucket(permission) === 'advanced')
+                            .map(permission => (
+                              <li key={permission.key} className="text-[11px] text-muted-foreground">
+                                <span className="font-mono text-foreground">{permission.key}</span>
+                                {permission.description && (
+                                  <span> — {permission.description}</span>
+                                )}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
+                  </li>
+                ))}
                 {filteredPerms.length === 0 && (
                   <li className="px-3 py-4 text-center text-xs text-muted-foreground">
                     Eşleşen yetki yok.

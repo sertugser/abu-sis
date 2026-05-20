@@ -46,10 +46,6 @@ export default function MyReportsPage() {
           <FileBarChart className="h-7 w-7" />
           Raporlarım
         </h1>
-        <p className="text-muted-foreground mt-2">
-          Erişebildiğiniz raporlar — kategoriye göre gruplanmış. Yetkilendirme yöneticisi tarafından
-          atanır.
-        </p>
       </div>
 
       <Card>

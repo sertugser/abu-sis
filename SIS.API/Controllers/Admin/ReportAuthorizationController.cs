@@ -126,6 +126,7 @@ public class ReportAuthorizationController : ControllerBase
     // ── Frontend tüketim ────────────────────────────────────
 
     [HttpGet("api/me/reports")]
+    [RequirePermission("menu.raporlarim.view")]
     public async Task<IActionResult> ListMyAccessibleReports(CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var uid)) return Unauthorized();

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { createElement, useState } from 'react';
 import {
   AlertCircle,
   ChevronDown,
@@ -40,7 +40,7 @@ import {
 import MenuModuleFormDialog from '../components/admin/MenuModuleFormDialog';
 import MenuItemFormDialog from '../components/admin/MenuItemFormDialog';
 import type { MenuItemAdminDto, MenuModuleAdminDto } from '@/api/menuAdmin.api';
-import { resolveIcon } from '../components/layout/SidebarModules';
+import { ICON_MAP } from '../components/layout/SidebarModules';
 
 type ModuleDialogState =
   | { mode: 'create'; parentId: number | null }
@@ -207,21 +207,15 @@ export default function MenuManagementPage() {
   };
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Menü Yönetimi</h1>
-          <p className="text-sm text-muted-foreground">
-            Sidebar modülleri ve sayfalarını yönet — sıra, görünürlük, yetki bağı.
-          </p>
-        </div>
-        {canManage && (
+    <div className="space-y-4">
+      {canManage && (
+        <div className="flex justify-end">
           <Button onClick={() => setModuleDialog({ mode: 'create', parentId: null })}>
             <Plus className="mr-2 h-4 w-4" />
             Üst Seviye Modül
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {errorMsg && (
         <Alert variant="destructive">
@@ -365,7 +359,7 @@ function ModuleCard({
   onMoveItem,
 }: ModuleCardProps) {
   const isExpanded = expanded.has(module.id);
-  const Icon = useMemo(() => resolveIcon(module.icon), [module.icon]);
+  const iconName = module.icon && module.icon in ICON_MAP ? module.icon : 'HelpCircle';
   const childCount = module.children.length + module.items.length;
   const isFirst = index === 0;
   const isLast = index === siblings.length - 1;
@@ -381,7 +375,7 @@ function ModuleCard({
         >
           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        {createElement(ICON_MAP[iconName], { className: 'h-4 w-4 text-muted-foreground' })}
         <div className="min-w-0 flex-1">
           <CardTitle className="flex items-center gap-2 text-base">
             <span className="truncate">{module.label}</span>

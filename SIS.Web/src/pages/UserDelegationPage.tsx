@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2, Plus, ShieldOff, UserCog } from 'lucide-react';
+import { Loader2, Plus, ShieldOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,25 +83,15 @@ export default function UserDelegationPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight flex items-center gap-2">
-            <UserCog className="h-7 w-7" />
-            Kullanıcı Vekalet İşlemleri
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Bir kullanıcının yetkilerinin (rolleri ve scope'u) belirli tarih aralığında başka bir
-            kullanıcıya devri. Tüm aktif vekâletler audit'e kaydedilir.
-          </p>
-        </div>
-        {canManage && (
+    <div className="space-y-6">
+      {canManage && (
+        <div className="flex justify-end">
           <Button onClick={() => { setErrorMsg(null); setCreateOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             Yeni Vekâlet
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">

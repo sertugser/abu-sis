@@ -47,17 +47,9 @@ export default function UserPermissionGroupsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="font-heading text-3xl font-bold tracking-tight">Kullanıcı Yetki Grupları</h1>
-        <p className="text-muted-foreground mt-2">
-          Yetki paketlerini yönetin. Paketler, rol oluştururken/düzenlerken hızlıca atanabilen
-          yetki kümeleridir.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       {error && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>Paketler yüklenirken hata oluştu.</AlertDescription>
         </Alert>

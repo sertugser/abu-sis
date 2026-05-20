@@ -374,13 +374,12 @@ export default function App() {
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
 
-                  {/* Dev-only test route â€” Karar 9: production sidebar/route YOK,
-                      Phase 2'de KullanÄ±cÄ± Yetki GruplarÄ± placeholder'a import edilecek */}
+                  {/* Rol yetki matrisi — sistem yönetimi aracı */}
                   {import.meta.env.DEV && (
                     <Route element={<RoleProtectedRoute permission="system.permission.view" />}>
                       <Route path="__dev/permission-matrix" element={
                         <div className="p-6">
-                          <h1 className="text-xl font-semibold mb-4">RolePermissionMatrix (Dev Test)</h1>
+                          <h1 className="text-xl font-semibold mb-4">Rol Yetki Matrisi</h1>
                           <RolePermissionMatrix />
                         </div>
                       } />
@@ -406,4 +405,3 @@ export default function App() {
     </QueryClientProvider>
   );
 }
-

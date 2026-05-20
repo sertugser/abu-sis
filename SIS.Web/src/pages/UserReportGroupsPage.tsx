@@ -82,18 +82,7 @@ export default function UserReportGroupsPage() {
   const canManage = hasPermission('menu.kullanici-rapor-gruplari.manage');
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="font-heading text-3xl font-bold tracking-tight flex items-center gap-2">
-          <ShieldCheck className="h-7 w-7" />
-          Kullanıcı Rapor Grupları
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Raporları kategoriye ayır, kategorileri rollere ata, gerekirse rapor başına özel allow/deny
-          override ekle. Önce kategori yetkisine bakılır; per-rapor override (allow/deny) öncelikli.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <Tabs defaultValue="categories" className="space-y-4">
         <TabsList>
           <TabsTrigger value="categories">
