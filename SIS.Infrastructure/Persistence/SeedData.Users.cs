@@ -86,7 +86,8 @@ public static partial class SeedData
         await EnsureUserAsync(userManager, "yavuzselim.ozdemir@ankarabilim.edu.tr", "Yavuz Selim", "Özdemir", "Ogretmen123!", "DepartmentManager");
 
         // Dean (also has Instructor role from above — faculty-level authority)
-        await EnsureUserAsync(userManager, "halimhaldun.goktas@ankarabilim.edu.tr", "Halim Haldun", "Göktaş", "Ogretmen123!", "Dean");
+        var deanUser = await EnsureUserAsync(userManager, "halimhaldun.goktas@ankarabilim.edu.tr", "Halim Haldun", "Göktaş", "Ogretmen123!", "Dean");
+        await EnsureDeanScopeAsync(context, deanUser);
 
         // ============================================================
         // 3. STUDENTS (1000 total)
@@ -304,4 +305,29 @@ public static partial class SeedData
         var t when t.Contains("Prof.") => 10, // "Emeritus Prof. Dr." etc.
         _ => 20 // Arş. Gör. and others
     };
+
+    private static async Task EnsureDeanScopeAsync(AppDbContext context, ApplicationUser deanUser)
+    {
+        var existingScope = await context.UserScopes
+            .FirstOrDefaultAsync(scope => scope.UserId == deanUser.Id && scope.Kind == SIS.Domain.Identity.ScopeKind.Faculty);
+        if (existingScope is not null)
+            return;
+
+        var facultyId = await context.Instructors
+            .Where(instructor => instructor.UserId == deanUser.Id)
+            .Select(instructor => (int?)instructor.Department.FacultyId)
+            .FirstOrDefaultAsync();
+        if (facultyId is null)
+            return;
+
+        context.UserScopes.Add(new SIS.Domain.Identity.UserScope
+        {
+            UserId = deanUser.Id,
+            Kind = SIS.Domain.Identity.ScopeKind.Faculty,
+            FacultyId = facultyId.Value,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync();
+    }
 }

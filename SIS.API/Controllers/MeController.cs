@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
 using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
@@ -14,11 +16,19 @@ public class MeController : ControllerBase
 {
     private readonly IPermissionService _permissionService;
     private readonly IMenuService _menuService;
+    private readonly IPermissionDelegationService _delegationService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public MeController(IPermissionService permissionService, IMenuService menuService)
+    public MeController(
+        IPermissionService permissionService,
+        IMenuService menuService,
+        IPermissionDelegationService delegationService,
+        UserManager<ApplicationUser> userManager)
     {
         _permissionService = permissionService;
         _menuService = menuService;
+        _delegationService = delegationService;
+        _userManager = userManager;
     }
 
     /// <summary>
@@ -61,9 +71,38 @@ public class MeController : ControllerBase
         return Ok(menu);
     }
 
+    /// <summary>
+    /// Kullanıcının kendi rolleri + aktif vekâletten devraldığı rolleri döner.
+    /// Frontend panel switcher availableRoles'u bu endpoint'ten kurar.
+    /// </summary>
+    [HttpGet("effective-roles")]
+    [RequirePermission("lookup.me")]
+    public async Task<ActionResult<EffectiveRolesDto>> GetEffectiveRoles(CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        var ownRoles = user is null
+            ? Array.Empty<string>()
+            : (await _userManager.GetRolesAsync(user)).ToArray();
+
+        var delegated = await _delegationService.GetActiveDelegatedRoleNamesAsync(userId, ct);
+
+        // Vekâletten gelen ama kullanıcının zaten kendi sahip olduğu rolleri dışla (duplicate olmasın)
+        var ownSet = new HashSet<string>(ownRoles, StringComparer.Ordinal);
+        var delegatedOnly = delegated.Where(r => !ownSet.Contains(r)).ToArray();
+
+        return Ok(new EffectiveRolesDto(ownRoles, delegatedOnly));
+    }
+
     private bool TryGetUserId(out int userId)
     {
         var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(idClaim, out userId);
     }
 }
+
+public record EffectiveRolesDto(IReadOnlyList<string> OwnRoles, IReadOnlyList<string> DelegatedRoles);

@@ -37,6 +37,7 @@ using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.Time;
+using SIS.Infrastructure.Services.Scope;
 using SIS.Infrastructure.Services.CourseEvaluation;
 using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
@@ -267,9 +268,17 @@ builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
 
-// RBAC (Phase 1)
+// RBAC (Phase 1 + Phase 2)
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IPermissionBundleService, PermissionBundleService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IMenuAdminService, MenuAdminService>();
+builder.Services.AddScoped<IPermissionDelegationService, PermissionDelegationService>();
+builder.Services.AddScoped<IReportAuthorizationService, ReportAuthorizationService>();
+builder.Services.AddScoped<ICurrentUserScope, CurrentUserScope>();
+builder.Services.AddScoped<IScopeGuard, ScopeGuard>();
+builder.Services.AddScoped<IScopeResolver, ScopeResolver>();
+builder.Services.AddScoped<IUserScopeService, UserScopeService>();
 
 // Course Evaluation + Internal Announcements
 builder.Services.AddScoped<ICourseEvaluationService, CourseEvaluationService>();
@@ -320,6 +329,8 @@ app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<SIS.API.Middleware.ScopeViolationMiddleware>();
+app.UseMiddleware<SIS.API.Middleware.ScopePreloadMiddleware>();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
