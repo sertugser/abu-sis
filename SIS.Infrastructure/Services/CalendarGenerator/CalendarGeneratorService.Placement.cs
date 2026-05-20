@@ -76,7 +76,7 @@ public partial class CalendarGeneratorService
             var attempts = 0;
             var shiftReasons = new List<string>();
             var shiftBackwardForWeekend = ShouldShiftBackwardForWeekend(item.EventType, start, holidays);
-            while (attempts < 14)
+            while (attempts < 90)
             {
                 var conflicts = FindBlockingConflictDescriptions(start, end, item.EventType, holidays);
                 if (conflicts.Count == 0)
@@ -105,7 +105,7 @@ public partial class CalendarGeneratorService
                 warnings.Add(new("HOLIDAY_SHIFT", "Warning", $"{item.Title} {reasonText} nedeniyle {attempts} gün {directionText} kaydırıldı. Yeni tarih: {FormatDateRange(start, end)}.", EventId(academicYear, semester, item.Key)));
             }
 
-            if (attempts >= 14)
+            if (FindBlockingConflictDescriptions(start, end, item.EventType, holidays).Count > 0)
                 return BuildEvent(academicYear, semester, item, chainCode, start, end, true, "Otomatik yerleşim başarısız.");
         }
 

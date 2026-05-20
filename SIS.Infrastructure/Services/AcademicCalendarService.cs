@@ -344,7 +344,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             .AsNoTracking()
             .Include(t => t.AcademicCalendar)
             .Include(t => t.CalendarEvents.Where(e => includeAllEvents || e.IsPublic))
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
             .FirstOrDefaultAsync(ct);
 
         if (term is null)

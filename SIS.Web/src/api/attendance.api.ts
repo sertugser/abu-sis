@@ -12,7 +12,15 @@ export interface AttendanceStudent {
   email: string;
   status: AttendanceStatus | null;
   source: AttendanceEntrySource | null;
+  totalSlotCount: number;
+  presentSlotNumbers: number[];
   submittedAt: string | null;
+}
+
+export interface AttendanceSlot {
+  slotNumber: number;
+  label: string;
+  timeRange: string | null;
 }
 
 export interface AttendanceSession {
@@ -28,6 +36,8 @@ export interface AttendanceSession {
   isQrCurrentlyActive: boolean;
   qrExpiresAt: string | null;
   token: string;
+  totalSlotCount: number;
+  slots: AttendanceSlot[];
   totalStudents: number;
   presentCount: number;
   absentCount: number;
@@ -47,6 +57,7 @@ export interface SaveAttendancePayload {
   records: Array<{
     studentId: number;
     status: AttendanceStatus;
+    presentSlotNumbers?: number[];
   }>;
 }
 
@@ -68,6 +79,8 @@ export interface QrAttendanceSession {
 export interface AttendanceStudentWeekStatus {
   status: AttendanceStatus;
   source: AttendanceEntrySource;
+  totalSlotCount: number;
+  presentSlotNumbers: number[];
   submittedAt: string | null;
 }
 

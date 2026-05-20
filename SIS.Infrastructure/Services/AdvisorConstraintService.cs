@@ -314,7 +314,7 @@ public class AdvisorConstraintService : IAdvisorConstraintService
         var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }

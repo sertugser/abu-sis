@@ -1,4 +1,4 @@
-﻿export const ROUTES = {
+export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
   AKADEMIK_TAKVIM: '/akademik-takvim',
@@ -37,7 +37,7 @@
   SYSTEM_CONFIG: '/sistem-ayarlari',
   AUDIT_LOG: '/denetim-kayitlari',
   PROMOTION_RULES: '/mufredat-sinif-donem-tanimlari',
-  // â”€â”€ Ã–ÄŸrenci Ä°ÅŸlemleri (SystemAdmin) â”€â”€
+  // ── Öğrenci İşlemleri (SystemAdmin) ──
   STUDENT_NUMBER_CHANGE: '/ogrenci-no-degistirme',
   STUDENT_PROMOTION: '/sinif-atlatma-islemleri',
   BULK_ADVISOR_ASSIGNMENT: '/toplu-danisman-atama',
@@ -47,14 +47,14 @@
   COURSE_REGISTRATION_EDIT: '/ders-kayit-duzenleme',
   COURSE_TRANSFER: '/dersler-arasi-ogrenci-transfer',
   LETTER_GRADE_EDIT: '/harf-notu-duzenleme',
-  // â”€â”€ YÃ¶netim â†’ KullanÄ±cÄ± Ä°ÅŸlemleri â”€â”€
+  // ── Yönetim → Kullanıcı İşlemleri ──
   USER_PERMISSION_GROUPS: '/kullanici-yetki-gruplari',
   USER_REPORT_GROUPS: '/kullanici-rapor-gruplari',
   USER_GROUP_RESTRICTIONS: '/kullanici-grup-sinirlandirmalar',
   USER_REPORT_DESIGN_GROUPS: '/kullanici-rapor-tasarim-gruplari',
   USER_DELEGATION: '/kullanici-vekalet-islemleri',
   PASSWORD_CHANGE: '/sifre-degistir',
-  // â”€â”€ YÃ¶netim â†’ Genel Ayarlar â”€â”€
+  // ── Yönetim → Genel Ayarlar ──
   UNIVERSITY_INFO: '/universite-bilgileri',
   INSTITUTIONAL_INTEGRATION: '/kurumsal-entegrasyon-tanimlari',
   DOCUMENT_RESTRICTIONS: '/belge-sinirlandirmalar',
@@ -168,11 +168,11 @@ export const QUERY_KEYS = {
 
 export const STATUS_LABELS: Record<string, string> = {
   Draft: 'Taslak',
-  PendingAdvisorApproval: 'DanÄ±ÅŸman OnayÄ± Bekleniyor',
+  PendingAdvisorApproval: 'Danışman Onayı Bekleniyor',
   Active: 'Aktif',
-  Completed: 'TamamlandÄ±',
-  Dropped: 'BÄ±rakÄ±ldÄ±',
-  Withdrawn: 'Ã‡ekildi',
+  Completed: 'Tamamlandı',
+  Dropped: 'Bırakıldı',
+  Withdrawn: 'Çekildi',
   Rejected: 'Reddedildi',
 };
 
@@ -274,22 +274,22 @@ export const IMPLEMENTED_ROUTES = new Set([
 export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Active: 'Aktif',
   Passive: 'Pasif',
-  Frozen: 'DondurulmuÅŸ',
-  Suspended: 'UzaklaÅŸtÄ±rÄ±lmÄ±ÅŸ',
-  Dismissed: 'Ä°liÅŸik KesilmiÅŸ',
+  Frozen: 'Dondurulmuş',
+  Suspended: 'Uzaklaştırılmış',
+  Dismissed: 'İlişik Kesilmiş',
   Graduated: 'Mezun',
 };
 
 export const COURSE_LANGUAGE_LABELS: Record<string, string> = {
-  Turkish: 'TÃ¼rkÃ§e',
-  English: 'Ä°ngilizce',
-  French: 'FransÄ±zca',
+  Turkish: 'Türkçe',
+  English: 'İngilizce',
+  French: 'Fransızca',
   German: 'Almanca',
-  Arabic: 'ArapÃ§a',
+  Arabic: 'Arapça',
 };
 
 export const TEACHING_METHOD_LABELS: Record<string, string> = {
-  FaceToFace: 'YÃ¼z YÃ¼ze',
+  FaceToFace: 'Yüz Yüze',
   Online: 'Uzaktan',
   Hybrid: 'Hibrit',
 };
@@ -301,7 +301,7 @@ export const COURSE_STATUS_LABELS: Record<string, string> = {
 
 export const COURSE_LEVEL_LABELS: Record<string, string> = {
   Undergraduate: 'Lisans',
-  Masters: 'YÃ¼ksek Lisans',
+  Masters: 'Yüksek Lisans',
   Doctorate: 'Doktora',
 };
 

@@ -221,6 +221,7 @@ builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
+builder.Services.AddHostedService<AcademicTermActivationReminderJob>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service

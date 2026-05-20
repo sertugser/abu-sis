@@ -13,6 +13,8 @@ public class AttendanceRecord
     public Student Student { get; set; } = null!;
     public AttendanceStatus Status { get; set; }
     public AttendanceEntrySource Source { get; set; }
+    public int TotalSlotCount { get; set; } = 1;
+    public string? PresentSlotNumbersCsv { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public DateTime? QrSubmittedAt { get; set; }

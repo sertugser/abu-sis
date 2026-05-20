@@ -80,7 +80,7 @@ public static partial class SeedData
             // V1 silindiğinde 19 atıl key migration `RemoveAtilV1AlgorithmKeys` ile DB'den kaldırıldı
             // (2026-05-10). Bonus: aynı gün BatchAuto.cs ölü kod silinmesi sonrası
             // Scheduling.MaxBacktrackingDepth de migration `RemoveBatchAutoConfigKey` ile düştü.
-            // Geriye kalan key'ler V2 scheduler tarafından hâlâ okunan canlı ayarlar.
+            // Geriye kalan key'ler V2 scheduler tarafindan h�l� okunan canli ayarlar.
             new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Other", DataType = "string", Description = "Bir derslik yetmediğinde hangi tip dersler aynı saatte iki ayrı dersliğe bölünebilir." },
             new() { Key = "Schedule.Lab.MaxBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Lab dersi kaç saatlik bloklara bölünsün." },
             new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir." },
