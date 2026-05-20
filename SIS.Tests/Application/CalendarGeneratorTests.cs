@@ -254,6 +254,49 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Generator_DoesNotPlaceExamBoundaries_OnWeekends()
+    {
+        foreach (var startYear in Enumerable.Range(2025, 20))
+        {
+            var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+                $"{startYear}-{startYear + 1}",
+                Utc(startYear, 9, 22),
+                Utc(startYear + 1, 2, 23),
+                IncludeSummer: true,
+                Constraints: null,
+                TemplateDurationOverrides: null));
+
+            result.Events
+                .Where(IsExamEvent)
+                .Should()
+                .OnlyContain(e => !IsWeekend(e.StartDate) && !IsWeekend(e.EndDate ?? e.StartDate));
+        }
+    }
+
+    [Fact]
+    public async Task WhatIf_RealignsExamBoundaries_WhenMovedToWeekend()
+    {
+        var generated = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            "2025-2026",
+            Utc(2025, 9, 22),
+            Utc(2026, 2, 23),
+            IncludeSummer: true,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        var final = generated.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "final_exam");
+
+        var whatIf = await _generatorService.WhatIfAsync(
+            generated.DraftId,
+            new WhatIfRequestDto(final.DraftEventId, Utc(2026, 1, 4), Utc(2026, 1, 17)));
+
+        var moved = whatIf.Events.Single(e => e.DraftEventId == final.DraftEventId);
+        moved.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
+        IsWeekend(moved.EndDate ?? moved.StartDate).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Generator_AllowsLongAdministrativeWindow_ToOverlapSingleDayHoliday()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
@@ -1344,6 +1387,17 @@ public class CalendarGeneratorTests : IDisposable
     private static bool IsTeachingDay(DateTime day, IReadOnlyList<ResolvedHolidayDto> holidays) =>
         day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
         && !holidays.Any(h => h.BlocksAcademicEvents && day >= h.StartDate.Date && day <= h.EndDate.Date);
+
+    private static bool IsWeekend(DateTime day) =>
+        day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+    private static bool IsExamEvent(GeneratedCalendarEventDto ev) =>
+        ev.EventType is CalendarEventType.MidtermExam
+            or CalendarEventType.FinalExam
+            or CalendarEventType.MakeupExam
+            or CalendarEventType.ExcuseExam
+            or CalendarEventType.PrepSchoolExam
+            or CalendarEventType.SummerSchoolExam;
 
     private static bool EventContainsWeekend(GeneratedCalendarEventDto ev)
     {

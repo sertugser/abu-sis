@@ -421,12 +421,15 @@ function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: st
     return 'Bitis tarihi baslangic tarihinden once olamaz.';
 
   const parsedStart = parseUtcDisplayDate(startDate);
+  const parsedEnd = parseUtcDisplayDate(endDate || startDate);
   if (mustStartOnMonday(ev.eventType) && parsedStart?.getUTCDay() !== 1)
     return 'Bu etkinlik Pazartesi günü başlamalıdır.';
 
   if (isExamDraftEvent(ev)) {
     if (parsedStart && isWeekend(parsedStart))
       return 'Sinav baslangic tarihi hafta sonuna denk gelemez.';
+    if (parsedEnd && isWeekend(parsedEnd))
+      return 'Sinav bitis tarihi hafta sonuna denk gelemez.';
   }
 
   return null;
@@ -1559,8 +1562,13 @@ export default function AcademicCalendarGeneratorPage() {
     const isExam = calendarEventCategory(selectedPinOption.eventType, selectedPinOption.title, selectedPinOption.templateItemKey) === 'exam';
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(pinDate);
+      const parsedEnd = parseUtcDisplayDate(resolvedEndDate);
       if (parsedStart && isWeekend(parsedStart)) {
         setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
+        return;
+      }
+      if (parsedEnd && isWeekend(parsedEnd)) {
+        setNotice('Sinav bitis tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
@@ -1751,13 +1759,10 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Tatil ve bloklayici ozel gunler tarih duzenleme ile degistirilemez.');
       return;
     }
-    const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
-    if (isExam) {
-      const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
-        return;
-      }
+    const validationError = validateDraftEventDateEdit(selectedEvent, editForm.startDate, editForm.endDate || editForm.startDate);
+    if (validationError) {
+      setNotice(validationError);
+      return;
     }
 
     const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Zincirleme kaydırma ön izlemesi');
@@ -1781,13 +1786,10 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Tatil ve bloklayici ozel gunler tarih duzenleme ile degistirilemez.');
       return;
     }
-    const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
-    if (isExam) {
-      const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
-        return;
-      }
+    const validationError = validateDraftEventDateEdit(selectedEvent, editForm.startDate, editForm.endDate || editForm.startDate);
+    if (validationError) {
+      setNotice(validationError);
+      return;
     }
 
     const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Taslağa yaz');

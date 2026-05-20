@@ -481,8 +481,11 @@ public partial class CalendarGeneratorService
     private static bool DateRangesOverlap(DateTime aStart, DateTime aEnd, DateTime bStart, DateTime bEnd) =>
         aStart.Date <= bEnd.Date && bStart.Date <= aEnd.Date;
 
+    private static bool IsWeekend(DateTime day) =>
+        day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
     private static bool StartsOnWeekend(DateTime start, CalendarEventType eventType) =>
-        IsSingleDaySensitive(eventType) && start.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        IsSingleDaySensitive(eventType) && IsWeekend(start);
 
     private static bool ShouldShiftBackwardForWeekend(CalendarEventType eventType, DateTime start, IReadOnlyList<ResolvedHolidayDto> holidays) =>
         StartsOnWeekend(start, eventType)
@@ -741,10 +744,12 @@ public partial class CalendarGeneratorService
             normalized = ApplySummerExcuseSequenceRules(normalized, holidays);
             normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplyDependentExamScheduling(normalized, holidays);
+            normalized = AlignWeekdayOnlyExamBoundaries(normalized, pinnedDraftEventIds);
             normalized = ApplyHolidayOverflowShifts(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplySummerTeachingSequenceRules(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplySummerExcuseSequenceRules(normalized, holidays);
             normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
+            normalized = AlignWeekdayOnlyExamBoundaries(normalized, pinnedDraftEventIds);
             normalized = TrimTrailingWeekendEnds(normalized, pinnedDraftEventIds);
 
             if (DateFingerprint(normalized) == before)
@@ -873,6 +878,43 @@ public partial class CalendarGeneratorService
         return updated;
     }
 
+    private static List<GeneratedCalendarEventDto> AlignWeekdayOnlyExamBoundaries(
+        IReadOnlyList<GeneratedCalendarEventDto> events,
+        IReadOnlySet<string>? pinnedDraftEventIds = null)
+    {
+        var updated = events.ToList();
+
+        foreach (var ev in events.Where(e => !e.IsHoliday && IsWeekdayOnlyExamEvent(e.EventType) && !IsPinned(e, pinnedDraftEventIds)))
+        {
+            var originalEnd = ev.EndDate ?? ev.StartDate;
+            var durationDays = Math.Max(0, (originalEnd.Date - ev.StartDate.Date).Days);
+            var start = ev.StartDate;
+
+            if (IsWeekend(start))
+            {
+                start = WeekdayOnOrAfter(start);
+            }
+
+            var end = start.Date == ev.StartDate.Date
+                ? originalEnd
+                : EnsureUtcDate(start.AddDays(durationDays));
+            end = WeekdayOnOrBefore(end);
+            if (end.Date < start.Date)
+                end = start;
+
+            if (start.Date == ev.StartDate.Date && end.Date == originalEnd.Date)
+                continue;
+
+            updated = ReplaceEvent(updated, ev with
+            {
+                StartDate = EnsureUtcDate(start),
+                EndDate = end.Date == start.Date ? null : EnsureUtcDate(end)
+            });
+        }
+
+        return updated;
+    }
+
     private static List<GeneratedCalendarEventDto> AlignClassesEndToWeekday(
         IReadOnlyList<GeneratedCalendarEventDto> events,
         IReadOnlySet<string>? pinnedDraftEventIds = null)
@@ -910,10 +952,18 @@ public partial class CalendarGeneratorService
         return updated;
     }
 
+    private static DateTime WeekdayOnOrAfter(DateTime date)
+    {
+        var day = date.Date;
+        while (IsWeekend(day))
+            day = day.AddDays(1);
+        return EnsureUtcDate(day);
+    }
+
     private static DateTime WeekdayOnOrBefore(DateTime date)
     {
         var day = date.Date;
-        while (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        while (IsWeekend(day))
             day = day.AddDays(-1);
         return EnsureUtcDate(day);
     }

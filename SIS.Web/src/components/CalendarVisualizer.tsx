@@ -216,6 +216,34 @@ function eventDateRange(event: VisualizerEvent) {
   };
 }
 
+function shouldRenderWeekdaysOnly(event: VisualizerEvent) {
+  return calendarEventCategory(event.eventType, event.title, event.templateItemKey) === 'exam';
+}
+
+function weekdayDateSegments(startDate: string, endDate: string) {
+  const segments: Array<{ startDate: string; endDate: string }> = [];
+  let cursor = startDate;
+  let segmentStart: string | null = null;
+
+  while (cursor <= endDate) {
+    if (isWeekendDateValue(cursor)) {
+      if (segmentStart) {
+        segments.push({ startDate: segmentStart, endDate: shiftDateValue(cursor, -1) });
+        segmentStart = null;
+      }
+    } else if (!segmentStart) {
+      segmentStart = cursor;
+    }
+
+    cursor = shiftDateValue(cursor, 1);
+  }
+
+  if (segmentStart)
+    segments.push({ startDate: segmentStart, endDate });
+
+  return segments.length > 0 ? segments : [{ startDate, endDate }];
+}
+
 function monthKey(month: ViewMonth) {
   return `${month.y}-${month.m}`;
 }
@@ -575,14 +603,18 @@ export function CalendarVisualizer({
       if (!range)
         return [];
 
-      return [{
+      const segments = shouldRenderWeekdaysOnly(event)
+        ? weekdayDateSegments(range.startDate, range.endDate)
+        : [range];
+
+      return segments.map(segment => ({
         ...event,
         sourceEventId: event.id,
         sourceStartDate: range.startDate,
         sourceEndDate: range.endDate,
-        startDate: range.startDate,
-        endDate: range.endDate,
-      }];
+        startDate: segment.startDate,
+        endDate: segment.endDate,
+      }));
     }),
     [visibleEvents],
   );
