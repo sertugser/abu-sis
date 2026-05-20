@@ -9,8 +9,29 @@ namespace SIS.Tests.Scheduling.Rules.Hard;
 public sealed class H5_CurriculumConflictRuleTests
 {
     [Fact]
-    public void CurriculumMode_SharedDeptSameSemester_Reports()
+    public void CurriculumMode_SharedDeptSameSemester_BothCompulsory_Reports()
     {
+        // 2026-05-20: H5 curriculum mode artık iki ders de zorunlu olmalı.
+        var rule = new H5_CurriculumConflictRule();
+        var c1 = Candidate(id: 1, courseId: 100,
+            semestersByDept: new Dictionary<int, int> { [10] = 3 },
+            accessibleDepts: new[] { 10 },
+            blocks: Block(day: 1, startHour: 9, durationHours: 2))
+            with { IsCompulsory = true };
+        var c2 = Candidate(id: 2, courseId: 200,
+            semestersByDept: new Dictionary<int, int> { [10] = 3 },
+            accessibleDepts: new[] { 10 },
+            blocks: Block(day: 1, startHour: 9, durationHours: 2))
+            with { IsCompulsory = true };
+
+        var ctx = new RuleContext { Candidate = c1, Snapshot = Snapshot(c1, c2), Config = DefaultConfig() };
+        rule.Evaluate(ctx).Should().ContainSingle().Which.ConflictType.Should().Be("CurriculumConflict");
+    }
+
+    [Fact]
+    public void CurriculumMode_SharedDeptSameSemester_BothElective_NoConflict()
+    {
+        // İki seçmeli ders aynı saatte → öğrenci ikisinden birini seçer, uyarı yok.
         var rule = new H5_CurriculumConflictRule();
         var c1 = Candidate(id: 1, courseId: 100,
             semestersByDept: new Dictionary<int, int> { [10] = 3 },
@@ -22,7 +43,7 @@ public sealed class H5_CurriculumConflictRuleTests
             blocks: Block(day: 1, startHour: 9, durationHours: 2));
 
         var ctx = new RuleContext { Candidate = c1, Snapshot = Snapshot(c1, c2), Config = DefaultConfig() };
-        rule.Evaluate(ctx).Should().ContainSingle().Which.ConflictType.Should().Be("CurriculumConflict");
+        rule.Evaluate(ctx).Should().BeEmpty();
     }
 
     [Fact]
@@ -163,19 +184,19 @@ public sealed class H5_CurriculumConflictRuleTests
     [Fact]
     public void CurriculumMode_AllCombinationsConflict_Reports()
     {
-        // Tüm kombinasyonlar aynı saatte → gerçek darboğaz → uyarı verilir.
+        // Tüm kombinasyonlar aynı saatte + iki ders de zorunlu → gerçek darboğaz → uyarı verilir.
         var rule = new H5_CurriculumConflictRule();
         var depts = new Dictionary<int, int> { [10] = 3 };
         var access = new[] { 10 };
 
         var x1 = Candidate(id: 1, courseId: 100, semestersByDept: depts, accessibleDepts: access,
-            blocks: Block(day: 1, startHour: 9, durationHours: 2));
+            blocks: Block(day: 1, startHour: 9, durationHours: 2)) with { IsCompulsory = true };
         var x2 = Candidate(id: 2, courseId: 100, semestersByDept: depts, accessibleDepts: access,
-            blocks: Block(day: 1, startHour: 9, durationHours: 2));
+            blocks: Block(day: 1, startHour: 9, durationHours: 2)) with { IsCompulsory = true };
         var y1 = Candidate(id: 3, courseId: 200, semestersByDept: depts, accessibleDepts: access,
-            blocks: Block(day: 1, startHour: 9, durationHours: 2));
+            blocks: Block(day: 1, startHour: 9, durationHours: 2)) with { IsCompulsory = true };
         var y2 = Candidate(id: 4, courseId: 200, semestersByDept: depts, accessibleDepts: access,
-            blocks: Block(day: 1, startHour: 9, durationHours: 2));
+            blocks: Block(day: 1, startHour: 9, durationHours: 2)) with { IsCompulsory = true };
 
         var snapshot = Snapshot(x1, x2, y1, y2);
         var ctx = new RuleContext { Candidate = x1, Snapshot = snapshot, Config = DefaultConfig() };

@@ -74,10 +74,15 @@ public sealed class H5_CurriculumConflictRule : IRulePredicate
         }
 
         // Curriculum mode (default) — aynı alternatif mantığı.
+        // 2026-05-20: Sadece her iki tarafı da ZORUNLU olan ders çiftleri raporlanır.
+        // En az biri seçmeli ise öğrenci o seçmeliyi pas geçebilir → uyarı verilmez.
+        // (CohortBuilder aynı yıl pair üretiminde simetrik filtreyle uyumlu davranış.)
         foreach (var existing in snapshot.Sections)
         {
             if (existing.SectionId == c.SectionId) continue;
             if (existing.CourseId == c.CourseId) continue;
+
+            if (!c.IsCompulsory || !existing.IsCompulsory) continue;
 
             if (!ShareCurriculumDepartment(c, existing)) continue;
 

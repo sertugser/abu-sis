@@ -690,11 +690,23 @@ public partial class SchedulingService : ISchedulingService
                 minSuggestedSemesters[courseId] = positive.Min();
         }
 
+        // 2026-05-20: H5 curriculum mode için ders zorunlu mu seçmeli mi haritası.
+        // CourseId → en az bir aktif müfredatta IsCompulsory=true ise true. Yan sorgu olarak
+        // tek seferde çekilir (suggested semester sorgusunun IsCompulsory filtresi sıkıydı,
+        // burada filtresiz sorguluyoruz).
+        var compulsoryRows = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => ids.Contains(cc.CourseId) && cc.Curriculum.IsActive)
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new { CourseId = g.Key, IsCompulsory = g.Any(cc => cc.IsCompulsory) })
+            .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, cancellationToken);
+
         return new CourseSchedulingMetadata
         {
             MinSuggestedSemesters = minSuggestedSemesters,
             SuggestedSemestersByDepartment = suggestedSemestersByDepartment,
-            AccessibleDepartments = accessibleDepartments
+            AccessibleDepartments = accessibleDepartments,
+            CompulsoryFlags = compulsoryRows
         };
     }
 
