@@ -743,7 +743,7 @@ public partial class CalendarGeneratorService
             normalized = ApplySummerTeachingSequenceRules(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplySummerExcuseSequenceRules(normalized, holidays);
             normalized = ApplyGradePublicationSequenceRules(normalized, holidays, pinnedDraftEventIds);
-            normalized = ApplyDependentExamScheduling(normalized, holidays);
+            normalized = ApplyDependentExamScheduling(normalized, holidays, pinnedDraftEventIds);
             normalized = AlignWeekdayOnlyExamBoundaries(normalized, pinnedDraftEventIds);
             normalized = ApplyHolidayOverflowShifts(normalized, holidays, pinnedDraftEventIds);
             normalized = ApplySummerTeachingSequenceRules(normalized, holidays, pinnedDraftEventIds);
