@@ -610,6 +610,7 @@ builder.Entity<GradingCriteria>(e =>
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
+            e.Property(t => t.IsActivated).HasDefaultValue(true);
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
         });
 

@@ -363,7 +363,7 @@ public class CourseEvaluationService : ICourseEvaluationService
         var nowForTerm = DateTime.UtcNow;
         var term = termId.HasValue
             ? await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId.Value, ct)
-            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowForTerm && t.TermEnd >= nowForTerm, ct);
+            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowForTerm && t.TermEnd >= nowForTerm, ct);
 
         if (term == null)
             return null;
@@ -590,7 +590,7 @@ public class CourseEvaluationService : ICourseEvaluationService
         var now = DateTime.UtcNow;
         var term = termId.HasValue
             ? await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId.Value, ct)
-            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
+            : await _context.AcademicTerms.AsNoTracking().FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now, ct);
         if (term == null) return null;
 
         // Load all sections for this department/term

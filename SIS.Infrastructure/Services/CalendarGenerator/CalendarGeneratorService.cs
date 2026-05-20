@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.CalendarGenerator.DTOs;
 using SIS.Application.CalendarGenerator.Services;
+using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
@@ -16,6 +17,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
     private readonly ICalendarTemplateService _templateService;
     private readonly IHolidayCalculatorService _holidayCalculator;
     private readonly IAcademicCalendarRuleService _ruleService;
+    private readonly ITimeSlotService _timeSlotService;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -27,12 +29,14 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         AppDbContext context,
         ICalendarTemplateService templateService,
         IHolidayCalculatorService holidayCalculator,
-        IAcademicCalendarRuleService ruleService)
+        IAcademicCalendarRuleService ruleService,
+        ITimeSlotService timeSlotService)
     {
         _context = context;
         _templateService = templateService;
         _holidayCalculator = holidayCalculator;
         _ruleService = ruleService;
+        _timeSlotService = timeSlotService;
     }
 
     public async Task<GenerateCalendarResultDto> GenerateAsync(GenerateCalendarRequestDto request, CancellationToken ct = default)

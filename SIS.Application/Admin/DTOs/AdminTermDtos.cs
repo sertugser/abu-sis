@@ -12,6 +12,7 @@ public record AdminTermDto(
     string TermTypeLabel,
     string Status,
     string StatusLabel,
+    bool IsActivated,
     bool IsCancelled,
     string YoksisStatus,
     DateTime TermStart,

@@ -666,7 +666,7 @@ public partial class SchedulingService : ISchedulingService
         var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.IsActivated && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
     }
 
     private async Task<Dictionary<int, string>> LoadInstructorNameMapAsync(List<int> instructorIds, CancellationToken cancellationToken)

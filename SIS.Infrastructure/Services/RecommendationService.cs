@@ -40,7 +40,7 @@ public class RecommendationService : IRecommendationService
         var now = DateTime.UtcNow;
         var activeTermId = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

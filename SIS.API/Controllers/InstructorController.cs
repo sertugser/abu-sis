@@ -76,7 +76,7 @@ public class InstructorController : ControllerBase
         var nowInstr = DateTime.UtcNow;
         var term = termId.HasValue
             ? await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Id == termId.Value)
-            : await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowInstr && t.TermEnd >= nowInstr);
+            : await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowInstr && t.TermEnd >= nowInstr);
 
         if (term == null)
             return NotFound(new { error = termId.HasValue ? "Donem bulunamadi." : "Aktif donem bulunamadi." });
@@ -161,7 +161,7 @@ public class InstructorController : ControllerBase
                 Name = t.Name,
                 Year = t.Year,
                 Semester = t.TermType,
-                IsActive = !t.IsCancelled && t.TermStart <= DateTime.UtcNow && t.TermEnd >= DateTime.UtcNow
+                IsActive = !t.IsCancelled && t.IsActivated && t.TermStart <= DateTime.UtcNow && t.TermEnd >= DateTime.UtcNow
             })
             .ToListAsync();
 

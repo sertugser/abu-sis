@@ -6,6 +6,7 @@ using SIS.Application.CalendarGenerator.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 using SIS.Infrastructure.Services.CalendarGenerator;
 
 namespace SIS.Tests.Application;
@@ -22,6 +23,7 @@ public class CalendarGeneratorTests : IDisposable
     private readonly CalendarTemplateService _templateService;
     private readonly HolidayCalculatorService _holidayService;
     private readonly AcademicCalendarRuleService _ruleService;
+    private readonly TimeSlotService _timeSlotService;
     private readonly CalendarGeneratorService _generatorService;
 
     public CalendarGeneratorTests()
@@ -34,7 +36,8 @@ public class CalendarGeneratorTests : IDisposable
         _templateService = new CalendarTemplateService(_context);
         _holidayService = new HolidayCalculatorService(_context, _templateService);
         _ruleService = new AcademicCalendarRuleService(_context);
-        _generatorService = new CalendarGeneratorService(_context, _templateService, _holidayService, _ruleService);
+        _timeSlotService = new TimeSlotService(_context);
+        _generatorService = new CalendarGeneratorService(_context, _templateService, _holidayService, _ruleService, _timeSlotService);
     }
 
     [Fact]
@@ -892,7 +895,7 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Apply_UsesMatchingTerms_WhenAcademicTermsDoNotMatchDraftSemesters()
+    public async Task Apply_CreatesPassiveTerms_WhenAcademicTermsDoNotMatchDraftSemesters()
     {
         _context.AcademicTerms.Add(new AcademicTerm
         {
@@ -928,9 +931,8 @@ public class CalendarGeneratorTests : IDisposable
         var applied = await _generatorService.ApplyAsync(result.DraftId, new ApplyCalendarDraftRequestDto(), userId: null);
 
         applied.Success.Should().BeTrue();
-        applied.Message.Should().Contain("Atlanan dönemler");
-        applied.Message.Should().Contain("Bahar");
-        applied.TermIds.Should().ContainSingle();
+        applied.Message.Should().Contain("pasif");
+        applied.TermIds.Should().HaveCount(2);
 
         var titles = await _context.TermCalendarEvents
             .Where(e => e.TermId == 1)
@@ -938,6 +940,12 @@ public class CalendarGeneratorTests : IDisposable
             .ToListAsync();
 
         titles.Should().Contain("Derslerin Başlaması");
+
+        var springTerm = await _context.AcademicTerms
+            .Include(t => t.AcademicCalendar)
+            .SingleAsync(t => t.Year == 2025 && t.TermType == TermType.Spring);
+        springTerm.IsActivated.Should().BeFalse();
+        springTerm.AcademicCalendar.Should().NotBeNull();
     }
 
     [Fact]

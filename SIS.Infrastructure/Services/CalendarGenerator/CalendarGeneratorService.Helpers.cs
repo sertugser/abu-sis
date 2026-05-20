@@ -235,6 +235,7 @@ public partial class CalendarGeneratorService
         term.AcademicCalendar ??= new TermAcademicCalendar
         {
             TermId = term.Id,
+            Term = term,
             CreatedAt = now
         };
 
