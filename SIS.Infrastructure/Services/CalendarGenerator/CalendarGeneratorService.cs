@@ -66,7 +66,8 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
             }
         }
 
-        events = NormalizeCalendarEvents(events, holidays);
+        var pinnedDraftEventIds = ResolvePinnedDraftEventIds(events, constraints);
+        events = NormalizeCalendarEvents(events, holidays, pinnedDraftEventIds);
         events = AlignClassesEndToWeekday(events);
         events.AddRange(BuildHolidayEvents(request.AcademicYear, holidays, termStarts, request.IncludeSummer));
         events = events.OrderBy(e => e.StartDate).ThenBy(e => e.SortWeight()).ToList();

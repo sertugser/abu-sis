@@ -126,6 +126,37 @@ public class CalendarGeneratorTests : IDisposable
             .StartDate.Should().BeAfter(result.Events.Single(e => e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_classes_end").StartDate);
     }
 
+    [Theory]
+    [InlineData("2029-2030", 2029)]
+    [InlineData("2030-2031", 2030)]
+    public async Task Generator_DefaultCalendars_AvoidReportedCalendarPlacementErrors(string academicYear, int startYear)
+    {
+        var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
+            academicYear,
+            Utc(startYear, 9, 22),
+            Utc(startYear + 1, 2, 23),
+            IncludeSummer: true,
+            Constraints: null,
+            TemplateDurationOverrides: null));
+
+        result.Events.Should().NotContain(e => e.IsFailed);
+        result.Warnings.Should().NotContain(w =>
+            string.Equals(w.Severity, "Error", StringComparison.OrdinalIgnoreCase)
+            && (w.Code == "CHRONOLOGY" || w.Code.StartsWith("REG_", StringComparison.Ordinal)));
+
+        var summerClassesStart = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_classes_start");
+        var summerClassesEnd = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_classes_end");
+        var summerExam = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_exam");
+
+        CountTeachingWeekdays(summerClassesStart.StartDate, summerClassesEnd.StartDate, result.Holidays)
+            .Should().BeGreaterThanOrEqualTo(35);
+        summerExam.StartDate.Should().BeAfter(summerClassesEnd.StartDate);
+        summerExam.StartDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
+    }
+
     [Fact]
     public async Task Generator_DoesNotPlaceAcademicEvents_OnBlockingHolidays()
     {
@@ -355,7 +386,7 @@ public class CalendarGeneratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Generator_PlacesMidtermExcuseExam_OnNextMondayAfterMidterm_WithoutWeekend()
+    public async Task Generator_PlacesMidtermExcuseExam_OnNextBusinessDayAfterApplication_WithoutWeekend()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
             "2025-2026",
@@ -367,16 +398,19 @@ public class CalendarGeneratorTests : IDisposable
 
         var midterm = result.Events.Single(e =>
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_exam");
+        var excuseApplication = result.Events.Single(e =>
+            e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_excuse_application");
         var excuseExam = result.Events.Single(e =>
             e.Semester == SemesterType.Fall && e.TemplateItemKey == "midterm_excuse_exam");
 
-        var expectedStart = MondayOnOrAfter((midterm.EndDate ?? midterm.StartDate).AddDays(1));
+        excuseApplication.StartDate.Should().Be(NextBusinessDayAfter(midterm.EndDate ?? midterm.StartDate, result.Holidays));
+        var expectedStart = NextBusinessDayAfter(excuseApplication.StartDate, result.Holidays);
         excuseExam.StartDate.Should().Be(expectedStart);
         EventContainsWeekend(excuseExam).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Generator_PlacesSummerExcuseExam_OnNextMondayAfterSummerExam_WithoutWeekend()
+    public async Task Generator_PlacesSummerExcuseExam_OnNextBusinessDayAfterApplication_WithoutWeekend()
     {
         var result = await _generatorService.GenerateAsync(new GenerateCalendarRequestDto(
             "2025-2026",
@@ -388,10 +422,13 @@ public class CalendarGeneratorTests : IDisposable
 
         var summerExam = result.Events.Single(e =>
             e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_exam");
+        var excuseApplication = result.Events.Single(e =>
+            e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_excuse_application");
         var excuseExam = result.Events.Single(e =>
             e.Semester == SemesterType.Summer && e.TemplateItemKey == "summer_excuse_exam");
 
-        var expectedStart = MondayOnOrAfter((summerExam.EndDate ?? summerExam.StartDate).AddDays(1));
+        excuseApplication.StartDate.Should().Be(NextBusinessDayAfter(summerExam.EndDate ?? summerExam.StartDate, result.Holidays));
+        var expectedStart = NextBusinessDayAfter(excuseApplication.StartDate, result.Holidays);
         excuseExam.StartDate.Should().Be(expectedStart);
         EventContainsWeekend(excuseExam).Should().BeFalse();
     }
@@ -1056,7 +1093,7 @@ public class CalendarGeneratorTests : IDisposable
             e.Semester == SemesterType.Spring && e.TemplateItemKey == "midterm_publication");
 
         excuseApplication.StartDate.Should().Be(Utc(2026, 4, 8));
-        excuseExam.StartDate.Should().Be(MondayOnOrAfter(Utc(2026, 4, 8)));
+        excuseExam.StartDate.Should().Be(NextBusinessDayAfter(excuseApplication.StartDate, generated.Holidays));
         EventContainsWeekend(excuseExam).Should().BeFalse();
         publication.StartDate.Should().BeAfter(excuseExam.EndDate ?? excuseExam.StartDate);
         publication.StartDate.Should().BeOnOrBefore(Utc(2026, 4, 21));
@@ -1275,6 +1312,38 @@ public class CalendarGeneratorTests : IDisposable
 
         return Utc(current.Year, current.Month, current.Day);
     }
+
+    private static DateTime NextBusinessDayAfter(DateTime fromExclusive, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var day = fromExclusive.Date;
+        do
+        {
+            day = day.AddDays(1);
+        }
+        while (!IsBusinessDay(day, holidays));
+
+        return Utc(day.Year, day.Month, day.Day);
+    }
+
+    private static int CountTeachingWeekdays(DateTime start, DateTime end, IReadOnlyList<ResolvedHolidayDto> holidays)
+    {
+        var count = 0;
+        for (var day = start.Date; day <= end.Date; day = day.AddDays(1))
+        {
+            if (IsTeachingDay(day, holidays))
+                count++;
+        }
+
+        return count;
+    }
+
+    private static bool IsBusinessDay(DateTime day, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
+        && !holidays.Any(h => h.IsOfficialHoliday && h.BlocksAcademicEvents && day >= h.StartDate.Date && day <= h.EndDate.Date);
+
+    private static bool IsTeachingDay(DateTime day, IReadOnlyList<ResolvedHolidayDto> holidays) =>
+        day.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
+        && !holidays.Any(h => h.BlocksAcademicEvents && day >= h.StartDate.Date && day <= h.EndDate.Date);
 
     private static bool EventContainsWeekend(GeneratedCalendarEventDto ev)
     {
