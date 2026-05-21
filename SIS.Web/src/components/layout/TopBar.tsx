@@ -30,7 +30,11 @@ const TERM_TYPE_LABELS: Record<string, string> = {
 function usePageTitleMap(): Record<string, string> {
   const { data: modules = [] } = useMenu();
   return useMemo(() => {
-    const map: Record<string, string> = { '/': 'Ana Sayfa' };
+    const map: Record<string, string> = {
+      '/': 'Ana Sayfa',
+      '/danisman-paneli': 'Danışman Paneli',
+      '/danismanpaneli': 'Danışman Paneli',
+    };
     for (const module of modules) {
       for (const child of flattenModuleItems(module)) {
         if (!map[child.to]) {

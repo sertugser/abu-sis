@@ -127,6 +127,86 @@ public class WebModuleControlServiceTests
         result.Message.Should().Be("Ders kayıt işlemleri bugün saat 09:00 itibarıyla açılacaktır.");
     }
 
+    [Fact]
+    public async Task EvaluateAsync_WhenAdvisorRegistrationApprovalUsesCourseRegistrationEvent_ReturnsOpen()
+    {
+        await using var context = CreateContext();
+        context.AcademicTerms.Add(new AcademicTerm
+        {
+            Name = "2025-2026 Bahar",
+            Year = 2026,
+            TermType = TermType.Spring,
+            TermStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 6, 30, 23, 59, 59, DateTimeKind.Utc),
+            CalendarEvents =
+            {
+                new TermCalendarEvent
+                {
+                    EventType = CalendarEventType.CourseRegistration,
+                    Title = "Ders Kayit ve Danisman Onaylari",
+                    StartDate = new DateTime(2026, 5, 20, 0, 0, 0, DateTimeKind.Utc),
+                    EndDate = new DateTime(2026, 5, 25, 23, 59, 59, DateTimeKind.Utc),
+                },
+            },
+        });
+        context.WebModuleSettings.Add(new WebModuleSetting
+        {
+            ModuleKey = "AdvisorRegistrationApproval",
+            Key = "Mode",
+            Value = WebModuleControlModes.TermEventBased,
+        });
+        await context.SaveChangesAsync();
+
+        var clock = new FakeClock { UtcNow = new DateTime(2026, 5, 21, 10, 0, 0, DateTimeKind.Utc) };
+        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var provider = new WebModuleSettingsProvider(context, memoryCache, clock);
+        var service = new WebModuleControlService(context, provider, clock);
+
+        var result = await service.EvaluateAsync("advisor-registration-approval");
+
+        result.IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WhenAdvisorAddDropApprovalUsesAddDropEvent_ReturnsOpen()
+    {
+        await using var context = CreateContext();
+        context.AcademicTerms.Add(new AcademicTerm
+        {
+            Name = "2025-2026 Bahar",
+            Year = 2026,
+            TermType = TermType.Spring,
+            TermStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+            TermEnd = new DateTime(2026, 6, 30, 23, 59, 59, DateTimeKind.Utc),
+            CalendarEvents =
+            {
+                new TermCalendarEvent
+                {
+                    EventType = CalendarEventType.AddDrop,
+                    Title = "Ders Ekleme - Birakma ve Danisman Onaylari",
+                    StartDate = new DateTime(2026, 5, 20, 0, 0, 0, DateTimeKind.Utc),
+                    EndDate = new DateTime(2026, 5, 25, 23, 59, 59, DateTimeKind.Utc),
+                },
+            },
+        });
+        context.WebModuleSettings.Add(new WebModuleSetting
+        {
+            ModuleKey = "AdvisorAddDropApproval",
+            Key = "Mode",
+            Value = WebModuleControlModes.TermEventBased,
+        });
+        await context.SaveChangesAsync();
+
+        var clock = new FakeClock { UtcNow = new DateTime(2026, 5, 21, 10, 0, 0, DateTimeKind.Utc) };
+        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var provider = new WebModuleSettingsProvider(context, memoryCache, clock);
+        var service = new WebModuleControlService(context, provider, clock);
+
+        var result = await service.EvaluateAsync("advisor-add-drop-approval");
+
+        result.IsOpen.Should().BeTrue();
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

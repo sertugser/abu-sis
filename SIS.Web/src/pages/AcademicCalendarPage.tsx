@@ -211,12 +211,14 @@ function fallbackPhaseEvents(calendar: StudentAcademicCalendarDto): VisualizerEv
   return events;
 }
 
-// Liste sekmesi için "öğrenciye açık" event'leri kronolojik sırada döner.
+// Liste sekmesi için gösterilebilir event'leri kronolojik sırada döner.
+// Takvim oluşturucu yetkisi olan kullanıcılar API'den includeAllEvents=true ile
+// tüm event'leri aldığı için burada tekrar sadece public'e daraltmıyoruz.
 // PDF helper'ı (printableEventsForCalendar) string formatlanmış tek sütun döndürdüğü için
 // tabloya ayrı bir kaynak gerekti: tablo Başlangıç ve Bitiş'i ayrı kolonlarda gösteriyor.
-function publicEventsForCalendar(calendar: StudentAcademicCalendarDto): TermCalendarEventDto[] {
+function visibleEventsForCalendar(calendar: StudentAcademicCalendarDto, includeAllEvents: boolean): TermCalendarEventDto[] {
   return calendar.events
-    .filter(event => event.isPublic)
+    .filter(event => includeAllEvents || event.isPublic)
     .slice()
     .sort((left, right) =>
       left.startDate.localeCompare(right.startDate)
@@ -704,13 +706,15 @@ export default function AcademicCalendarPage() {
               // kullanıcı öğrenciye açık etkinlik aramaya geldiğinde info-only dönemler
               // ("Öğrenciye açık etkinlik tanımlanmamış") sayfayı kalabalıklaştırıyor.
               const populated = calendars
-                .map(calendar => ({ calendar, rows: publicEventsForCalendar(calendar) }))
+                .map(calendar => ({ calendar, rows: visibleEventsForCalendar(calendar, canEditCalendar) }))
                 .filter(item => item.rows.length > 0);
 
               if (populated.length === 0) {
                 return (
                   <div className="border border-slate-200 rounded-xl bg-white shadow-sm p-10 text-center text-slate-400">
-                    Bu akademik yıl için öğrenciye açık etkinlik bulunamadı.
+                    {canEditCalendar
+                      ? 'Bu akademik yıl için etkinlik bulunamadı.'
+                      : 'Bu akademik yıl için öğrenciye açık etkinlik bulunamadı.'}
                   </div>
                 );
               }

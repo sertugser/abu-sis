@@ -16,11 +16,16 @@ public class FacultyPlanningController : ControllerBase
 {
     private readonly IFacultyPlanningService _service;
     private readonly AppDbContext _context;
+    private readonly ILogger<FacultyPlanningController> _logger;
 
-    public FacultyPlanningController(IFacultyPlanningService service, AppDbContext context)
+    public FacultyPlanningController(
+        IFacultyPlanningService service,
+        AppDbContext context,
+        ILogger<FacultyPlanningController> logger)
     {
         _service = service;
         _context = context;
+        _logger = logger;
     }
 
     private bool TryGetUserId(out int userId)
@@ -114,6 +119,19 @@ public class FacultyPlanningController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or NotSupportedException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Auto-schedule rejected for FacultyId={FacultyId}, TermId={TermId}, DepartmentId={DepartmentId}",
+                request.FacultyId,
+                request.TermId,
+                request.DepartmentId);
+            return BadRequest(new
+            {
+                error = "Ders programi olusturulamadi. Derslik, zaman dilimi ve kisit ayarlarini kontrol edin."
+            });
         }
     }
 

@@ -27,6 +27,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleSettingsProvider _webSettings;
     private readonly IWebModuleControlService _webModuleControls;
+    private readonly bool _useCalendarFallbackForWebModuleControls;
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
@@ -45,6 +46,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         _advisorConstraintService = advisorConstraintService;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _useCalendarFallbackForWebModuleControls = webModuleControls is null;
     }
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
@@ -784,13 +786,37 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             .Include(item => item.AcademicCalendar)
             .FirstOrDefaultAsync(item => item.Id == termId);
 
-        if (term?.IsAddDropOpen(nowUtc) == true)
-            return "advisor-add-drop-approval";
-
         var student = await LoadStudentModuleProfileAsync(studentId);
-        return student?.CompletedSemesters == 0
+        var registrationApprovalCode = student?.CompletedSemesters == 0
             ? "advisor-new-student-registration-approval"
             : "advisor-registration-approval";
+
+        var registrationAccess = await _webModuleControls.EvaluateAsync(registrationApprovalCode, termId);
+        if (registrationAccess.IsOpen)
+            return registrationApprovalCode;
+
+        var addDropApprovalCode = "advisor-add-drop-approval";
+        var addDropAccess = await _webModuleControls.EvaluateAsync(addDropApprovalCode, termId);
+        if (addDropAccess.IsOpen)
+            return addDropApprovalCode;
+
+        var studentRegistrationControlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, termId);
+        var studentRegistrationAccess = await _webModuleControls.EvaluateAsync(studentRegistrationControlCode, termId);
+        if (studentRegistrationAccess.IsOpen && !await IsConfiguredClosedModeAsync(registrationApprovalCode))
+            return studentRegistrationControlCode;
+
+        var studentAddDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+        var studentAddDropAccess = await _webModuleControls.EvaluateAsync(studentAddDropControlCode, termId);
+        if (studentAddDropAccess.IsOpen && !await IsConfiguredClosedModeAsync(addDropApprovalCode))
+            return studentAddDropControlCode;
+
+        if (term?.IsRegistrationOpen(nowUtc) == true)
+            return registrationApprovalCode;
+
+        if (term?.IsAddDropOpen(nowUtc) == true)
+            return addDropApprovalCode;
+
+        return registrationApprovalCode;
     }
 
     private async Task<Domain.Entities.Student?> LoadStudentModuleProfileAsync(int studentId)
@@ -832,6 +858,44 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             return null;
 
         return CreateWebModuleError(rule, access.Message ?? fallbackMessage);
+    }
+
+    private async Task<bool> IsManualOpenModeAsync(string controlCode, CancellationToken ct = default)
+    {
+        var definition = _webModuleControls.GetDefinition(controlCode);
+        if (definition is null)
+            return false;
+
+        var configuredMode = await _webSettings.GetStringAsync(
+            definition.SettingModuleKey,
+            definition.ModeKey,
+            definition.Options[0].Code,
+            ct);
+
+        var normalizedMode = definition.Options
+            .FirstOrDefault(option => string.Equals(option.Code, configuredMode, StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? definition.Options[0].Code;
+
+        return string.Equals(normalizedMode, WebModuleControlModes.Open, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> IsConfiguredClosedModeAsync(string controlCode, CancellationToken ct = default)
+    {
+        var definition = _webModuleControls.GetDefinition(controlCode);
+        if (definition is null)
+            return false;
+
+        var configuredMode = await _webSettings.GetStringAsync(
+            definition.SettingModuleKey,
+            definition.ModeKey,
+            definition.Options[0].Code,
+            ct);
+
+        var normalizedMode = definition.Options
+            .FirstOrDefault(option => string.Equals(option.Code, configuredMode, StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? definition.Options[0].Code;
+
+        return string.Equals(normalizedMode, WebModuleControlModes.Closed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ValidationResultDto CreateWebModuleError(string rule, string message)

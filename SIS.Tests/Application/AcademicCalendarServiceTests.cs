@@ -329,6 +329,45 @@ public class AcademicCalendarServiceTests
     }
 
     [Fact]
+    public async Task GetStudentViewAsync_ReturnsAllEvents_WhenIncludeAllEventsRequested()
+    {
+        using var ctx = CreateContext();
+        var term = SeedTerm(ctx);
+        var svc = CreateService(ctx);
+
+        await svc.UpsertAsync(term.Id, ValidDto(term));
+
+        ctx.TermCalendarEvents.AddRange(
+            new TermCalendarEvent
+            {
+                TermId = term.Id,
+                EventType = CalendarEventType.ClassesStart,
+                Title = "Derslerin Baslangici",
+                StartDate = term.TermStart,
+                IsPublic = true,
+                IsGenerated = false,
+                BlocksAcademicEvents = false
+            },
+            new TermCalendarEvent
+            {
+                TermId = term.Id,
+                EventType = CalendarEventType.Other,
+                Title = "Gizli Etkinlik",
+                StartDate = term.TermStart.AddDays(1),
+                IsPublic = false,
+                IsGenerated = false,
+                BlocksAcademicEvents = false
+            });
+        ctx.SaveChanges();
+
+        var result = await svc.GetStudentViewAsync(term.Id, includeAllEvents: true);
+
+        result.Should().NotBeNull();
+        result!.Events.Should().HaveCount(2);
+        result.Events.Should().Contain(e => !e.IsPublic && e.Title == "Gizli Etkinlik");
+    }
+
+    [Fact]
     public async Task GetActiveStudentViewAsync_ReturnsNull_WhenNoActiveTerm()
     {
         using var ctx = CreateContext();

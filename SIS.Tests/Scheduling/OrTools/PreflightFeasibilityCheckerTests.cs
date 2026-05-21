@@ -20,6 +20,9 @@ public class PreflightFeasibilityCheckerTests
         TeachingMethod = TeachingMethod.FaceToFace
     };
 
+    private static SectionInput OnlineSection(int id, int theory, int lab, int capacity = 40) =>
+        Section(id, theory, lab, capacity) with { TeachingMethod = TeachingMethod.Online };
+
     private static IReadOnlyList<TimeSlotInput> BuildMinimalSlots() => new[]
     {
         new TimeSlotInput { Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
@@ -99,6 +102,18 @@ public class PreflightFeasibilityCheckerTests
 
         // Computer type counts as a valid lab classroom
         result.FeasibleSections.Should().HaveCount(1);
+        result.InfeasibleSections.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Check_OnlineSectionWithoutClassrooms_MarkedFeasible()
+    {
+        var checker = new PreflightFeasibilityChecker();
+        var sections = new[] { OnlineSection(1, theory: 2, lab: 0, capacity: 40) };
+
+        var result = checker.Check(sections, Array.Empty<ClassroomInput>(), BuildMinimalSlots());
+
+        result.FeasibleSections.Should().ContainSingle().Which.Id.Should().Be(1);
         result.InfeasibleSections.Should().BeEmpty();
     }
 
