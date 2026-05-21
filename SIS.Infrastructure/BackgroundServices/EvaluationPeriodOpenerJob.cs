@@ -58,7 +58,7 @@ public class EvaluationPeriodOpenerJob : BackgroundService
 
         var terms = await ctx.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
             .ToListAsync(ct);
         terms = terms.Where(t => t.AcademicCalendar != null && t.AcademicCalendar.GradeEntryStart <= now).ToList();
 

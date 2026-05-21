@@ -54,17 +54,64 @@ public class PermissionService : IPermissionService
             return allSet;
         }
 
-        if (roles.Count == 0)
+        // Aktif vekâletlerden gelen delegator user'larını topla (kendi rolleri ∪ devralınan roller)
+        var now = DateTime.UtcNow;
+        var delegatorIds = await _context.PermissionDelegations
+            .AsNoTracking()
+            .Where(d => d.DelegateeUserId == userId
+                        && d.RevokedAtUtc == null
+                        && d.StartsAtUtc <= now
+                        && now <= d.EndsAtUtc)
+            .Select(d => d.DelegatorUserId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        // Delegator'ın SysAdmin rolü varsa: tüm permission'ları üret (delegate edilebilir mi tartışılabilir,
+        // ama kasıtlı vekâlette buna izin veriyoruz; revoke ile geri alınabilir)
+        if (delegatorIds.Count > 0)
+        {
+            var delegatorRoleNames = await (
+                from ur in _context.Set<IdentityUserRole<int>>().AsNoTracking()
+                join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                where delegatorIds.Contains(ur.UserId)
+                select r.Name!
+            ).Distinct().ToListAsync(ct);
+
+            if (delegatorRoleNames.Contains(SystemAdminRole))
+            {
+                var allKeys = await _context.Permissions
+                    .AsNoTracking()
+                    .Select(p => p.Key)
+                    .ToListAsync(ct);
+                var allSet = new HashSet<string>(allKeys, StringComparer.Ordinal);
+                _cache.Set(cacheKey, allSet, CacheTtl);
+                return allSet;
+            }
+        }
+
+        // Normal user: kendi rolleri + delegator rolleri toplam set
+        var combinedRoleNames = new HashSet<string>(roles, StringComparer.Ordinal);
+        if (delegatorIds.Count > 0)
+        {
+            var extraRoleNames = await (
+                from ur in _context.Set<IdentityUserRole<int>>().AsNoTracking()
+                join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                where delegatorIds.Contains(ur.UserId)
+                select r.Name!
+            ).Distinct().ToListAsync(ct);
+            foreach (var n in extraRoleNames) combinedRoleNames.Add(n);
+        }
+
+        if (combinedRoleNames.Count == 0)
         {
             var emptySet = new HashSet<string>(StringComparer.Ordinal);
             _cache.Set(cacheKey, emptySet, CacheTtl);
             return emptySet;
         }
 
-        // Normal user: rol-permission JOIN
         var roleIds = await _context.Roles
             .AsNoTracking()
-            .Where(r => roles.Contains(r.Name!))
+            .Where(r => combinedRoleNames.Contains(r.Name!))
             .Select(r => r.Id)
             .ToListAsync(ct);
 

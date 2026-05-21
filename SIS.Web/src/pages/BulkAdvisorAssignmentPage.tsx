@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,14 +51,8 @@ export default function BulkAdvisorAssignmentPage() {
   const [lastResult, setLastResult] = useState<BulkAcademicOperationResult | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  // Hoca bazlı kapasite ve dahil/değil overrides — initial value backend'den, kullanıcı override edebilir
-  const [capacityOverrides, setCapacityOverrides] = useState<Record<number, string>>({});
-  const [excludedAdvisors, setExcludedAdvisors] = useState<Record<number, boolean>>({});
   const [assignmentMode] = useState<'single' | 'per-student'>('single');
   const [perStudentAdvisorIds, setPerStudentAdvisorIds] = useState<Record<number, number>>({});
-  const [previewOpen, setPreviewOpen] = useState(false);
-  // Atama modu: 'single' = tek hoca tümüne, 'per-student' = her öğrenci için ayrı
-  // Önizleme dialog'u — runAssignment'tan önce kullanıcı onayı
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -82,49 +72,17 @@ export default function BulkAdvisorAssignmentPage() {
     setSelectedAdvisorId('none');
     setReplaceExisting(false);
     setSelectedStudentIds(new Set());
-    setCapacityOverrides({});
-    setExcludedAdvisors({});
     setPerStudentAdvisorIds({});
-    setPreviewOpen(false);
     setLastResult(null);
   }, [departmentId]);
 
   const studentsQuery = useDepartmentStudents(departmentId, {}, departmentId !== null);
-  const instructorsQuery = useDepartmentInstructors(departmentId);
+  const advisorsQuery = useDepartmentInstructors(null, null, true);
   const assignmentMutation = useBulkAdvisorAssignment(departmentId);
 
   const students = studentsQuery.data?.students ?? EMPTY_STUDENTS;
-  const instructors = instructorsQuery.data ?? EMPTY_INSTRUCTORS;
+  const instructors = advisorsQuery.data ?? EMPTY_INSTRUCTORS;
   const departmentOptions = contextQuery.data?.accessibleDepartments ?? [];
-
-  // Backend'den gelen kapasite/dahil değerleriyle local override'ları senkronize et
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCapacityOverrides(prev => {
-      const next: Record<number, string> = { ...prev };
-      let changed = false;
-      instructors.forEach(inst => {
-        if (next[inst.instructorId] === undefined) {
-          next[inst.instructorId] = inst.advisorAssignmentCapacity == null
-            ? ''
-            : String(inst.advisorAssignmentCapacity);
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-    setExcludedAdvisors(prev => {
-      const next: Record<number, boolean> = { ...prev };
-      let changed = false;
-      instructors.forEach(inst => {
-        if (next[inst.instructorId] === undefined) {
-          next[inst.instructorId] = !inst.isAvailableForAdvisorAssignment;
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [instructors]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -395,58 +353,6 @@ export default function BulkAdvisorAssignmentPage() {
     ? getAcademicOperationsErrorMessage(assignmentMutation.error, 'Danışman ataması tamamlanamadı.')
     : null;
 
-  // Önizleme: hangi hoca → kaç öğrenci, kapasite aşımı var mı
-  const assignmentPreview = useMemo(() => {
-    const groups = new Map<number, { advisor: InstructorOptionDto; studentIds: number[] }>();
-    if (assignmentMode === 'single') {
-      if (!selectedAdvisor) return { groups: [], skippedCount: 0, capacityWarnings: [] as string[] };
-      groups.set(selectedAdvisor.instructorId, {
-        advisor: selectedAdvisor,
-        studentIds: [...selectedStudentIds],
-      });
-    } else {
-      let skipped = 0;
-      for (const studentId of selectedStudentIds) {
-        const advisorId = perStudentAdvisorIds[studentId];
-        if (!advisorId) { skipped++; continue; }
-        const advisor = instructors.find(i => i.instructorId === advisorId);
-        if (!advisor) { skipped++; continue; }
-        const existing = groups.get(advisorId);
-        if (existing) existing.studentIds.push(studentId);
-        else groups.set(advisorId, { advisor, studentIds: [studentId] });
-      }
-      const warnings: string[] = [];
-      for (const [, group] of groups) {
-        const capacityRaw = capacityOverrides[group.advisor.instructorId];
-        const capacity = capacityRaw && capacityRaw.trim() !== '' ? Number(capacityRaw) : null;
-        if (capacity !== null && Number.isFinite(capacity) && capacity > 0) {
-          const projected = group.advisor.currentStudentCount + group.studentIds.length;
-          if (projected > capacity) {
-            warnings.push(`${group.advisor.fullName}: ${projected}/${capacity} (aşım)`);
-          }
-        }
-      }
-      return {
-        groups: [...groups.values()],
-        skippedCount: skipped,
-        capacityWarnings: warnings,
-      };
-    }
-    // Single mode capacity check
-    const warnings: string[] = [];
-    for (const [, group] of groups) {
-      const capacityRaw = capacityOverrides[group.advisor.instructorId];
-      const capacity = capacityRaw && capacityRaw.trim() !== '' ? Number(capacityRaw) : null;
-      if (capacity !== null && Number.isFinite(capacity) && capacity > 0) {
-        const projected = group.advisor.currentStudentCount + group.studentIds.length;
-        if (projected > capacity) {
-          warnings.push(`${group.advisor.fullName}: ${projected}/${capacity} (aşım)`);
-        }
-      }
-    }
-    return { groups: [...groups.values()], skippedCount: 0, capacityWarnings: warnings };
-  }, [assignmentMode, selectedAdvisor, selectedStudentIds, perStudentAdvisorIds, instructors, capacityOverrides]);
-
   return (
     <DepartmentOperationsLayout
       icon={UserCheck}
@@ -463,12 +369,12 @@ export default function BulkAdvisorAssignmentPage() {
       hideHeader
     >
       <div className="space-y-3">
-        {(studentsQuery.isError || instructorsQuery.isError || mutationError) && (
+        {(studentsQuery.isError || advisorsQuery.isError || mutationError) && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {mutationError
-                ?? getAcademicOperationsErrorMessage(studentsQuery.error ?? instructorsQuery.error, 'Toplu danışman atama verisi yüklenemedi.')}
+                ?? getAcademicOperationsErrorMessage(studentsQuery.error ?? advisorsQuery.error, 'Toplu danışman atama verisi yüklenemedi.')}
             </AlertDescription>
           </Alert>
         )}
@@ -563,12 +469,10 @@ export default function BulkAdvisorAssignmentPage() {
                   disabled={!canAssignAdvisors}
                   options={[
                     { value: 'none', label: 'Danışman seçin' },
-                    ...instructors
-                      .filter(instructor => !excludedAdvisors[instructor.instructorId])
-                      .map(instructor => ({
-                        value: String(instructor.instructorId),
-                        label: instructor.fullName,
-                      })),
+                    ...instructors.map(instructor => ({
+                      value: String(instructor.instructorId),
+                      label: formatAdvisorOption(instructor),
+                    })),
                   ]}
                 />
 
@@ -601,21 +505,25 @@ export default function BulkAdvisorAssignmentPage() {
                     <X className="h-3.5 w-3.5" />
                     Temizle
                   </Button>
+                  <Button
+                    type="button"
+                    className="h-8 px-3 text-xs"
+                    onClick={runAssignment}
+                    disabled={
+                      !canAssignAdvisors
+                      || selectedStudents.length === 0
+                      || selectedAdvisor === null
+                      || assignmentMutation.isPending
+                    }
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    {assignmentMutation.isPending ? 'Atanıyor' : 'Danışman Ata'}
+                  </Button>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        <AdvisorCapacityPanel
-          instructors={instructors}
-          loading={instructorsQuery.isLoading}
-          capacityOverrides={capacityOverrides}
-          excludedAdvisors={excludedAdvisors}
-          onCapacityChange={(id, value) => setCapacityOverrides(prev => ({ ...prev, [id]: value }))}
-          onExcludeChange={(id, excluded) => setExcludedAdvisors(prev => ({ ...prev, [id]: excluded }))}
-          disabled={!canAssignAdvisors}
-        />
 
         <StudentTable
           students={pageStudents}
@@ -627,7 +535,7 @@ export default function BulkAdvisorAssignmentPage() {
           onToggleStudent={toggleStudent}
           onToggleVisible={toggleVisibleStudents}
           perStudentMode={assignmentMode === 'per-student'}
-          availableAdvisors={instructors.filter(i => !excludedAdvisors[i.instructorId])}
+          availableAdvisors={instructors}
           perStudentAdvisorIds={perStudentAdvisorIds}
           onPerStudentAdvisorChange={(studentId, advisorId) =>
             setPerStudentAdvisorIds(prev => ({ ...prev, [studentId]: advisorId }))}
@@ -645,77 +553,6 @@ export default function BulkAdvisorAssignmentPage() {
 
         <BulkOperationResultPanel result={lastResult ?? null} title="Son Danışman Atama Sonucu" />
       </div>
-
-      <AlertDialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Atama Önizlemesi</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm">
-                <p>
-                  <strong>{assignmentPreview.groups.reduce((sum, g) => sum + g.studentIds.length, 0)}</strong> öğrenci,{' '}
-                  <strong>{assignmentPreview.groups.length}</strong> hocaya atanacak.
-                  {assignmentPreview.skippedCount > 0 && (
-                    <>{' '}<span className="text-amber-700">{assignmentPreview.skippedCount} öğrenci hoca seçimi olmadığı için atlanacak.</span></>
-                  )}
-                </p>
-
-                {assignmentPreview.capacityWarnings.length > 0 && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      <div className="font-medium mb-1">Kapasite aşımı:</div>
-                      <ul className="list-disc pl-5 space-y-0.5">
-                        {assignmentPreview.capacityWarnings.map(warning => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="rounded-md border max-h-[280px] overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/40 sticky top-0">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium">Hoca</th>
-                        <th className="text-center px-3 py-2 font-medium w-20">Mevcut</th>
-                        <th className="text-center px-3 py-2 font-medium w-24">Bu Atamada</th>
-                        <th className="text-center px-3 py-2 font-medium w-20">Toplam</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assignmentPreview.groups.map(group => (
-                        <tr key={group.advisor.instructorId} className="border-t">
-                          <td className="px-3 py-2 font-medium">{group.advisor.fullName}</td>
-                          <td className="px-3 py-2 text-center tabular-nums">{group.advisor.currentStudentCount}</td>
-                          <td className="px-3 py-2 text-center tabular-nums font-semibold">+{group.studentIds.length}</td>
-                          <td className="px-3 py-2 text-center tabular-nums">{group.advisor.currentStudentCount + group.studentIds.length}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {replaceExisting && (
-                  <p className="text-amber-700 text-xs">
-                    ⚠ "Yeniden Ata" modunda — mevcut danışmanı olan öğrencilerin danışmanı değişecek.
-                  </p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => { setPreviewOpen(false); runAssignment(); }}
-              disabled={assignmentPreview.groups.length === 0}
-            >
-              Onayla ve Ata
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </DepartmentOperationsLayout>
   );
 }
@@ -879,7 +716,7 @@ function StudentTable({
                         <option value="">Seçiniz...</option>
                         {availableAdvisors.map(advisor => (
                           <option key={advisor.instructorId} value={advisor.instructorId}>
-                            {advisor.fullName}
+                            {formatAdvisorOption(advisor)}
                           </option>
                         ))}
                       </select>
@@ -901,85 +738,13 @@ function StudentTable({
   );
 }
 
-function AdvisorCapacityPanel({
-  instructors,
-  loading,
-  capacityOverrides,
-  excludedAdvisors,
-  onCapacityChange,
-  onExcludeChange,
-  disabled,
-}: {
-  instructors: InstructorOptionDto[];
-  loading: boolean;
-  capacityOverrides: Record<number, string>;
-  excludedAdvisors: Record<number, boolean>;
-  onCapacityChange: (instructorId: number, value: string) => void;
-  onExcludeChange: (instructorId: number, excluded: boolean) => void;
-  disabled: boolean;
-}) {
-  if (loading) return null;
-  if (instructors.length === 0) return null;
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm">Hoca Kapasiteleri</CardTitle>
-          <Badge variant="outline">{instructors.length} hoca</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Hoca</TableHead>
-              <TableHead className="w-[100px] text-center">Mevcut Yük</TableHead>
-              <TableHead className="w-[110px] text-center">Atamaya Dahil</TableHead>
-              <TableHead className="w-[140px] text-center">Kapasite</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {instructors.map(instructor => {
-              const isExcluded = excludedAdvisors[instructor.instructorId] ?? false;
-              const capacityText = capacityOverrides[instructor.instructorId] ?? '';
-              return (
-                <TableRow key={instructor.instructorId} className={isExcluded ? 'opacity-60' : undefined}>
-                  <TableCell className="font-medium">{instructor.fullName}</TableCell>
-                  <TableCell className="text-center tabular-nums">{instructor.currentStudentCount}</TableCell>
-                  <TableCell className="text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input"
-                      checked={!isExcluded}
-                      disabled={disabled}
-                      onChange={event => onExcludeChange(instructor.instructorId, !event.target.checked)}
-                      aria-label={`${instructor.fullName} atamaya dahil`}
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Sınırsız"
-                      value={capacityText}
-                      disabled={disabled || isExcluded}
-                      onChange={event => onCapacityChange(instructor.instructorId, event.target.value)}
-                      className="h-8 w-24 mx-auto text-center text-xs"
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
 function getStudentClassYear(student: DepartmentStudentListItem) {
   return Math.min(4, Math.max(1, Math.floor(student.completedSemesters / 2) + 1));
+}
+
+function formatAdvisorOption(instructor: InstructorOptionDto) {
+  const departmentLabel = instructor.departmentCode || instructor.departmentName;
+  return departmentLabel ? `${instructor.fullName} · ${departmentLabel}` : instructor.fullName;
 }
 
 function StatusBadge({ status }: { status: string }) {

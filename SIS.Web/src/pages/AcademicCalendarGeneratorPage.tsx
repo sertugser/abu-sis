@@ -50,6 +50,7 @@ import {
 
 type CalendarView = GenerateCalendarResultDto | CalendarDraftDto;
 type ConfirmTone = 'default' | 'danger' | 'info';
+type NoticeTone = 'info' | 'success' | 'error';
 type WarningRow = {
   warning: CalendarWarningDto;
   message: string;
@@ -420,12 +421,15 @@ function validateDraftEventDateEdit(ev: GeneratedCalendarEventDto, startDate: st
     return 'Bitis tarihi baslangic tarihinden once olamaz.';
 
   const parsedStart = parseUtcDisplayDate(startDate);
+  const parsedEnd = parseUtcDisplayDate(endDate || startDate);
   if (mustStartOnMonday(ev.eventType) && parsedStart?.getUTCDay() !== 1)
     return 'Bu etkinlik Pazartesi günü başlamalıdır.';
 
   if (isExamDraftEvent(ev)) {
     if (parsedStart && isWeekend(parsedStart))
       return 'Sinav baslangic tarihi hafta sonuna denk gelemez.';
+    if (parsedEnd && isWeekend(parsedEnd))
+      return 'Sinav bitis tarihi hafta sonuna denk gelemez.';
   }
 
   return null;
@@ -982,7 +986,8 @@ export default function AcademicCalendarGeneratorPage() {
   const [generated, setGenerated] = useState<GenerateCalendarResultDto | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ title: '', startDate: '', endDate: '', note: '' });
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNoticeMessage] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<NoticeTone>('info');
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [showDraftHistory, setShowDraftHistory] = useState(false);
@@ -1331,9 +1336,19 @@ export default function AcademicCalendarGeneratorPage() {
     });
   }
 
+  function draftEventToEditForm(ev: GeneratedCalendarEventDto) {
+    const startDate = dateInput(ev.startDate);
+    return {
+      title: displayText(ev.title),
+      startDate,
+      endDate: dateInput(ev.endDate) || startDate,
+      note: ev.note ?? '',
+    };
+  }
+
   function selectEvent(ev: GeneratedCalendarEventDto) {
     setSelectedEventId(ev.draftEventId);
-    setEditForm({ title: displayText(ev.title), startDate: dateInput(ev.startDate), endDate: dateInput(ev.endDate), note: ev.note ?? '' });
+    setEditForm(draftEventToEditForm(ev));
     whatIf.reset();
   }
 
@@ -1426,14 +1441,22 @@ export default function AcademicCalendarGeneratorPage() {
       },
     }, {
       onSuccess: data => {
+        const updatedEvent = data.events.find(event => event.draftEventId === ev.draftEventId);
         setGenerated(null);
         setSelectedDraftId(data.id);
-        setSelectedEventId(null);
-        setNotice(propagateChanges
+        setSelectedSemester(updatedEvent?.semester ?? ev.semester);
+        setSelectedEventId(ev.draftEventId);
+        setEditForm(updatedEvent ? draftEventToEditForm(updatedEvent) : {
+          title: displayText(ev.title),
+          startDate: nextStartDate,
+          endDate: nextEndDate,
+          note: ev.note ?? '',
+        });
+        showSuccessNotice(propagateChanges
           ? 'Taslak etkinligi guncellendi; bagimli tarihler yeniden hesaplandi.'
           : 'Taslak etkinligi guncellendi; zincirleme kaydirma uygulanmadi, sadece secili etkinlik degisti.');
       },
-      onError: error => setNotice(getErrorMessage(error)),
+      onError: error => showErrorNotice(getErrorMessage(error)),
     });
   }
 
@@ -1497,9 +1520,26 @@ export default function AcademicCalendarGeneratorPage() {
     return { allowed: true, reason: 'Uygun hedef. Bırakınca taslak güncellemesi onaylanır.' };
   }
 
-  function showErrorNotice(message: string) {
-    setNotice(null);
-    setErrorNotice(message);
+  function setNotice(message: string | null) {
+    setNoticeTone('info');
+    setNoticeMessage(message);
+  }
+
+  function showNotice(message: string, tone: NoticeTone = 'info') {
+    setNoticeTone(tone);
+    setNoticeMessage(message);
+    if (tone !== 'error')
+      setErrorNotice(null);
+  }
+
+  function showSuccessNotice(message: string) {
+    showNotice(message, 'success');
+  }
+
+  function showErrorNotice(message: string, showDialog = true) {
+    showNotice(message, 'error');
+    if (showDialog)
+      setErrorNotice(message);
   }
 
   function handleInvalidDraftEventDrop({ reason }: DropFeedbackRequest & { reason?: string }) {
@@ -1522,8 +1562,13 @@ export default function AcademicCalendarGeneratorPage() {
     const isExam = calendarEventCategory(selectedPinOption.eventType, selectedPinOption.title, selectedPinOption.templateItemKey) === 'exam';
     if (isExam) {
       const parsedStart = parseUtcDisplayDate(pinDate);
+      const parsedEnd = parseUtcDisplayDate(resolvedEndDate);
       if (parsedStart && isWeekend(parsedStart)) {
         setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
+        return;
+      }
+      if (parsedEnd && isWeekend(parsedEnd)) {
+        setNotice('Sinav bitis tarihi hafta sonuna denk gelemez.');
         return;
       }
     }
@@ -1714,13 +1759,10 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Tatil ve bloklayici ozel gunler tarih duzenleme ile degistirilemez.');
       return;
     }
-    const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
-    if (isExam) {
-      const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
-        return;
-      }
+    const validationError = validateDraftEventDateEdit(selectedEvent, editForm.startDate, editForm.endDate || editForm.startDate);
+    if (validationError) {
+      setNotice(validationError);
+      return;
     }
 
     const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Zincirleme kaydırma ön izlemesi');
@@ -1744,13 +1786,10 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Tatil ve bloklayici ozel gunler tarih duzenleme ile degistirilemez.');
       return;
     }
-    const isExam = calendarEventCategory(selectedEvent.eventType, selectedEvent.title, selectedEvent.templateItemKey) === 'exam';
-    if (isExam) {
-      const parsedStart = parseUtcDisplayDate(editForm.startDate);
-      if (parsedStart && isWeekend(parsedStart)) {
-        setNotice('Sınav başlangıç tarihi hafta sonuna denk gelemez.');
-        return;
-      }
+    const validationError = validateDraftEventDateEdit(selectedEvent, editForm.startDate, editForm.endDate || editForm.startDate);
+    if (validationError) {
+      setNotice(validationError);
+      return;
     }
 
     const propagateChanges = await askCascadeShiftPreference(selectedEvent, 'Taslağa yaz');
@@ -1780,14 +1819,22 @@ export default function AcademicCalendarGeneratorPage() {
       },
     }, {
       onSuccess: data => {
+        const updatedEvent = data.events.find(event => event.draftEventId === selectedEvent.draftEventId);
         setGenerated(null);
         setSelectedDraftId(data.id);
-        setSelectedEventId(null);
-        setNotice(propagateChanges
+        setSelectedSemester(updatedEvent?.semester ?? selectedEvent.semester);
+        setSelectedEventId(selectedEvent.draftEventId);
+        setEditForm(updatedEvent ? draftEventToEditForm(updatedEvent) : {
+          title: editForm.title,
+          startDate: editForm.startDate,
+          endDate: editForm.endDate || editForm.startDate,
+          note: editForm.note,
+        });
+        showSuccessNotice(propagateChanges
           ? 'Taslak etkinliği güncellendi; bağımlı tarihler yeniden hesaplandı.'
           : 'Taslak etkinliği güncellendi; zincirleme kaydırma uygulanmadı, sadece seçili etkinlik değişti.');
       },
-      onError: error => setNotice(getErrorMessage(error)),
+      onError: error => showErrorNotice(getErrorMessage(error)),
     });
   }
 
@@ -1815,9 +1862,9 @@ export default function AcademicCalendarGeneratorPage() {
     applyDraft.mutate({ draftId: activeDraftId, forceOverwrite }, {
       onSuccess: result => {
         const terms = result.termIds.length > 0 ? result.termIds.join(', ') : 'yok';
-        setNotice(`${result.message} Akademik takvim sayfası yenilendi. Güncellenen dönemler: ${terms}.`);
+        showSuccessNotice(`${result.message} Akademik takvim sayfası yenilendi. Güncellenen dönemler: ${terms}.`);
       },
-      onError: error => setNotice(getErrorMessage(error)),
+      onError: error => showErrorNotice(getErrorMessage(error)),
     });
   }
 
@@ -2587,7 +2634,7 @@ export default function AcademicCalendarGeneratorPage() {
         </div>
 
         <Dialog open={!!errorNotice} onOpenChange={(open) => !open && setErrorNotice(null)}>
-          <DialogContent className="max-w-md border-red-200">
+          <DialogContent className="z-[150] max-w-md border-red-200">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-900">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -2606,7 +2653,16 @@ export default function AcademicCalendarGeneratorPage() {
         </Dialog>
 
         {notice && (
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              'fixed right-4 top-4 z-[140] max-h-[40vh] w-[min(calc(100vw-2rem),32rem)] overflow-auto rounded-lg border px-4 py-3 text-sm shadow-xl',
+              noticeTone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
+              noticeTone === 'error' && 'border-red-200 bg-red-50 text-red-900',
+              noticeTone === 'info' && 'border-slate-200 bg-white text-slate-700',
+            )}
+          >
             {notice}
           </div>
         )}
@@ -2619,7 +2675,7 @@ export default function AcademicCalendarGeneratorPage() {
       {renderDraftHistoryDialog()}
 
       {pendingConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 px-4 py-6">
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/50 px-4 py-6">
           <div
             className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
             role="dialog"

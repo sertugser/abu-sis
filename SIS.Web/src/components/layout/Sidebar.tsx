@@ -53,7 +53,7 @@ function findPathToRoute(nodes: ModuleNode[], pathname: string): string[] | null
 /**
  * Sidebar açık-yol state'i (`openPath`) için route bazlı çözüm.
  * 4 strateji:
- *   1) Kullanıcı niyeti — mevcut top-level modül hâlâ pathname'i içeriyorsa korunur
+ *   1) Kullanıcı niyeti - mevcut top-level modül hâlâ pathname'i içeriyorsa korunur
  *   2) Canonical (favori-dışı) ilk eşleşme
  *   3) Son çare favori modülü
  *   4) Default ilk modül (alt-state yok)
@@ -63,7 +63,7 @@ function resolveOpenPath(
   modules: Module[],
   currentPath: string[],
 ): string[] {
-  // 1) Kullanıcı niyetine saygı — currentPath[0] hâlâ pathname'i içeriyorsa onu kullan,
+  // 1) Kullanıcı niyetine saygı - currentPath[0] hâlâ pathname'i içeriyorsa onu kullan,
   //    nested seviye yeni pathname'e göre güncellenir (alt-modül intent korunmaz)
   if (currentPath.length > 0) {
     const currentTop = modules.find(m => m.id === currentPath[0]);

@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
+import { effectiveRolesApi } from '../api/effectiveRoles.api';
 import {
   getPrimaryRole,
   getRoleDisplayLabel,
@@ -17,7 +19,10 @@ interface InvalidationNotice {
 interface ActiveRoleState {
   activeRole: AppRole | null;
   availableRoles: AppRole[];
+  /** Vekâletten gelen rollerin set'i — UI'da "(vekâlet)" suffix'i için. */
+  delegatedRoles: AppRole[];
   isMultiRole: boolean;
+  isDelegated: (role: AppRole) => boolean;
   setActiveRole: (role: AppRole) => void;
   invalidationNotice: InvalidationNotice | null;
   dismissNotice: () => void;
@@ -50,20 +55,37 @@ function clearStoredRole(): void {
 }
 
 export function ActiveRoleProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const userRoles = user?.roles ?? [];
+  const { user, isAuthenticated } = useAuth();
+  const ownRolesFromJwt = user?.roles ?? [];
 
-  // Sort user roles by priority once per roles-list change for stable dropdown order.
-  const availableRoles = useMemo<AppRole[]>(
-    () => sortRolesByPriority(userRoles),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userRoles.join('|')],
+  // Backend'den effective-roles çek: own ∪ aktif vekâletten devralınan
+  const { data: effective } = useQuery({
+    queryKey: ['me', 'effective-roles', user?.userId],
+    queryFn: () => effectiveRolesApi.get(),
+    enabled: isAuthenticated,
+    staleTime: 60_000, // 1 dk — vekâlet başla/bit anlarında biraz gecikme tolere edilir
+  });
+
+  // delegated rolleri ayrı tut (UI suffix için), availableRoles'u union olarak inşa et
+  const delegatedRoles = useMemo<AppRole[]>(
+    () => sortRolesByPriority(effective?.delegatedRoles ?? []),
+    [effective?.delegatedRoles?.join('|')],
   );
+
+  const availableRoles = useMemo<AppRole[]>(() => {
+    const all = new Set<string>(effective?.ownRoles ?? ownRolesFromJwt);
+    for (const r of effective?.delegatedRoles ?? []) all.add(r);
+    return sortRolesByPriority(Array.from(all));
+  }, [
+    effective?.ownRoles?.join('|'),
+    effective?.delegatedRoles?.join('|'),
+    ownRolesFromJwt.join('|'),
+  ]);
 
   const [activeRole, setActiveRoleState] = useState<AppRole | null>(null);
   const [invalidationNotice, setInvalidationNotice] = useState<InvalidationNotice | null>(null);
 
-  // Resolve activeRole on mount and whenever the user's role list changes.
+  // Resolve activeRole on mount and whenever the available roles change.
   useEffect(() => {
     if (availableRoles.length === 0) {
       setActiveRoleState(null);
@@ -98,16 +120,23 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }) {
     if (!user) clearStoredRole();
   }, [user]);
 
+  const isDelegated = useCallback(
+    (role: AppRole) => delegatedRoles.includes(role),
+    [delegatedRoles],
+  );
+
   const value = useMemo<ActiveRoleState>(
     () => ({
       activeRole,
       availableRoles,
+      delegatedRoles,
       isMultiRole: availableRoles.length > 1,
+      isDelegated,
       setActiveRole,
       invalidationNotice,
       dismissNotice,
     }),
-    [activeRole, availableRoles, setActiveRole, invalidationNotice, dismissNotice],
+    [activeRole, availableRoles, delegatedRoles, isDelegated, setActiveRole, invalidationNotice, dismissNotice],
   );
 
   return <ActiveRoleContext.Provider value={value}>{children}</ActiveRoleContext.Provider>;

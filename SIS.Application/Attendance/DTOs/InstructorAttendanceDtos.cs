@@ -16,6 +16,8 @@ public class AttendanceSessionDto
     public bool IsQrCurrentlyActive { get; set; }
     public DateTime? QrExpiresAt { get; set; }
     public string Token { get; set; } = string.Empty;
+    public int TotalSlotCount { get; set; } = 1;
+    public List<AttendanceSlotDto> Slots { get; set; } = new();
     public int TotalStudents { get; set; }
     public int PresentCount { get; set; }
     public int AbsentCount { get; set; }
@@ -34,7 +36,16 @@ public class AttendanceStudentDto
     public string Email { get; set; } = string.Empty;
     public AttendanceStatus? Status { get; set; }
     public AttendanceEntrySource? Source { get; set; }
+    public int TotalSlotCount { get; set; } = 1;
+    public List<int> PresentSlotNumbers { get; set; } = new();
     public DateTime? SubmittedAt { get; set; }
+}
+
+public class AttendanceSlotDto
+{
+    public int SlotNumber { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public string? TimeRange { get; set; }
 }
 
 public class CreateAttendanceSessionRequest
@@ -54,6 +65,7 @@ public class AttendanceRecordUpdateDto
 {
     public int StudentId { get; set; }
     public AttendanceStatus Status { get; set; }
+    public List<int> PresentSlotNumbers { get; set; } = new();
 }
 
 public class OpenQrAttendanceRequest
@@ -124,5 +136,7 @@ public class AttendanceStudentWeekStatusDto
 {
     public AttendanceStatus Status { get; set; }
     public AttendanceEntrySource Source { get; set; }
+    public int TotalSlotCount { get; set; } = 1;
+    public List<int> PresentSlotNumbers { get; set; } = new();
     public DateTime? SubmittedAt { get; set; }
 }

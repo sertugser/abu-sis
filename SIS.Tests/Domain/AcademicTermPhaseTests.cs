@@ -9,6 +9,7 @@ public class AcademicTermPhaseTests
 {
     private static AcademicTerm BuildTerm(
         bool isCancelled = false,
+        bool isActivated = true,
         DateTime? regStart = null,
         DateTime? regEnd = null,
         DateTime? addDropStart = null,
@@ -28,6 +29,7 @@ public class AcademicTermPhaseTests
         var te = termEnd ?? d.AddDays(120);
         return new AcademicTerm
         {
+            IsActivated = isActivated,
             IsCancelled = isCancelled,
             TermStart = ts,
             TermEnd = te,
@@ -162,6 +164,13 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
+    public void IsActive_FalseWhenNotActivated()
+    {
+        var term = BuildTerm(isActivated: false);
+        term.IsActive(term.TermStart.AddDays(1)).Should().BeFalse();
+    }
+
+    [Fact]
     public void IsActive_FalseWhenBeforeTermStart()
     {
         var term = BuildTerm();
@@ -187,6 +196,13 @@ public class AcademicTermPhaseTests
     {
         var term = BuildTerm(isCancelled: true);
         term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Cancelled);
+    }
+
+    [Fact]
+    public void GetStatus_ReturnsInactive_WhenNotActivated()
+    {
+        var term = BuildTerm(isActivated: false);
+        term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Inactive);
     }
 
     [Fact]

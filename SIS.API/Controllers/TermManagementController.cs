@@ -54,6 +54,32 @@ public class TermManagementController : ControllerBase
         catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
+    [HttpPost("{id:int}/activate")]
+    [RequirePermission("menu.akademik-donem.edit")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        try
+        {
+            await _service.ActivateTermAsync(id);
+            return Ok(await _service.GetTermByIdAsync(id));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPost("{id:int}/deactivate")]
+    [RequirePermission("menu.akademik-donem.edit")]
+    public async Task<IActionResult> Deactivate(int id)
+    {
+        try
+        {
+            await _service.DeactivateTermAsync(id);
+            return Ok(await _service.GetTermByIdAsync(id));
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     [HttpPost("{id:int}/cancel")]
     [RequirePermission("menu.akademik-donem.cancel")]
     public async Task<IActionResult> Cancel(int id)

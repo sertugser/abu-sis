@@ -80,6 +80,7 @@ public class AdminTermService : IAdminTermService
             TermEnd = termEnd,
             OverrideStart = overrideStart,
             OverrideEnd = overrideEnd,
+            IsActivated = true,
             IsCancelled = false,
             YoksisStatus = ParseYoksisStatus(dto.YoksisStatus),
             CreatedAt = _clock.UtcNow
@@ -128,6 +129,40 @@ public class AdminTermService : IAdminTermService
 
         await _context.SaveChangesAsync();
         return ToDto(term);
+    }
+
+    public async Task ActivateTermAsync(int id)
+    {
+        var term = await _context.AcademicTerms.FindAsync(id)
+            ?? throw new KeyNotFoundException($"Donem bulunamadi: {id}");
+
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Iptal edilmis donem aktif edilemez. Once iptali geri alin.");
+
+        if (term.IsActivated)
+            return;
+
+        term.IsActivated = true;
+        term.UpdatedAt = _clock.UtcNow;
+        await _context.SaveChangesAsync();
+
+        await _timeSlotService.GenerateTimeSlotsForTermAsync(term.Id);
+    }
+
+    public async Task DeactivateTermAsync(int id)
+    {
+        var term = await _context.AcademicTerms.FindAsync(id)
+            ?? throw new KeyNotFoundException($"Donem bulunamadi: {id}");
+
+        if (term.IsCancelled)
+            throw new InvalidOperationException("Iptal edilmis donem pasife alinamaz. Once iptali geri alin.");
+
+        if (!term.IsActivated)
+            return;
+
+        term.IsActivated = false;
+        term.UpdatedAt = _clock.UtcNow;
+        await _context.SaveChangesAsync();
     }
 
     /// <summary>
@@ -208,6 +243,7 @@ public class AdminTermService : IAdminTermService
             GetTermTypeLabel(t.TermType),
             status.ToString(),
             GetStatusLabel(status),
+            t.IsActivated,
             t.IsCancelled,
             t.YoksisStatus.ToString(),
             t.TermStart, t.TermEnd,

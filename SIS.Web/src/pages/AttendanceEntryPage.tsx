@@ -50,6 +50,7 @@ import type {
   AttendanceMatrixStudent,
   AttendanceMatrixWeek,
   AttendanceSession,
+  AttendanceSlot,
   AttendanceStatus,
 } from '../api/attendance.api';
 
@@ -67,6 +68,7 @@ const STATUS_STYLES: Record<AttendanceStatus, string> = {
   Excused: 'bg-sky-50 text-sky-700 border-sky-200',
 };
 
+const MANUAL_STATUS_OPTIONS: AttendanceStatus[] = ['Present', 'Absent', 'Excused'];
 const FALLBACK_WEEK_NUMBERS = Array.from({ length: 14 }, (_, index) => index + 1);
 
 type EditableStatus = AttendanceStatus | '';
@@ -80,12 +82,12 @@ export default function AttendanceEntryPage() {
   const [manualWeekSelection, setManualWeekSelection] = useState(false);
   const [activePage, setActivePage] = useState<'entry' | 'history'>('entry');
   const [sessionDate, setSessionDate] = useState(formatDateInput(new Date()));
-  const [topic, setTopic] = useState('');
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [historyWeekNumber, setHistoryWeekNumber] = useState<number | null>(null);
   const [statuses, setStatuses] = useState<Record<number, EditableStatus>>({});
+  const [presentSlotSelections, setPresentSlotSelections] = useState<Record<number, number[]>>({});
   const [dirtyStudentIds, setDirtyStudentIds] = useState<Set<number>>(new Set());
   const [qrDurationHours, setQrDurationHours] = useState('0');
   const [qrDurationMinutes, setQrDurationMinutes] = useState('10');
@@ -106,6 +108,7 @@ export default function AttendanceEntryPage() {
   const weekNumbers = matrix?.weeks.length
     ? matrix.weeks.map(week => week.weekNumber)
     : FALLBACK_WEEK_NUMBERS;
+  const entryWeekNumbers = [selectedWeekNumber];
   const qrUrl = session?.token ? `${window.location.origin}/yoklama/qr/${session.token}` : '';
   const remainingMs = session?.qrExpiresAt ? Math.max(0, new Date(session.qrExpiresAt).getTime() - now) : 0;
   const isQrActive = Boolean(session?.isQrCurrentlyActive && remainingMs > 0);
@@ -168,12 +171,13 @@ export default function AttendanceEntryPage() {
     if (!selectedSectionId) {
       setSessionId(null);
       setStatuses({});
+      setPresentSlotSelections({});
       setDirtyStudentIds(new Set());
     } else {
       setSessionId(selectedMatrixWeek?.sessionId ?? null);
       setStatuses({});
+      setPresentSlotSelections({});
       setDirtyStudentIds(new Set());
-      setTopic(selectedMatrixWeek?.topic ?? '');
       setSessionDate(getDefaultWeekDateInput(selectedMatrixWeek));
     }
   }
@@ -183,7 +187,6 @@ export default function AttendanceEntryPage() {
   if (session !== prevSessionRef) {
     setPrevSessionRef(session);
     if (session) {
-      setTopic(session.topic);
       setSessionDate(formatDateInput(new Date(session.sessionDate)));
       setStatuses(previous => {
         const next: Record<number, EditableStatus> = {};
@@ -191,6 +194,15 @@ export default function AttendanceEntryPage() {
           next[student.studentId] = dirtyStudentIds.has(student.studentId)
             ? previous[student.studentId] ?? student.status ?? ''
             : student.status ?? '';
+        });
+        return next;
+      });
+      setPresentSlotSelections(previous => {
+        const next: Record<number, number[]> = {};
+        session.students.forEach(student => {
+          next[student.studentId] = dirtyStudentIds.has(student.studentId)
+            ? normalizeSlotSelection(previous[student.studentId], session.totalSlotCount)
+            : normalizeSlotSelection(student.presentSlotNumbers, session.totalSlotCount);
         });
         return next;
       });
@@ -224,7 +236,6 @@ export default function AttendanceEntryPage() {
         courseSectionId: selectedSectionId,
         weekNumber: selectedWeekNumber,
         sessionDate: `${sessionDate}T00:00:00.000Z`,
-        topic,
       },
       {
         onSuccess: data => {
@@ -238,6 +249,24 @@ export default function AttendanceEntryPage() {
 
   const setStudentStatus = (studentId: number, status: AttendanceStatus) => {
     setStatuses(previous => ({ ...previous, [studentId]: status }));
+    setPresentSlotSelections(previous => {
+      const next = { ...previous };
+      next[studentId] = status === 'Present'
+        ? allSlotNumbers(session?.totalSlotCount ?? 1)
+        : [];
+      return next;
+    });
+    setDirtyStudentIds(previous => {
+      const next = new Set(previous);
+      next.add(studentId);
+      return next;
+    });
+  };
+
+  const setStudentPresentSlots = (studentId: number, selectedSlots: number[]) => {
+    const nextSlots = normalizeSlotSelection(selectedSlots, session?.totalSlotCount ?? 1);
+    setPresentSlotSelections(previous => ({ ...previous, [studentId]: nextSlots }));
+    setStatuses(previous => ({ ...previous, [studentId]: nextSlots.length > 0 ? 'Present' : '' }));
     setDirtyStudentIds(previous => {
       const next = new Set(previous);
       next.add(studentId);
@@ -249,6 +278,12 @@ export default function AttendanceEntryPage() {
     if (!session) return;
 
     setStatuses(Object.fromEntries(session.students.map(student => [student.studentId, status])));
+    setPresentSlotSelections(Object.fromEntries(
+      session.students.map(student => [
+        student.studentId,
+        status === 'Present' ? allSlotNumbers(session.totalSlotCount) : [],
+      ])
+    ));
     setDirtyStudentIds(new Set(session.students.map(student => student.studentId)));
   };
 
@@ -256,8 +291,24 @@ export default function AttendanceEntryPage() {
     if (!session) return;
 
     const records = session.students
-      .map(student => ({ studentId: student.studentId, status: statuses[student.studentId] }))
-      .filter((record): record is { studentId: number; status: AttendanceStatus } => Boolean(record.status));
+      .map(student => {
+        const status = statuses[student.studentId];
+        if (!status) return null;
+
+        return {
+          studentId: student.studentId,
+          status,
+          presentSlotNumbers: status === 'Present'
+            ? normalizeSlotSelection(
+                presentSlotSelections[student.studentId]?.length
+                  ? presentSlotSelections[student.studentId]
+                  : allSlotNumbers(session.totalSlotCount),
+                session.totalSlotCount
+              )
+            : [],
+        };
+      })
+      .filter((record): record is { studentId: number; status: AttendanceStatus; presentSlotNumbers: number[] } => Boolean(record));
 
     if (records.length === 0) {
       alert('Kaydedilecek yoklama durumu seçilmedi.');
@@ -319,7 +370,7 @@ export default function AttendanceEntryPage() {
       <Card className="border-border shadow-sm">
         <CardContent className="p-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-            <div className="grid flex-1 gap-3 md:grid-cols-[1.4fr_130px_160px_1fr]">
+            <div className="grid flex-1 gap-3 md:grid-cols-[1.4fr_130px_160px]">
               <div className="space-y-2">
                 <Label>Ders / Şube</Label>
                 <Select
@@ -377,15 +428,6 @@ export default function AttendanceEntryPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Konu</Label>
-                <Input
-                  value={topic}
-                  onChange={event => setTopic(event.target.value)}
-                  maxLength={200}
-                  placeholder="Ders konusu"
-                />
-              </div>
             </div>
 
             <Button
@@ -504,16 +546,16 @@ export default function AttendanceEntryPage() {
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1180px] text-sm">
+                        <table className="w-full min-w-[900px] text-sm">
                           <thead>
                             <tr className="border-b bg-muted/30">
                               <th className="sticky left-0 z-20 min-w-72 bg-muted/30 px-4 py-3 text-left font-medium text-muted-foreground">
                                 Öğrenci
                               </th>
-                              {weekNumbers.map(weekNumber => (
+                              {entryWeekNumbers.map(weekNumber => (
                                 <th
                                   key={weekNumber}
-                                  className={`min-w-32 px-3 py-3 text-center font-medium text-muted-foreground ${
+                                  className={`min-w-[540px] px-3 py-3 text-center font-medium text-muted-foreground ${
                                     weekNumber === selectedWeekNumber ? 'bg-sky-50 text-sky-800' : ''
                                   }`}
                                 >
@@ -537,12 +579,14 @@ export default function AttendanceEntryPage() {
                               <AttendanceMatrixRow
                                 key={student.studentId}
                                 student={student}
-                                weekNumbers={weekNumbers}
+                                weekNumbers={entryWeekNumbers}
                                 selectedWeekNumber={selectedWeekNumber}
                                 session={session}
                                 sessionStudentMap={sessionStudentMap}
                                 statuses={statuses}
+                                presentSlotSelections={presentSlotSelections}
                                 onStatusChange={setStudentStatus}
+                                onPresentSlotsChange={setStudentPresentSlots}
                               />
                             ))}
                           </tbody>
@@ -1013,7 +1057,9 @@ function AttendanceMatrixRow({
   session,
   sessionStudentMap,
   statuses,
+  presentSlotSelections,
   onStatusChange,
+  onPresentSlotsChange,
 }: {
   student: AttendanceMatrixStudent;
   weekNumbers: number[];
@@ -1021,7 +1067,9 @@ function AttendanceMatrixRow({
   session?: AttendanceSession;
   sessionStudentMap: Map<number, AttendanceSession['students'][number]>;
   statuses: Record<number, EditableStatus>;
+  presentSlotSelections: Record<number, number[]>;
   onStatusChange: (studentId: number, status: AttendanceStatus) => void;
+  onPresentSlotsChange: (studentId: number, slots: number[]) => void;
 }) {
   return (
     <tr className="border-b last:border-0 hover:bg-muted/20">
@@ -1049,7 +1097,11 @@ function AttendanceMatrixRow({
             {isEditableWeek ? (
               <StatusButtons
                 value={status ?? ''}
+                totalSlotCount={session?.totalSlotCount ?? 1}
+                slots={session?.slots ?? []}
+                presentSlotNumbers={presentSlotSelections[student.studentId] ?? []}
                 onChange={nextStatus => onStatusChange(student.studentId, nextStatus)}
+                onPresentSlotsChange={slots => onPresentSlotsChange(student.studentId, slots)}
               />
             ) : (
               <StatusBadge status={status || undefined} source={source} />
@@ -1063,25 +1115,112 @@ function AttendanceMatrixRow({
 
 function StatusButtons({
   value,
+  totalSlotCount,
+  slots,
+  presentSlotNumbers,
   onChange,
+  onPresentSlotsChange,
 }: {
   value: EditableStatus;
+  totalSlotCount: number;
+  slots: AttendanceSlot[];
+  presentSlotNumbers: number[];
   onChange: (status: AttendanceStatus) => void;
+  onPresentSlotsChange: (slots: number[]) => void;
 }) {
+  const slotOptions = normalizeSlotOptions(slots, totalSlotCount);
+  const selectedSlots = normalizeSlotSelection(presentSlotNumbers, totalSlotCount);
+
   return (
-    <div className="flex min-w-[220px] flex-wrap justify-center gap-1">
-      {(Object.keys(STATUS_LABELS) as AttendanceStatus[]).map(status => (
+    <div className="grid min-w-[500px] grid-rows-[32px_46px] place-items-center gap-1.5">
+      <div className="grid grid-cols-[76px_76px_96px] items-center justify-center gap-2">
         <Button
-          key={status}
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => onChange(status)}
-          className={value === status ? `h-7 px-2 text-xs ${STATUS_STYLES[status]}` : 'h-7 px-2 text-xs'}
+          onClick={() => onChange('Present')}
+          className={value === 'Present' ? `h-8 w-full px-2 text-xs ${STATUS_STYLES.Present}` : 'h-8 w-full px-2 text-xs'}
         >
-          {STATUS_LABELS[status]}
+          {STATUS_LABELS.Present}
         </Button>
-      ))}
+
+        {MANUAL_STATUS_OPTIONS.filter(status => status !== 'Present').map(status => (
+          <Button
+            key={status}
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onChange(status)}
+            className={value === status ? `h-8 w-full px-2 text-xs ${STATUS_STYLES[status]}` : 'h-8 w-full px-2 text-xs'}
+          >
+            {STATUS_LABELS[status]}
+          </Button>
+        ))}
+      </div>
+
+      <SlotToggleGroup
+        slots={slotOptions}
+        selectedSlots={selectedSlots}
+        onChange={onPresentSlotsChange}
+      />
+    </div>
+  );
+}
+
+function SlotToggleGroup({
+  slots,
+  selectedSlots,
+  onChange,
+}: {
+  slots: AttendanceSlot[];
+  selectedSlots: number[];
+  onChange: (slots: number[]) => void;
+}) {
+  const selectedSet = new Set(selectedSlots);
+  const slotNumbers = slots.map(slot => slot.slotNumber);
+  const allSelected = slots.length > 0 && selectedSlots.length === slots.length;
+
+  const toggleSlot = (slotNumber: number) => {
+    const next = selectedSet.has(slotNumber)
+      ? selectedSlots.filter(value => value !== slotNumber)
+      : [...selectedSlots, slotNumber];
+    onChange(normalizeSlotSelection(next, slots.length));
+  };
+
+  return (
+    <div
+      className="grid items-center justify-center gap-1.5"
+      style={{ gridTemplateColumns: `repeat(${Math.max(slots.length, 1)}, 70px) 76px` }}
+      aria-label="Katıldığı ders saatleri"
+    >
+      {slots.map(slot => {
+        const selected = selectedSet.has(slot.slotNumber);
+        return (
+          <button
+            key={slot.slotNumber}
+            type="button"
+            aria-pressed={selected}
+            title={`${slot.label}${slot.timeRange ? ` (${slot.timeRange})` : ''}`}
+            onClick={() => toggleSlot(slot.slotNumber)}
+            className={`flex h-10 w-[70px] flex-col items-center justify-center rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight transition-colors ${
+              selected
+                ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <span className="whitespace-nowrap">{slot.label}</span>
+            {slot.timeRange && <span className="whitespace-nowrap text-[9px] font-medium">{slot.timeRange}</span>}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => onChange(allSelected ? [] : slotNumbers)}
+        className="h-10 w-[76px] rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-50"
+        title={allSelected ? 'Tüm saatleri temizle' : 'Tüm saatleri seç'}
+      >
+        {allSelected ? 'Temizle' : 'Tümü'}
+      </button>
     </div>
   );
 }
@@ -1271,6 +1410,40 @@ function QrSvg({ value }: { value: string }) {
 function getDefaultWeekDateInput(week?: AttendanceMatrixWeek | null) {
   const value = week?.sessionDate ?? week?.suggestedSessionDate;
   return value ? formatDateInput(new Date(value)) : formatDateInput(new Date());
+}
+
+function allSlotNumbers(totalSlotCount: number) {
+  const count = Math.max(1, Math.trunc(totalSlotCount || 1));
+  return Array.from({ length: count }, (_, index) => index + 1);
+}
+
+function normalizeSlotOptions(slots: AttendanceSlot[] | undefined, totalSlotCount: number): AttendanceSlot[] {
+  const maxSlot = Math.max(1, Math.trunc(totalSlotCount || 1));
+  const providedSlots = (slots ?? [])
+    .filter(slot => slot.slotNumber >= 1 && slot.slotNumber <= maxSlot)
+    .sort((a, b) => a.slotNumber - b.slotNumber);
+
+  if (providedSlots.length > 0) {
+    return providedSlots.map(slot => ({
+      slotNumber: slot.slotNumber,
+      label: slot.label || `${slot.slotNumber}. Saat`,
+      timeRange: slot.timeRange ?? null,
+    }));
+  }
+
+  return allSlotNumbers(maxSlot).map(slotNumber => ({
+    slotNumber,
+    label: `${slotNumber}. Saat`,
+    timeRange: null,
+  }));
+}
+
+function normalizeSlotSelection(values: number[] | undefined, totalSlotCount: number) {
+  const maxSlot = Math.max(1, Math.trunc(totalSlotCount || 1));
+  return [...new Set(values ?? [])]
+    .map(value => Math.trunc(value))
+    .filter(value => value >= 1 && value <= maxSlot)
+    .sort((a, b) => a - b);
 }
 
 function formatDateInput(date: Date) {

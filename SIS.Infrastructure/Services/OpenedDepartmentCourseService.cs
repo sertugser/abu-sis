@@ -43,7 +43,7 @@ public class OpenedDepartmentCourseService : IOpenedDepartmentCourseService
         var now = DateTime.UtcNow;
         var term = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, ct);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now, ct);
 
         if (term is null)
         {

@@ -242,10 +242,23 @@ Admin UI'dan permission değiştirince:
 3. Frontend: `useUpdateRolePermissions` mutation onSuccess → `permissions` ve `menu` query cache'leri invalid
 4. Etkilenen kullanıcılar sayfayı yenilediğinde max **anlık** olarak güncel veriyi görür
 
+## Permission Scope (Phase 2)
+
+Phase 2 ile RBAC sistemi yalnızca "permission var/yok" değil, "hangi veri üzerinde" boyutunu da taşır.
+Şu an sadece `Dean` scope-bound roldür ve kullanıcıya `UserScopes` tablosu üzerinden tek fakülte atanır.
+
+- Read tarafı: `AppDbContext` query filter'ları `Faculty`, `Department`, `AcademicProgram`, `Curriculum`,
+  `Course`, `CourseSection`, `Student`, `Instructor`, `ProgramQuota`, `ElectiveGroup`,
+  `CurriculumElectivePool` için faculty kısıtı uygular.
+- Write tarafı: `IScopeGuard` create/cross-faculty update akışlarında 403 üretir.
+- Bypass: `SystemAdministrator` için scope pasiftir; admin operasyonlarında gerektiğinde `WithoutScope()`
+  helper'ı kullanılabilir.
+- Admin UI: `GET/PUT/DELETE /api/admin/users/{id}/scope` ve kullanıcı yönetimi modalındaki
+  "Kapsam (Fakülte)" alanı ile scope atanır.
+
 ## Sonraki Phase'ler (Plan'da, bu codemap kapsamında değil)
 
-- **Phase 2:** Permission grupları (`<RolePermissionMatrix />` "Kullanıcı Yetki Grupları" placeholder'a import)
+- **Phase 2 (tamamlandı):** Permission scope / faculty-level data filtering
 - **Phase 3:** Vekalet (delegation)
 - **Phase 4:** Modül editörü (admin yeni modül oluşturabilir, `system.menu.*` permission'ları)
-- **Phase 5:** Data-scope sınırlandırmalar ("sadece şu fakülte")
-- **Phase 6:** Rapor grupları
+- **Phase 5:** Rapor grupları

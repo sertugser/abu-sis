@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Identity.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Identity;
 
@@ -8,7 +9,19 @@ namespace SIS.Infrastructure.Persistence;
 
 public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>, int>
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    private readonly ICurrentUserScope _scope;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options)
+        : base(options)
+    {
+        _scope = NoopCurrentUserScope.Instance;
+    }
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUserScope scope)
+        : base(options)
+    {
+        _scope = scope;
+    }
 
     // DbSets
     public DbSet<Student> Students => Set<Student>();
@@ -91,6 +104,18 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<MenuModule> MenuModules => Set<MenuModule>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<MenuItemPermission> MenuItemPermissions => Set<MenuItemPermission>();
+
+    // ── RBAC (Phase 2) ──────────────────────────────────────────
+    public DbSet<PermissionBundle> PermissionBundles => Set<PermissionBundle>();
+    public DbSet<PermissionBundleItem> PermissionBundleItems => Set<PermissionBundleItem>();
+    public DbSet<UserScope> UserScopes => Set<UserScope>();
+    public DbSet<PermissionDelegation> PermissionDelegations => Set<PermissionDelegation>();
+
+    // ── RBAC (Phase 3 — Report Authorization) ───────────────────
+    public DbSet<ReportCategory> ReportCategories => Set<ReportCategory>();
+    public DbSet<ReportDefinition> ReportDefinitions => Set<ReportDefinition>();
+    public DbSet<ReportCategoryRolePermission> ReportCategoryRolePermissions => Set<ReportCategoryRolePermission>();
+    public DbSet<ReportPermissionOverride> ReportPermissionOverrides => Set<ReportPermissionOverride>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -610,6 +635,7 @@ builder.Entity<GradingCriteria>(e =>
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
+            e.Property(t => t.IsActivated).HasDefaultValue(true);
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
         });
 
@@ -1223,6 +1249,158 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
         });
 
+        // ── UserScope ────────────────────────────────────────────
+        builder.Entity<UserScope>(e =>
+        {
+            e.ToTable("UserScopes", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint(
+                    "CK_UserScopes_Kind_Faculty",
+                    "(\"Kind\" = 1 AND \"FacultyId\" IS NOT NULL)");
+            });
+
+            e.HasKey(scope => scope.Id);
+            e.Property(scope => scope.Kind).HasConversion<int>();
+
+            e.HasOne<ApplicationUser>()
+             .WithMany()
+             .HasForeignKey(scope => scope.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<Faculty>()
+             .WithMany()
+             .HasForeignKey(scope => scope.FacultyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(scope => scope.UserId)
+             .HasDatabaseName("IX_UserScopes_UserId");
+
+            e.HasIndex(scope => new { scope.UserId, scope.Kind })
+             .IsUnique()
+             .HasDatabaseName("UQ_UserScopes_UserId_Kind");
+        });
+
+        // ── PermissionDelegation (Vekâlet) ───────────────────────
+        builder.Entity<PermissionDelegation>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Reason).HasMaxLength(500).IsRequired();
+            e.Property(d => d.RevokeReason).HasMaxLength(500);
+
+            e.HasOne<ApplicationUser>()
+             .WithMany()
+             .HasForeignKey(d => d.DelegatorUserId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne<ApplicationUser>()
+             .WithMany()
+             .HasForeignKey(d => d.DelegateeUserId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // Audit kayıtlarını korumak için aktif zaman penceresi sorguları
+            e.HasIndex(d => new { d.DelegateeUserId, d.RevokedAtUtc, d.StartsAtUtc, d.EndsAtUtc })
+             .HasDatabaseName("IX_PermissionDelegations_Delegatee_Active");
+            e.HasIndex(d => new { d.DelegatorUserId, d.StartsAtUtc, d.EndsAtUtc })
+             .HasDatabaseName("IX_PermissionDelegations_Delegator");
+        });
+
+        // ── RBAC Phase 3: ReportCategory ────────────────────────
+        builder.Entity<ReportCategory>(e =>
+        {
+            e.Property(c => c.Code).HasMaxLength(64).IsRequired();
+            e.Property(c => c.Name).HasMaxLength(200).IsRequired();
+            e.HasIndex(c => c.Code).IsUnique();
+        });
+
+        // ── RBAC Phase 3: ReportDefinition ──────────────────────
+        builder.Entity<ReportDefinition>(e =>
+        {
+            e.Property(r => r.Code).HasMaxLength(100).IsRequired();
+            e.Property(r => r.Name).HasMaxLength(200).IsRequired();
+            e.Property(r => r.Description).HasMaxLength(500);
+            e.HasIndex(r => r.Code).IsUnique();
+
+            e.HasOne(r => r.Category)
+             .WithMany(c => c.Reports)
+             .HasForeignKey(r => r.CategoryId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── RBAC Phase 3: ReportCategoryRolePermission (composite PK) ─
+        builder.Entity<ReportCategoryRolePermission>(e =>
+        {
+            e.HasKey(rp => new { rp.CategoryId, rp.RoleId });
+
+            e.HasOne(rp => rp.Category)
+             .WithMany()
+             .HasForeignKey(rp => rp.CategoryId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<IdentityRole<int>>()
+             .WithMany()
+             .HasForeignKey(rp => rp.RoleId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(rp => rp.RoleId);
+        });
+
+        // ── RBAC Phase 3: ReportPermissionOverride ──────────────
+        builder.Entity<ReportPermissionOverride>(e =>
+        {
+            e.Property(o => o.Reason).HasMaxLength(500);
+
+            e.HasOne(o => o.Report)
+             .WithMany()
+             .HasForeignKey(o => o.ReportId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<IdentityRole<int>>()
+             .WithMany()
+             .HasForeignKey(o => o.RoleId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Aynı (rapor, rol) çiftine tek override
+            e.HasIndex(o => new { o.ReportId, o.RoleId }).IsUnique();
+            e.HasIndex(o => o.RoleId);
+        });
+
+        // ── Permission Scope Query Filters (Phase 2) ─────────────
+        builder.Entity<Faculty>().HasQueryFilter(faculty =>
+            !_scope.IsActive || _scope.FacultyId == faculty.Id);
+
+        builder.Entity<Department>().HasQueryFilter(department =>
+            !_scope.IsActive || _scope.FacultyId == department.FacultyId);
+
+        builder.Entity<AcademicProgram>().HasQueryFilter(program =>
+            !_scope.IsActive || _scope.FacultyId == program.Department.FacultyId);
+
+        builder.Entity<Curriculum>().HasQueryFilter(curriculum =>
+            !_scope.IsActive || _scope.FacultyId == curriculum.Program.Department.FacultyId);
+
+        builder.Entity<Course>().HasQueryFilter(course =>
+            !_scope.IsActive || (course.DepartmentId != null && _scope.FacultyId == course.Department!.FacultyId));
+
+        builder.Entity<CourseSection>().HasQueryFilter(section =>
+            !_scope.IsActive || (section.Course.DepartmentId != null && _scope.FacultyId == section.Course.Department!.FacultyId));
+
+        builder.Entity<Student>().HasQueryFilter(student =>
+            !_scope.IsActive || student.StudentPrograms.Any(program => program.Program.Department.FacultyId == _scope.FacultyId));
+
+        builder.Entity<Instructor>().HasQueryFilter(instructor =>
+            !_scope.IsActive || _scope.FacultyId == instructor.Department.FacultyId);
+
+        builder.Entity<ProgramQuota>().HasQueryFilter(quota =>
+            !_scope.IsActive || _scope.FacultyId == quota.Program.Department.FacultyId);
+
+        builder.Entity<ElectiveGroup>().HasQueryFilter(group =>
+            !_scope.IsActive
+            || (group.DepartmentId == null && group.FacultyId == null)
+            || (group.DepartmentId != null && _scope.FacultyId == group.Department!.FacultyId)
+            || (group.DepartmentId == null && group.FacultyId != null && _scope.FacultyId == group.FacultyId));
+
+        builder.Entity<CurriculumElectivePool>().HasQueryFilter(pool =>
+            !_scope.IsActive || _scope.FacultyId == pool.Curriculum.Program.Department.FacultyId);
+
         // ── RBAC: Permission ────────────────────────────────────
         builder.Entity<Permission>(e =>
         {
@@ -1232,10 +1410,13 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(p => p.Category);
         });
 
-        // ── RBAC: RolePermission (composite PK) ─────────────────
+        // ── RBAC: RolePermission (Phase 2 — surrogate PK + Source tracking) ─
+        // Aynı (RoleId, PermissionId) için iki satır olabilir: biri Manual,
+        // diğer(ler)i farklı bundle'lardan. Source ayrımı için surrogate Id PK kullanılır.
+        // Filtered unique index'lerle veri bütünlüğü korunur.
         builder.Entity<RolePermission>(e =>
         {
-            e.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+            e.HasKey(rp => rp.Id);
             e.HasOne<IdentityRole<int>>()
              .WithMany()
              .HasForeignKey(rp => rp.RoleId)
@@ -1244,7 +1425,47 @@ builder.Entity<GradingCriteria>(e =>
              .WithMany(p => p.RolePermissions)
              .HasForeignKey(rp => rp.PermissionId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(rp => rp.SourceBundle)
+             .WithMany(b => b.AppliedRolePermissions)
+             .HasForeignKey(rp => rp.SourceBundleId)
+             .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(rp => rp.PermissionId);
+            e.HasIndex(rp => rp.RoleId);
+            // Manuel atamada her (rol, permission) tekildir
+            e.HasIndex(rp => new { rp.RoleId, rp.PermissionId })
+             .IsUnique()
+             .HasFilter("\"SourceBundleId\" IS NULL")
+             .HasDatabaseName("ix_role_permissions_manual_unique");
+            // Bundle atamasında her (rol, permission, bundle) tekildir
+            e.HasIndex(rp => new { rp.RoleId, rp.PermissionId, rp.SourceBundleId })
+             .IsUnique()
+             .HasFilter("\"SourceBundleId\" IS NOT NULL")
+             .HasDatabaseName("ix_role_permissions_bundle_unique");
+        });
+
+        // ── RBAC Phase 2: PermissionBundle ──────────────────────
+        builder.Entity<PermissionBundle>(e =>
+        {
+            e.Property(b => b.Name).HasMaxLength(200).IsRequired();
+            e.Property(b => b.Description).HasMaxLength(1000);
+            e.Property(b => b.Category).HasMaxLength(100);
+            e.HasIndex(b => b.Name).IsUnique();
+            e.HasIndex(b => b.Category);
+        });
+
+        // ── RBAC Phase 2: PermissionBundleItem (composite PK) ───
+        builder.Entity<PermissionBundleItem>(e =>
+        {
+            e.HasKey(i => new { i.BundleId, i.PermissionId });
+            e.HasOne(i => i.Bundle)
+             .WithMany(b => b.Items)
+             .HasForeignKey(i => i.BundleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.Permission)
+             .WithMany(p => p.BundleItems)
+             .HasForeignKey(i => i.PermissionId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(i => i.PermissionId);
         });
 
         // ── RBAC: MenuModule (recursive tree) ───────────────────
@@ -1294,5 +1515,16 @@ builder.Entity<GradingCriteria>(e =>
              .HasForeignKey(mip => mip.PermissionId)
              .OnDelete(DeleteBehavior.Cascade);
         });
+    }
+
+    private sealed class NoopCurrentUserScope : ICurrentUserScope
+    {
+        public static NoopCurrentUserScope Instance { get; } = new();
+
+        public bool IsActive => false;
+        public int? FacultyId => null;
+
+        public Task<bool> IsActiveAsync() => Task.FromResult(false);
+        public Task<int?> GetFacultyIdAsync() => Task.FromResult<int?>(null);
     }
 }

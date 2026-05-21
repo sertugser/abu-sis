@@ -18,6 +18,8 @@ import {
   useUpdateTerm,
   useCancelTerm,
   useUncancelTerm,
+  useActivateTerm,
+  useDeactivateTerm,
   type AdminTermDto,
   type CreateTermDto,
   type UpdateTermDto,
@@ -144,6 +146,8 @@ export default function TermManagementPage() {
   const updateTerm = useUpdateTerm();
   const cancelTerm = useCancelTerm();
   const uncancelTerm = useUncancelTerm();
+  const activateTerm = useActivateTerm();
+  const deactivateTerm = useDeactivateTerm();
 
   const sortedTerms = [...terms].sort((a, b) => b.year - a.year || a.termType.localeCompare(b.termType));
 
@@ -281,6 +285,24 @@ export default function TermManagementPage() {
     }
   }
 
+  async function handleActivate(termId: number) {
+    try {
+      await activateTerm.mutateAsync(termId);
+      showSuccess('Dönem kullanıma açıldı.');
+    } catch (err: unknown) {
+      setActionError(extractApiError(err, 'Dönem kullanıma açılamadı.'));
+    }
+  }
+
+  async function handleDeactivate(termId: number) {
+    try {
+      await deactivateTerm.mutateAsync(termId);
+      showSuccess('Dönem kullanıma kapatıldı.');
+    } catch (err: unknown) {
+      setActionError(extractApiError(err, 'Dönem kullanıma kapatılamadı.'));
+    }
+  }
+
   function showSuccess(msg: string) {
     setSuccessMessage(msg);
     setTimeout(() => setSuccessMessage(''), 3000);
@@ -391,6 +413,27 @@ export default function TermManagementPage() {
                       <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
+                      {!term.isCancelled && (
+                        term.isActivated ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={deactivateTerm.isPending}
+                            onClick={() => handleDeactivate(term.id)}
+                          >
+                            Kullanıma Kapat
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={activateTerm.isPending}
+                            onClick={() => handleActivate(term.id)}
+                          >
+                            Kullanıma Aç
+                          </Button>
+                        )
+                      )}
                       {term.status === 'Cancelled' ? (
                         <Button
                           size="sm"
@@ -506,9 +549,9 @@ export default function TermManagementPage() {
 
 function TermDetailView({ term, onEdit }: { term: AdminTermDto; onEdit: () => void }) {
   const today = new Date();
-  const start = new Date(term.termStart);
-  const end = new Date(term.termEnd);
-  const withinDates = today >= start && today <= end;
+  const effectiveStart = new Date(term.effectiveStart);
+  const effectiveEnd = new Date(term.effectiveEnd);
+  const withinEffectiveDates = today >= effectiveStart && today <= effectiveEnd;
 
   const hasOverrideStart = !!term.overrideStart;
   const hasOverrideEnd = !!term.overrideEnd;
@@ -517,7 +560,8 @@ function TermDetailView({ term, onEdit }: { term: AdminTermDto; onEdit: () => vo
   const inactiveReason =
     term.status === 'Active' ? null
     : term.isCancelled ? 'Bu dönem iptal edilmiş. Aktif olabilmesi için önce iptal geri alınmalı.'
-    : !withinDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.effectiveStart)} ve ${fmt(term.effectiveEnd)} arasında olması gerekir.`
+    : !term.isActivated ? 'Bu dönem kullanıma kapalı. Aktif dönem olarak kullanılabilmesi için önce kullanıma açılmalı.'
+    : !withinEffectiveDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.effectiveStart)} ve ${fmt(term.effectiveEnd)} arasında olması gerekir.`
     : null;
 
   return (
@@ -529,6 +573,7 @@ function TermDetailView({ term, onEdit }: { term: AdminTermDto; onEdit: () => vo
       <DetailRow label="Diğer Ad" value={term.otherName || '—'} />
       <DetailRow label="Yıl" value={String(term.year)} />
       <DetailRow label="Tür" value={term.termTypeLabel} />
+      <DetailRow label="Kullanım" value={term.isActivated ? 'Kullanıma açık' : 'Kullanıma kapalı'} />
       <DetailRow label="YÖKSİS Durumu" value={term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'} />
       <DetailRow
         label="Durum"

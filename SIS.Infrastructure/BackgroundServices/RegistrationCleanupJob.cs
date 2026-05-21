@@ -58,7 +58,7 @@ public class RegistrationCleanupJob : BackgroundService
 
         var terms = await ctx.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .Where(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
             .Select(t => new { t.Id, t.AcademicCalendar })
             .ToListAsync(ct);
 
