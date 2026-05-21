@@ -35,7 +35,7 @@ public class AuthController : ControllerBase
 
     [HttpGet("login-settings")]
     [AllowAnonymous]
-    [EnableRateLimiting("AuthLogin")]
+    [EnableRateLimiting("AuthLoginSettings")]
     [PublicEndpointJustification("Login settings must be reachable before authentication; response is limited to non-sensitive UI defaults and instructor-specific locale selection.")]
     public async Task<IActionResult> GetLoginSettings([FromQuery] string? email, CancellationToken ct)
     {

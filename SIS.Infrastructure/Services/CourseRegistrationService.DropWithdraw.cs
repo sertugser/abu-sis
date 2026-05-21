@@ -38,12 +38,41 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        var addDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
-        var webModuleGate = await ValidateModuleAsync(
-            addDropControlCode,
-            registration.CourseSection.TermId,
-            "WebModuleAddDropClosed",
-            "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
+        var isPlanItemDrop = registration.Status == RegistrationStatus.Draft
+            || registration.Status == RegistrationStatus.Rejected;
+        ValidationResultDto? webModuleGate = null;
+        var isManualOpenMode = false;
+        if (isPlanItemDrop)
+        {
+            var registrationControlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, registration.CourseSection.TermId);
+            var addDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+            var registrationGate = await ValidateModuleAsync(
+                registrationControlCode,
+                registration.CourseSection.TermId,
+                "WebModuleRegistrationClosed",
+                "Ders kayıt işlemleri şu anda kullanılamıyor.");
+            var addDropGate = await ValidateModuleAsync(
+                addDropControlCode,
+                registration.CourseSection.TermId,
+                "WebModuleAddDropClosed",
+                "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
+
+            if (registrationGate is not null && addDropGate is not null)
+                webModuleGate = registrationGate;
+
+            isManualOpenMode = await IsManualOpenModeAsync(registrationControlCode)
+                || await IsManualOpenModeAsync(addDropControlCode);
+        }
+        else
+        {
+            var addDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+            webModuleGate = await ValidateModuleAsync(
+                addDropControlCode,
+                registration.CourseSection.TermId,
+                "WebModuleAddDropClosed",
+                "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
+            isManualOpenMode = await IsManualOpenModeAsync(addDropControlCode);
+        }
         if (webModuleGate is not null)
         {
             response.Success = false;
@@ -53,7 +82,7 @@ public partial class CourseRegistrationService
 
         // Guard: dönem AddDrop aşamasında olmalı
         var dropTerm = registration.CourseSection.Term;
-        if (!await IsManualOpenModeAsync(addDropControlCode)
+        if (!isManualOpenMode
             && !dropTerm.IsAddDropOpen(_clock.UtcNow)
             && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
         {
@@ -72,7 +101,8 @@ public partial class CourseRegistrationService
         // Check status is droppable
         if (registration.Status != RegistrationStatus.Active
             && registration.Status != RegistrationStatus.PendingAdvisorApproval
-            && registration.Status != RegistrationStatus.Draft)
+            && registration.Status != RegistrationStatus.Draft
+            && registration.Status != RegistrationStatus.Rejected)
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -88,28 +118,28 @@ public partial class CourseRegistrationService
 
         // Check add-drop period (FR-48)
         var term = registration.CourseSection.Term;
-        var now = DateTime.UtcNow;
-        if (!await IsManualOpenModeAsync(addDropControlCode) && !term.IsAddDropOpen(now))
+        var now = _clock.UtcNow;
+        if (!isPlanItemDrop && !isManualOpenMode && !term.IsAddDropOpen(now))
         {
-            // Allow dropping Draft items anytime, but Active/PendingAdvisorApproval only during add-drop
-            if (registration.Status != RegistrationStatus.Draft)
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
             {
-                response.Success = false;
-                response.ValidationResult = new ValidationResultDto
+                IsValid = false,
+                Errors = new List<ValidationError>
                 {
-                    IsValid = false,
-                    Errors = new List<ValidationError>
+                    new()
                     {
-                        new()
-                        {
-                            Rule = "AddDropPeriod",
-                            Message = "Ders bırakma dönemi dışında. Ders bırakma dönemi kapalı."
-                        }
+                        Rule = "AddDropPeriod",
+                        Message = "Ders bırakma dönemi dışında. Ders bırakma dönemi kapalı."
                     }
-                };
-                return response;
-            }
+                }
+            };
+            return response;
         }
+
+        var shouldReleaseSeat = registration.Status == RegistrationStatus.Active
+            || registration.Status == RegistrationStatus.PendingAdvisorApproval
+            || registration.Status == RegistrationStatus.Draft;
 
         // Set status to Dropped
         registration.Status = RegistrationStatus.Dropped;
@@ -117,7 +147,7 @@ public partial class CourseRegistrationService
 
         // Decrement section.EnrolledCount
         var section = registration.CourseSection;
-        if (section.EnrolledCount > 0)
+        if (shouldReleaseSeat && section.EnrolledCount > 0)
             section.EnrolledCount--;
 
         await _context.SaveChangesAsync();

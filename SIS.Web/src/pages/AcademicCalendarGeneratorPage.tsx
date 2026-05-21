@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -80,6 +80,8 @@ type ConfirmOptions = {
 type PendingConfirm = ConfirmOptions & {
   resolve: (value: boolean) => void;
 };
+
+const NOTICE_AUTO_DISMISS_MS = 2000;
 
 type CalendarProcessOption = {
   key: string;
@@ -991,6 +993,18 @@ export default function AcademicCalendarGeneratorPage() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [showDraftHistory, setShowDraftHistory] = useState(false);
+
+  useEffect(() => {
+    if (!notice)
+      return;
+
+    const timer = window.setTimeout(() => {
+      setNoticeMessage(null);
+    }, NOTICE_AUTO_DISMISS_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   const defaultStartDates = useMemo(() => {
     const parsedStart = academicYearStart(academicYear);
     return {

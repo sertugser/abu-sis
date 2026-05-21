@@ -56,6 +56,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Include(cs => cs.Registrations)
             .Where(cs => courseSectionIds.Contains(cs.Id))
             .ToListAsync();
+        var requestedSectionIds = sections.Select(section => section.Id).ToHashSet();
 
         // Load active term
         var now = DateTime.UtcNow;
@@ -79,6 +80,10 @@ public class RegistrationValidationService : IRegistrationValidationService
                         || cr.Status == RegistrationStatus.PendingAdvisorApproval
                         || cr.Status == RegistrationStatus.Draft))
                 .ToListAsync();
+        var existingRegistrationsOutsideRequest = existingRegistrations
+            .Where(registration => registration.Status != RegistrationStatus.Draft
+                || !requestedSectionIds.Contains(registration.CourseSectionId))
+            .ToList();
 
         // Load student's all past registrations (for prerequisite and grade checks)
         var allPastRegistrations = await _context.CourseRegistrations
@@ -247,7 +252,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             if (course.CanBeTakenStandalone)
             {
                 var otherRequested = sections.Any(s => s.Id != section.Id);
-                var otherExisting = existingRegistrations.Any(r => r.CourseSection.CourseId != course.Id);
+                var otherExisting = existingRegistrationsOutsideRequest.Any(r => r.CourseSection.CourseId != course.Id);
                 if (otherRequested || otherExisting)
                 {
                     errors.Add(new ValidationError
@@ -260,18 +265,22 @@ public class RegistrationValidationService : IRegistrationValidationService
             }
 
             // === CHECK 9: Capacity Check (FR-40) ===
-            if (section.EnrolledCount >= section.Capacity)
+            var ownDraftHoldCount = existingRegistrations.Count(registration =>
+                registration.Status == RegistrationStatus.Draft
+                && registration.CourseSectionId == section.Id);
+            var effectiveEnrolledCount = Math.Max(0, section.EnrolledCount - ownDraftHoldCount);
+            if (effectiveEnrolledCount >= section.Capacity)
             {
                 errors.Add(new ValidationError
                 {
                     Rule = "Capacity",
-                    Message = $"'{course.Code} {course.Name}' dersinin kontenjani dolu ({section.EnrolledCount}/{section.Capacity}).",
+                    Message = $"'{course.Code} {course.Name}' dersinin kontenjani dolu ({effectiveEnrolledCount}/{section.Capacity}).",
                     CourseSectionId = section.Id
                 });
             }
 
             // === CHECK 10: Duplicate Registration (FR-50) ===
-            var alreadyRegistered = existingRegistrations.Any(r =>
+            var alreadyRegistered = existingRegistrationsOutsideRequest.Any(r =>
                 r.CourseSection.Course.Id == course.Id);
 
             if (alreadyRegistered)
@@ -356,7 +365,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         // Faz 4: Açma Nedeni'nde IsCreditFree=true olan dersler dönem AKTS sınırı hesabından çıkarılır.
 
         // Mevcut kayıtlar — snapshot'taki flag okunur (donmuş)
-        var existingEcts = existingRegistrations
+        var existingEcts = existingRegistrationsOutsideRequest
             .Where(r => r.OpeningReasonSnapshot?.IsCreditFree != true)
             .Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
 
@@ -489,7 +498,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         // === CHECK 8: Schedule Conflict (FR-41) ===
         // Load SectionSchedule records for all relevant sections (new + existing)
         var allSectionIds = sections.Select(s => s.Id)
-            .Union(existingRegistrations.Select(r => r.CourseSectionId))
+            .Union(existingRegistrationsOutsideRequest.Select(r => r.CourseSectionId))
             .Distinct()
             .ToList();
 
@@ -512,7 +521,7 @@ public class RegistrationValidationService : IRegistrationValidationService
             bool newSectionBypass = HasFlag(newSection.CourseId, r => r.BypassScheduleConflict);
 
             // Check against existing registrations
-            foreach (var existing in existingRegistrations)
+            foreach (var existing in existingRegistrationsOutsideRequest)
             {
                 // Faz 4 — Yeni veya mevcut dersten biri "BypassScheduleConflict" ise çakışma kontrolünü atla
                 bool existingBypass = existing.OpeningReasonSnapshot?.BypassScheduleConflict == true;

@@ -73,6 +73,12 @@ public sealed class PreflightFeasibilityChecker
             }
 
             // Lab component check — paralel split destekli (Plan 4 Task 6)
+            if (section.TeachingMethod == TeachingMethod.Online)
+            {
+                feasible.Add(section);
+                continue;
+            }
+
             if (section.LabHours > 0)
             {
                 var labRooms = classrooms.Where(c =>

@@ -70,6 +70,57 @@ public class CourseRegistrationManualOpenOverrideTests : IDisposable
     }
 
     [Fact]
+    public async Task DropCourse_WhenDraftPlanItemAndRegistrationModuleOpen_AllowsEvenIfAddDropClosed()
+    {
+        ConfigureModuleMode("StudentCourseRegistration", WebModuleControlModes.Open);
+        ConfigureModuleMode("StudentAddDrop", WebModuleControlModes.Closed);
+        var service = CreateService();
+        var course = AddCourse(110, "CENG210", "Software Design");
+        var section = AddSection(1010, course.Id);
+        var registration = AddRegistration(5010, section.Id, RegistrationStatus.Draft);
+
+        var result = await service.DropCourseAsync(StudentId, registration.Id);
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(item => item.Id == registration.Id).Status.Should().Be(RegistrationStatus.Dropped);
+        _context.CourseSections.Single(item => item.Id == section.Id).EnrolledCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DropCourse_WhenDraftPlanItemAndAddDropModuleOpen_AllowsEvenIfRegistrationClosed()
+    {
+        ConfigureModuleMode("StudentCourseRegistration", WebModuleControlModes.Closed);
+        ConfigureModuleMode("StudentAddDrop", WebModuleControlModes.Open);
+        var service = CreateService();
+        var course = AddCourse(112, "CENG212", "System Analysis");
+        var section = AddSection(1012, course.Id);
+        var registration = AddRegistration(5012, section.Id, RegistrationStatus.Draft);
+
+        var result = await service.DropCourseAsync(StudentId, registration.Id);
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(item => item.Id == registration.Id).Status.Should().Be(RegistrationStatus.Dropped);
+        _context.CourseSections.Single(item => item.Id == section.Id).EnrolledCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DropCourse_WhenRejectedPlanItem_DoesNotRequireAddDropOrDecrementSeatAgain()
+    {
+        ConfigureModuleMode("StudentCourseRegistration", WebModuleControlModes.Open);
+        ConfigureModuleMode("StudentAddDrop", WebModuleControlModes.Closed);
+        var service = CreateService();
+        var course = AddCourse(111, "CENG211", "Web Programming");
+        var section = AddSection(1011, course.Id, enrolledCount: 0);
+        var registration = AddRegistration(5011, section.Id, RegistrationStatus.Rejected);
+
+        var result = await service.DropCourseAsync(StudentId, registration.Id);
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(item => item.Id == registration.Id).Status.Should().Be(RegistrationStatus.Dropped);
+        _context.CourseSections.Single(item => item.Id == section.Id).EnrolledCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ApproveStudentRegistrations_WhenApprovalModuleIsManuallyOpen_AllowsOutsideRegistrationWindow()
     {
         ConfigureModuleMode("AdvisorRegistrationApproval", WebModuleControlModes.Open);
@@ -85,6 +136,77 @@ public class CourseRegistrationManualOpenOverrideTests : IDisposable
 
         result.Success.Should().BeTrue();
         _context.CourseRegistrations.Single(item => item.CourseSectionId == section.Id).Status.Should().Be(RegistrationStatus.Active);
+    }
+
+    [Fact]
+    public async Task ApproveStudentRegistrations_WhenCourseRegistrationEventIsOpen_AllowsEvenIfAddDropApprovalClosed()
+    {
+        ConfigureModuleMode("AdvisorRegistrationApproval", WebModuleControlModes.TermEventBased);
+        ConfigureModuleMode("AdvisorAddDropApproval", WebModuleControlModes.Closed);
+        _context.TermCalendarEvents.Add(new TermCalendarEvent
+        {
+            TermId = TermId,
+            EventType = CalendarEventType.CourseRegistration,
+            Title = "Ders Kayit ve Danisman Onaylari",
+            StartDate = _clock.UtcNow.AddDays(-1),
+            EndDate = _clock.UtcNow.AddDays(1),
+            IsPublic = true
+        });
+        _context.SaveChanges();
+
+        var service = CreateService();
+        var course = AddCourse(103, "CENG204", "Computer Networks");
+        var section = AddSection(1003, course.Id);
+        AddRegistration(5003, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        var result = await service.ApproveStudentRegistrationsAsync(AdvisorId, new ApprovalActionDto
+        {
+            StudentId = StudentId
+        });
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(item => item.CourseSectionId == section.Id).Status.Should().Be(RegistrationStatus.Active);
+    }
+
+    [Fact]
+    public async Task ApproveStudentRegistrations_WhenStudentRegistrationModuleIsOpen_AllowsEvenIfAdvisorEventIsMissing()
+    {
+        ConfigureModuleMode("AdvisorRegistrationApproval", WebModuleControlModes.TermEventBased);
+        ConfigureModuleMode("AdvisorAddDropApproval", WebModuleControlModes.Closed);
+        ConfigureModuleMode("StudentCourseRegistration", WebModuleControlModes.Open);
+        var service = CreateService();
+        var course = AddCourse(104, "CENG205", "Data Structures");
+        var section = AddSection(1004, course.Id);
+        AddRegistration(5004, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        var result = await service.ApproveStudentRegistrationsAsync(AdvisorId, new ApprovalActionDto
+        {
+            StudentId = StudentId
+        });
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(item => item.CourseSectionId == section.Id).Status.Should().Be(RegistrationStatus.Active);
+    }
+
+    [Fact]
+    public async Task ApproveStudentRegistrations_WhenAdvisorApprovalIsExplicitlyClosed_BlocksEvenIfStudentRegistrationIsOpen()
+    {
+        ConfigureModuleMode("AdvisorRegistrationApproval", WebModuleControlModes.Closed);
+        ConfigureModuleMode("AdvisorAddDropApproval", WebModuleControlModes.Closed);
+        ConfigureModuleMode("StudentCourseRegistration", WebModuleControlModes.Open);
+        ConfigureModuleMode("StudentAddDrop", WebModuleControlModes.Closed);
+        var service = CreateService();
+        var course = AddCourse(105, "CENG206", "Computer Architecture");
+        var section = AddSection(1005, course.Id);
+        AddRegistration(5005, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        var result = await service.ApproveStudentRegistrationsAsync(AdvisorId, new ApprovalActionDto
+        {
+            StudentId = StudentId
+        });
+
+        result.Success.Should().BeFalse();
+        _context.CourseRegistrations.Single(item => item.CourseSectionId == section.Id).Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
     }
 
     private CourseRegistrationService CreateService()
@@ -223,7 +345,7 @@ public class CourseRegistrationManualOpenOverrideTests : IDisposable
         return course;
     }
 
-    private CourseSection AddSection(int id, int courseId)
+    private CourseSection AddSection(int id, int courseId, int enrolledCount = 1)
     {
         var section = new CourseSection
         {
@@ -232,7 +354,7 @@ public class CourseRegistrationManualOpenOverrideTests : IDisposable
             TermId = TermId,
             SectionNumber = 1,
             Capacity = 40,
-            EnrolledCount = 1,
+            EnrolledCount = enrolledCount,
             Status = CourseSectionStatus.Active,
             InstructorId = AdvisorId
         };

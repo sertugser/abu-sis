@@ -262,7 +262,8 @@ public partial class CourseRegistrationService
             };
         }
 
-        if (!await IsManualOpenModeAsync(approvalControlCode)
+        if (_useCalendarFallbackForWebModuleControls
+            && !await IsManualOpenModeAsync(approvalControlCode)
             && !activeTerm.IsRegistrationOpen(_clock.UtcNow)
             && !activeTerm.IsAddDropOpen(_clock.UtcNow))
         {

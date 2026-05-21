@@ -70,6 +70,7 @@ public sealed class AutoScheduleEngine
                 request.DepartmentId,
                 request.Seed,
                 ct);
+            ValidateSolverRequest(solverRequest);
 
             var sectionCount = solverRequest.Sections.Count;
 
@@ -199,6 +200,28 @@ public sealed class AutoScheduleEngine
         };
     }
 
+    private static void ValidateSolverRequest(SolverRequest solverRequest)
+    {
+        if (solverRequest.Sections.Count == 0)
+            return;
+
+        if (solverRequest.TimeSlots.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Secili donem icin zaman dilimi tanimli degil. Ders programi olusturmadan once zaman dilimlerini olusturun.");
+        }
+
+        var hasPhysicalSection = solverRequest.Sections.Any(section =>
+            section.TeachingMethod != TeachingMethod.Online
+            && (section.TheoryHours > 0 || section.LabHours > 0));
+
+        if (hasPhysicalSection && solverRequest.Classrooms.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Bu fakulte ve donem icin atanmis derslik bulunamadi. Ders programi olusturmadan once derslik donem atamalarini kontrol edin.");
+        }
+    }
+
     /// <summary>
     /// SolverResult → AutoSchedulePreviewDto mapping. CP-SAT'ın ürettiği Assignment ve Failure
     /// listelerini frontend'in beklediği DTO formatına çevirir.
@@ -231,7 +254,9 @@ public sealed class AutoScheduleEngine
                 .Select(s =>
                 {
                     var ts = timeSlotLookup.TryGetValue(s.TimeSlotId, out var slot) ? slot : null;
-                    var crName = classroomLookup.TryGetValue(s.ClassroomId, out var c) ? c.Name : "?";
+                    var crName = s.ClassroomId == 0
+                        ? "Cevrim ici"
+                        : classroomLookup.TryGetValue(s.ClassroomId, out var c) ? c.Name : "?";
                     return new ScheduleSlotDto
                     {
                         Day = (int)(ts?.DayOfWeek ?? DayOfWeek.Monday),
@@ -254,7 +279,7 @@ public sealed class AutoScheduleEngine
                 CourseName = section.CourseName,
                 DepartmentCode = string.Empty,
                 ClassroomId = primaryClassroomId,
-                ClassroomName = primaryClassroom?.Name ?? string.Empty,
+                ClassroomName = primaryClassroomId == 0 ? "Cevrim ici" : primaryClassroom?.Name ?? string.Empty,
                 ScheduleSlots = scheduleSlots,
                 ScheduleSummary = summary,
                 InstructorId = section.InstructorId,
@@ -294,6 +319,7 @@ public sealed class AutoScheduleEngine
 
         var usedClassroomCount = result.Assignments
             .SelectMany(a => a.Slots.Select(s => s.ClassroomId))
+            .Where(id => id > 0)
             .Distinct()
             .Count();
 

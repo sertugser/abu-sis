@@ -83,6 +83,33 @@ public sealed class CpSatSolverEngine : ISolverEngine
         var unsatCoreEnabled = await _config.GetBoolAsync(
             "Schedule.OrTools.UnsatCoreEnabled", true, cancellationToken);
 
+        if (timeLimit <= 0)
+        {
+            _logger?.LogWarning(
+                "Schedule.OrTools.TimeLimitSeconds resolved to {Value} (non-positive); using default {Default}.",
+                timeLimit,
+                FALLBACK_TIME_LIMIT_SECONDS);
+            timeLimit = FALLBACK_TIME_LIMIT_SECONDS;
+        }
+
+        if (numWorkers <= 0)
+        {
+            _logger?.LogWarning(
+                "Schedule.OrTools.NumWorkers resolved to {Value} (non-positive); using default {Default}.",
+                numWorkers,
+                FALLBACK_NUM_WORKERS);
+            numWorkers = FALLBACK_NUM_WORKERS;
+        }
+
+        if (configuredSeed < 0)
+        {
+            _logger?.LogWarning(
+                "Schedule.OrTools.RandomSeed resolved to {Value} (negative); using default {Default}.",
+                configuredSeed,
+                FALLBACK_RANDOM_SEED);
+            configuredSeed = FALLBACK_RANDOM_SEED;
+        }
+
         // ── Pre-flight feasibility check (Plan 3 Task 2) ──────────────────
         // Filter out sections that have NO valid classroom; mark them as failures.
         // Prevents CP-SAT 'all-or-nothing' infeasibility on real-world data.
