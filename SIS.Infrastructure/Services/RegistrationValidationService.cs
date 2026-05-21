@@ -61,7 +61,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         var now = DateTime.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
 
         // Load student's existing active registrations for this term
         // Madde 9: Draft kayıtlar da AKTS sınır hesabına dahil edilir.

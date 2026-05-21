@@ -15,7 +15,7 @@ public partial class CourseRegistrationService
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
         var nowPending = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowPending && t.TermEnd >= nowPending);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowPending && t.TermEnd >= nowPending);
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -234,7 +234,7 @@ public partial class CourseRegistrationService
         var nowApprove = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -320,7 +320,7 @@ public partial class CourseRegistrationService
         }
 
         var nowReject = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowReject && t.TermEnd >= nowReject);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowReject && t.TermEnd >= nowReject);
         if (activeTerm == null)
         {
             return new ApprovalResponseDto

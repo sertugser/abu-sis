@@ -40,6 +40,7 @@ public static class RolePermissionSeed
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
                 "menu.alinan-dersler.view",
+                "menu.raporlarim.view",
                 "menu.danisman-bilgileri.view",
                 "menu.acilan-bolum-dersleri.view",
                 "menu.ders-kayit.view",
@@ -82,6 +83,7 @@ public static class RolePermissionSeed
                 "menu.akademik-takvim.view",
                 "menu.duyurular.view",
                 "menu.derslerim.view",
+                "menu.raporlarim.view",
                 "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
@@ -127,6 +129,7 @@ public static class RolePermissionSeed
                 // ── View permissions (10) ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
+                "menu.raporlarim.view",
                 "menu.duyurular.view",
                 "menu.danisman-ders-kisitlari.view",
                 "menu.derslerim.view",
@@ -163,6 +166,7 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
+                "menu.raporlarim.view",
                 // Patch: Duyurular admin'lerden kaldırıldı (Genel İşlemler
                 // modülü öğrenci-merkezli). Admin için Duyurular Duyuru Yönetimi altında.
                 "menu.akademik-takvim.view",
@@ -287,6 +291,7 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
+                "menu.raporlarim.view",
                 // Patch: duyurular admin'lerden kaldırıldı.
                 "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
@@ -427,6 +432,7 @@ public static class RolePermissionSeed
             {
                 // ── View permissions ──
                 "menu.ana-sayfa.view",
+                "menu.raporlarim.view",
                 // Patch: duyurular admin'lerden kaldırıldı.
                 "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
@@ -589,7 +595,9 @@ public static class RolePermissionSeed
     {
         if (await context.RolePermissions.AnyAsync(ct))
         {
-            // Daha önce seed edildi.
+            // Daha önce seed edildi. Admin UI replace-all semantiği ile yönetiyor;
+            // boot'ta merge etmek admin'in kasıtlı kaldırdığı satırları geri ekleyerek
+            // kararını ezerdi.
             return;
         }
 

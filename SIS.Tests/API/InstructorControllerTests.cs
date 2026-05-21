@@ -341,6 +341,20 @@ public class InstructorControllerTests
 
     private static void SeedSection(AppDbContext context, int sectionId, int instructorId)
     {
+        if (!context.Courses.Any(c => c.Id == 1))
+        {
+            context.Courses.Add(new Course
+            {
+                Id = 1,
+                Code = "TEST101",
+                Name = "Test Course",
+                DepartmentId = null,
+                Ects = 5,
+                TheoryHours = 3,
+                LabHours = 0
+            });
+        }
+
         context.CourseSections.Add(new CourseSection
         {
             Id = sectionId,

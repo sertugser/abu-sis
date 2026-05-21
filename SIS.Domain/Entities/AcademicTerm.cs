@@ -28,6 +28,7 @@ public class AcademicTerm
     // SİLİNDİ (Faz 2): RegistrationStart/End, AddDropStart/End, WithdrawalDeadline,
     //                  GradeEntryStart/End + 4 override — TermAcademicCalendar'a taşındı
 
+    public bool IsActivated { get; set; } = true;
     public bool IsCancelled { get; set; } = false;
     public YoksisStatus YoksisStatus { get; set; } = YoksisStatus.Inactive;
 
@@ -52,6 +53,7 @@ public class AcademicTerm
 
     public TermStatus GetStatus(DateTime now) =>
         IsCancelled ? TermStatus.Cancelled
+        : !IsActivated ? TermStatus.Inactive
         : (now >= EffectiveStart && now <= EffectiveEnd) ? TermStatus.Active
         : TermStatus.Inactive;
 

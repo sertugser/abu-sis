@@ -9,7 +9,9 @@ public interface IAdminTermService
     Task<AdminTermDto> CreateTermAsync(CreateTermDto dto);
     Task<AdminTermDto> UpdateTermAsync(int id, UpdateTermDto dto);
 
-    // Tek manuel aksiyon: Cancel ve tersini alma. Active/Inactive otomatik hesaplanır.
+    // Kullanima acma/pasife alma ayri; takvimsel Active/Inactive durum tarih araligindan hesaplanir.
+    Task ActivateTermAsync(int id);
+    Task DeactivateTermAsync(int id);
     Task CancelTermAsync(int id);
     Task UncancelTermAsync(int id);
 }

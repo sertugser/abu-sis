@@ -43,6 +43,7 @@ export interface ScenarioCourse {
   excludeFromAverage: boolean;
   continuationCourseId: string;
   isAdded: boolean;
+  isPlannedFromCurriculum: boolean;
   wasRepeated: boolean;
   sortOrder: number;
 }
@@ -126,6 +127,7 @@ export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): S
         excludeFromAverage: !course.countsTowardsGpa,
         continuationCourseId,
         isAdded: false,
+        isPlannedFromCurriculum: false,
         wasRepeated: course.isRepeated,
         sortOrder: sortOrder++,
       } satisfies ScenarioCourse;
@@ -273,6 +275,7 @@ export function areScenarioCoursesEqual(left: ScenarioCourse[], right: ScenarioC
         excludeFromAverage: course.excludeFromAverage,
         continuationCourseId: course.continuationCourseId,
         isAdded: course.isAdded,
+        isPlannedFromCurriculum: course.isPlannedFromCurriculum,
         wasRepeated: course.wasRepeated,
         sortOrder: course.sortOrder,
       }));

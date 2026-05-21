@@ -1,13 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Identity.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Domain.Identity;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Scope;
 
 namespace SIS.Infrastructure.Services;
 
-public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStructureService
+public class AdminAcademicStructureService(
+    AppDbContext db,
+    IScopeGuard scopeGuard,
+    IScopeResolver scopeResolver) : IAdminAcademicStructureService
 {
     private static string NormalizeRequiredText(string value, string fieldName)
     {
@@ -124,6 +130,8 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
 
     public async Task<DepartmentDto> CreateDepartmentAsync(CreateDepartmentDto dto)
     {
+        scopeGuard.EnsureCanWrite(ScopeKind.Faculty, dto.FacultyId);
+
         if (!await db.Faculties.AnyAsync(f => f.Id == dto.FacultyId))
             throw new KeyNotFoundException("Fakülte bulunamadı.");
         if (await db.Departments.AnyAsync(d => d.Code == dto.Code))
@@ -156,6 +164,8 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
     {
         var department = await db.Departments.Include(d => d.Faculty).FirstOrDefaultAsync(d => d.Id == id)
             ?? throw new KeyNotFoundException("Bölüm bulunamadı.");
+        if (department.FacultyId != dto.FacultyId)
+            scopeGuard.EnsureCanWrite(ScopeKind.Faculty, dto.FacultyId);
         if (!await db.Faculties.AnyAsync(f => f.Id == dto.FacultyId))
             throw new KeyNotFoundException("Fakülte bulunamadı.");
         if (await db.Departments.AnyAsync(d => d.Code == dto.Code && d.Id != id))
@@ -220,6 +230,9 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
 
     public async Task<ProgramDto> CreateProgramAsync(CreateProgramDto dto)
     {
+        var facultyId = await scopeResolver.ResolveFacultyFromDepartmentAsync(dto.DepartmentId);
+        scopeGuard.EnsureCanWrite(ScopeKind.Faculty, facultyId);
+
         var programName = NormalizeRequiredText(dto.Name, "Program adı");
         var programCode = NormalizeCode(dto.Code, "Program kodu");
         var externalSystemCode = NormalizeOptionalCode(dto.ExternalSystemCode);
@@ -270,6 +283,11 @@ public class AdminAcademicStructureService(AppDbContext db) : IAdminAcademicStru
 
         var program = await db.AcademicPrograms.Include(p => p.Department).FirstOrDefaultAsync(p => p.Id == id)
             ?? throw new KeyNotFoundException("Program bulunamadı.");
+        if (program.DepartmentId != dto.DepartmentId)
+        {
+            var facultyId = await scopeResolver.ResolveFacultyFromDepartmentAsync(dto.DepartmentId);
+            scopeGuard.EnsureCanWrite(ScopeKind.Faculty, facultyId);
+        }
         if (!await db.Departments.AnyAsync(d => d.Id == dto.DepartmentId))
             throw new KeyNotFoundException("Bölüm bulunamadı.");
         if (await db.AcademicPrograms.AnyAsync(p => p.Code == programCode && p.Id != id))

@@ -5,6 +5,7 @@ using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -49,7 +50,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
         var now = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
 
@@ -177,6 +178,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 cr.CourseSection.Term.Year,
                 cr.CourseSection.Term.TermType,
                 IsActive = !cr.CourseSection.Term.IsCancelled
+                    && cr.CourseSection.Term.IsActivated
                     && cr.CourseSection.Term.TermStart <= DateTime.UtcNow
                     && cr.CourseSection.Term.TermEnd >= DateTime.UtcNow
             })
@@ -214,7 +216,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             var nowAttendance = _clock.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowAttendance && t.TermEnd >= nowAttendance);
+                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowAttendance && t.TermEnd >= nowAttendance);
 
             if (activeTerm == null)
                 return null;
@@ -286,6 +288,31 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             .GroupBy(record => record.CourseRegistrationId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
+        var sectionIds = registrations.Select(registration => registration.CourseSectionId).Distinct().ToList();
+        var scheduleSlotRows = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(schedule => sectionIds.Contains(schedule.CourseSectionId))
+            .Select(schedule => new
+            {
+                schedule.CourseSectionId,
+                schedule.BlockType,
+                schedule.TimeSlot.DayOfWeek,
+                schedule.TimeSlot.StartTime,
+                schedule.TimeSlot.SlotOrder
+            })
+            .ToListAsync();
+
+        var scheduleSlotsBySection = scheduleSlotRows
+            .GroupBy(slot => slot.CourseSectionId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderBy(slot => DaysFromMonday(slot.DayOfWeek))
+                    .ThenBy(slot => slot.StartTime)
+                    .ThenBy(slot => slot.SlotOrder)
+                    .Select((slot, index) => new AttendanceSlotInfo(index + 1, slot.BlockType))
+                    .ToList());
+
         return new StudentAttendanceStatusDto
         {
             TermId = selectedTerm.TermId,
@@ -305,9 +332,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
                 var labTotalHours = weekCount * Math.Max(0, course.LabHours);
                 var recordsForRegistration = attendanceByRegistration.GetValueOrDefault(registration.Id) ?? [];
-                var absentSessions = recordsForRegistration.Count(record => record.Status == AttendanceStatus.Absent);
-                var theoryAbsenceHours = absentSessions * Math.Max(0, course.TheoryHours);
-                var labAbsenceHours = absentSessions * Math.Max(0, course.LabHours);
+                scheduleSlotsBySection.TryGetValue(registration.CourseSectionId, out var scheduleSlots);
+                var (theoryAbsenceHours, labAbsenceHours) = CalculateAttendanceAbsenceHours(
+                    recordsForRegistration,
+                    course.TheoryHours,
+                    course.LabHours,
+                    course.ApplicationHours,
+                    scheduleSlots);
                 var totalAbsenceHours = theoryAbsenceHours + labAbsenceHours;
                 var isInStudentProgram = curriculumMap.TryGetValue(course.Id, out var suggestedSemester);
                 var programName = isInStudentProgram && !string.IsNullOrWhiteSpace(activeProgramName)
@@ -343,6 +374,87 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             }).ToList()
         };
     }
+
+    private static (int TheoryHours, int LabHours) CalculateAttendanceAbsenceHours(
+        IReadOnlyCollection<AttendanceRecord> records,
+        int theoryHours,
+        int labHours,
+        int? applicationHours,
+        IReadOnlyList<AttendanceSlotInfo>? scheduleSlots)
+    {
+        var theoryAbsenceHours = 0;
+        var labAbsenceHours = 0;
+        var fallbackSlotCount = ResolveAttendanceSlotCount(theoryHours, labHours, applicationHours, scheduleSlots?.Count ?? 0);
+
+        foreach (var record in records)
+        {
+            var totalSlotCount = Math.Max(1, Math.Max(record.TotalSlotCount, fallbackSlotCount));
+            foreach (var slotNumber in GetAbsentSlotNumbers(record, totalSlotCount))
+            {
+                var blockType = scheduleSlots?.FirstOrDefault(slot => slot.SlotNumber == slotNumber)?.BlockType
+                    ?? InferAttendanceSlotBlock(slotNumber, theoryHours);
+
+                if (blockType == ScheduleBlockType.Theory)
+                    theoryAbsenceHours++;
+                else
+                    labAbsenceHours++;
+            }
+        }
+
+        return (theoryAbsenceHours, labAbsenceHours);
+    }
+
+    private static List<int> GetAbsentSlotNumbers(AttendanceRecord record, int totalSlotCount)
+    {
+        if (record.Status == AttendanceStatus.Absent)
+            return Enumerable.Range(1, Math.Max(1, totalSlotCount)).ToList();
+
+        if (record.Status != AttendanceStatus.Present)
+            return [];
+
+        var presentSlots = ParseAttendanceSlotNumbers(record.PresentSlotNumbersCsv, totalSlotCount);
+        if (presentSlots.Count == 0)
+            return [];
+
+        var presentSet = presentSlots.ToHashSet();
+        return Enumerable.Range(1, Math.Max(1, totalSlotCount))
+            .Where(slotNumber => !presentSet.Contains(slotNumber))
+            .ToList();
+    }
+
+    private static List<int> ParseAttendanceSlotNumbers(string? value, int totalSlotCount)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return [];
+
+        var maxSlot = Math.Max(1, totalSlotCount);
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => int.TryParse(part, out var slotNumber) ? slotNumber : 0)
+            .Where(slotNumber => slotNumber >= 1 && slotNumber <= maxSlot)
+            .Distinct()
+            .OrderBy(slotNumber => slotNumber)
+            .ToList();
+    }
+
+    private static int ResolveAttendanceSlotCount(
+        int theoryHours,
+        int labHours,
+        int? applicationHours,
+        int scheduledSlotCount)
+    {
+        if (scheduledSlotCount > 0)
+            return scheduledSlotCount;
+
+        return Math.Max(1, Math.Max(0, theoryHours) + Math.Max(0, labHours) + Math.Max(0, applicationHours ?? 0));
+    }
+
+    private static ScheduleBlockType InferAttendanceSlotBlock(int slotNumber, int theoryHours) =>
+        slotNumber <= Math.Max(0, theoryHours) ? ScheduleBlockType.Theory : ScheduleBlockType.Lab;
+
+    private static int DaysFromMonday(DayOfWeek day) => ((int)day + 6) % 7;
+
+    private sealed record AttendanceSlotInfo(int SlotNumber, ScheduleBlockType BlockType);
 
     public async Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId)
     {
@@ -469,7 +581,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         var nowReport = _clock.UtcNow;
         var activeTermName = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => !t.IsCancelled && t.TermStart <= nowReport && t.TermEnd >= nowReport)
+            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowReport && t.TermEnd >= nowReport)
             .Select(t => t.Name)
             .FirstOrDefaultAsync();
 

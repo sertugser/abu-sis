@@ -47,7 +47,7 @@ public class CourseController : ControllerBase
         // Find active term
         var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
 
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
@@ -167,7 +167,7 @@ public class CourseController : ControllerBase
 
         // 2. Active term
         var nowCatalog = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
+        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
         if (activeTerm == null)
             return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
 
@@ -563,7 +563,7 @@ public class CourseController : ControllerBase
         var now = _clock.UtcNow;
         var term = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
 
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
