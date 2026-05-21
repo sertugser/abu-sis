@@ -28,6 +28,34 @@ export interface WebModuleSettingLimits {
   [key: string]: { min: number | null; max: number | null };
 }
 
+export interface WebModuleControlOptionDto {
+  code: string;
+  label: string;
+  description: string;
+}
+
+export interface WebModuleControlSummaryDto {
+  code: string;
+  title: string;
+  category: string;
+  description: string;
+  displayOrder: number;
+  modeSettingId: number | null;
+  announcementSettingId: number | null;
+  selectedMode: string;
+  selectedModeLabel: string;
+  isCurrentlyOpen: boolean;
+  effectiveStateLabel: string;
+  effectiveMessage: string | null;
+  announcement: string | null;
+  options: WebModuleControlOptionDto[];
+}
+
+export interface UpdateWebModuleControlPayload {
+  mode: string;
+  announcement: string | null;
+}
+
 export async function getWebModuleSettings(): Promise<WebModuleSettingDto[]> {
   const { data } = await apiClient.get<WebModuleSettingDto[]>('/admin/web-module-settings');
   return data;
@@ -59,5 +87,18 @@ export async function importWebModuleSettings(payload: unknown): Promise<WebModu
 
 export async function getWebModuleSettingLimits(): Promise<WebModuleSettingLimits> {
   const { data } = await apiClient.get<WebModuleSettingLimits>('/admin/web-module-settings/limits');
+  return data;
+}
+
+export async function getWebModuleControlSummaries(): Promise<WebModuleControlSummaryDto[]> {
+  const { data } = await apiClient.get<WebModuleControlSummaryDto[]>('/admin/web-module-settings/modules');
+  return data;
+}
+
+export async function updateWebModuleControl(
+  code: string,
+  payload: UpdateWebModuleControlPayload,
+): Promise<WebModuleControlSummaryDto> {
+  const { data } = await apiClient.put<WebModuleControlSummaryDto>(`/admin/web-module-settings/modules/${code}`, payload);
   return data;
 }

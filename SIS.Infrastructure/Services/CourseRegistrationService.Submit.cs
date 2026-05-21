@@ -14,14 +14,6 @@ public partial class CourseRegistrationService
     public async Task<RegistrationResponseDto> SubmitRegistrationAsync(int studentId, RegistrationSubmitDto dto)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
-
         // Validate the registration
         var validationResult = await _validationService.ValidateRegistrationAsync(studentId, dto.CourseSectionIds);
 
@@ -36,6 +28,15 @@ public partial class CourseRegistrationService
             .Include(cs => cs.Course)
             .Where(cs => dto.CourseSectionIds.Contains(cs.Id))
             .ToListAsync();
+
+        var activeTermId = submittedSections.Select(section => (int?)section.TermId).Distinct().SingleOrDefault();
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync(studentId, activeTermId);
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
+            return response;
+        }
 
         var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(
             studentId,

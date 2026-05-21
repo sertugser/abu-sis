@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Controllers;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -118,6 +119,166 @@ public class InstructorControllerTests
         okResult.Value.Should().BeSameAs(expected);
     }
 
+    [Fact]
+    public async Task UpdateProfile_RequireOfficeHoursEnabled_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetBoolAsync("Instructor.RequireOfficeHoursOnProfileUpdate", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.UpdateProfile(
+            new InstructorController.UpdateInstructorProfileDto("ogretmen@ankarabilim.edu.tr", 1, "", false),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateProfile_PrimaryEmailImmutable_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetBoolAsync("Instructor.PrimaryEmailImmutable", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.UpdateProfile(
+            new InstructorController.UpdateInstructorProfileDto("yeni@ankarabilim.edu.tr", 1, "Salı 10:00-12:00", false),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateProfile_DepartmentDeadlinePassed_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+        SeedDepartment(context, departmentId: 2, facultyId: 1, code: "YM", name: "Yazılım Mühendisliği");
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetStringAsync("Instructor.ProfileOrgUnitUpdateDeadline", string.Empty, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("2000-01-01");
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.UpdateProfile(
+            new InstructorController.UpdateInstructorProfileDto("ogretmen@ankarabilim.edu.tr", 2, "Salı 10:00-12:00", false),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateProfile_AllowedUpdate_PersistsAdvisorOptOutAndOfficeHours()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42);
+
+        var result = await controller.UpdateProfile(
+            new InstructorController.UpdateInstructorProfileDto("ogretmen@ankarabilim.edu.tr", 1, "Perşembe 14:00-16:00", true),
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+
+        var instructor = await context.Instructors.SingleAsync(i => i.Id == 7);
+        instructor.OfficeHours.Should().Be("Perşembe 14:00-16:00");
+        instructor.AdvisorOptOutRequested.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateAcademicCvActivity_ActiveYearMismatch_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetIntAsync("Instructor.AcademicCvActiveYear", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2026);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.CreateAcademicCvActivity(
+            new InstructorController.CreateAcademicCvActivityDto(2025, "Makale", "Açıklama"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task CreateAcademicCvActivity_AutoApproveEnabled_PersistsApprovedStatus()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetIntAsync("Instructor.AcademicCvActiveYear", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2026);
+        systemConfigMock
+            .Setup(provider => provider.GetBoolAsync("Instructor.AcademicCvAutoApprove", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.CreateAcademicCvActivity(
+            new InstructorController.CreateAcademicCvActivityDto(2026, "Makale", "Açıklama"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        var activity = await context.AcademicCvActivities.SingleAsync();
+        activity.Status.Should().Be(ApprovalStepStatus.Approved);
+    }
+
+    [Fact]
+    public async Task UpdateAcademicCvActivity_ApprovedAndLocked_ReturnsBadRequest()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+        context.AcademicCvActivities.Add(new AcademicCvActivity
+        {
+            Id = 9,
+            InstructorId = 7,
+            ActivityYear = 2026,
+            Title = "Makale",
+            Description = "Eski",
+            Status = ApprovalStepStatus.Approved,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var systemConfigMock = CreateSystemConfigMock();
+        systemConfigMock
+            .Setup(provider => provider.GetIntAsync("Instructor.AcademicCvActiveYear", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2026);
+        systemConfigMock
+            .Setup(provider => provider.GetBoolAsync("Instructor.AcademicCvApprovedActivityEditable", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42, systemConfigMock);
+
+        var result = await controller.UpdateAcademicCvActivity(
+            9,
+            new InstructorController.UpdateAcademicCvActivityDto(2026, "Yeni Başlık", "Yeni açıklama"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -129,27 +290,17 @@ public class InstructorControllerTests
 
     private static void SeedInstructor(AppDbContext context, int instructorId, int userId)
     {
-        if (!context.Faculties.Any(f => f.Id == 1))
+        SeedDepartment(context, departmentId: 1, facultyId: 1, code: "BM", name: "Bilgisayar Mühendisliği");
+        context.Users.Add(new ApplicationUser
         {
-            context.Faculties.Add(new Faculty
-            {
-                Id = 1,
-                Name = "Engineering",
-                Code = "ENG"
-            });
-        }
-
-        if (!context.Departments.Any(d => d.Id == 1))
-        {
-            context.Departments.Add(new Department
-            {
-                Id = 1,
-                Name = "Computer Engineering",
-                Code = "CENG",
-                FacultyId = 1
-            });
-        }
-
+            Id = userId,
+            UserName = "ogretmen@ankarabilim.edu.tr",
+            NormalizedUserName = "OGRETMEN@ANKARABILIM.EDU.TR",
+            Email = "ogretmen@ankarabilim.edu.tr",
+            NormalizedEmail = "OGRETMEN@ANKARABILIM.EDU.TR",
+            FirstName = "Ada",
+            LastName = "Lovelace",
+        });
         context.Instructors.Add(new Instructor
         {
             Id = instructorId,
@@ -158,6 +309,32 @@ public class InstructorControllerTests
             Title = "Dr.",
             MaxWeeklyHours = 12
         });
+
+        context.SaveChanges();
+    }
+
+    private static void SeedDepartment(AppDbContext context, int departmentId, int facultyId, string code, string name)
+    {
+        if (!context.Faculties.Any(f => f.Id == facultyId))
+        {
+            context.Faculties.Add(new Faculty
+            {
+                Id = facultyId,
+                Code = $"F{facultyId}",
+                Name = $"Fakülte {facultyId}",
+            });
+        }
+
+        if (!context.Departments.Any(d => d.Id == departmentId))
+        {
+            context.Departments.Add(new Department
+            {
+                Id = departmentId,
+                FacultyId = facultyId,
+                Code = code,
+                Name = name,
+            });
+        }
 
         context.SaveChanges();
     }
@@ -191,9 +368,30 @@ public class InstructorControllerTests
         context.SaveChanges();
     }
 
-    private static InstructorController CreateController(AppDbContext context, ISchedulingService schedulingService, int userId)
+    private static Mock<ISystemConfigProvider> CreateSystemConfigMock()
     {
-        var controller = new InstructorController(context, schedulingService);
+        var systemConfigMock = new Mock<ISystemConfigProvider>();
+        systemConfigMock
+            .Setup(provider => provider.GetBoolAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, bool fallback, CancellationToken _) => fallback);
+        systemConfigMock
+            .Setup(provider => provider.GetStringAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string fallback, CancellationToken _) => fallback);
+        systemConfigMock
+            .Setup(provider => provider.GetIntAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, int fallback, CancellationToken _) => fallback);
+        return systemConfigMock;
+    }
+
+    private static InstructorController CreateController(
+        AppDbContext context,
+        ISchedulingService schedulingService,
+        int userId,
+        Mock<ISystemConfigProvider>? systemConfigMock = null)
+    {
+        var configMock = systemConfigMock ?? CreateSystemConfigMock();
+
+        var controller = new InstructorController(context, schedulingService, configMock.Object);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

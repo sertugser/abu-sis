@@ -57,9 +57,6 @@ public class CourseSectionLifecycleService(
             ? existingSections.Max(s => s.SectionNumber)
             : 0;
 
-        if (request.InstructorId.HasValue)
-            await _helpers.ValidateInstructorAssignmentAsync(request.InstructorId.Value, course.DepartmentId, ct);
-
         int? crossListGroupId = null;
         var linkedToOpen = new List<(int CourseId, int? DeptId)>();
         if (request.IncludeCrossLists)
@@ -81,6 +78,18 @@ public class CourseSectionLifecycleService(
                 foreach (var l in linked)
                     linkedToOpen.Add((l.LinkedCourseId, l.DeptId));
             }
+        }
+
+        if (request.InstructorId.HasValue)
+        {
+            await _helpers.ValidateInstructorAssignmentAsync(request.InstructorId.Value, course.DepartmentId, ct);
+            var additionalSectionCount = request.SectionCount * (1 + linkedToOpen.Count);
+            var weeklyHoursPerSection = course.TheoryHours + course.LabHours;
+            await ValidateInstructorWeeklyLoadLimitAsync(
+                request.InstructorId.Value,
+                termId,
+                weeklyHoursPerSection * additionalSectionCount,
+                ct);
         }
 
         var created = new List<CourseSection>();
@@ -352,6 +361,12 @@ public class CourseSectionLifecycleService(
         if (request.InstructorId.HasValue)
         {
             await _helpers.ValidateInstructorAssignmentAsync(request.InstructorId.Value, section.Course.DepartmentId, ct);
+            await ValidateInstructorWeeklyLoadLimitAsync(
+                request.InstructorId.Value,
+                section.TermId,
+                section.Course.TheoryHours + section.Course.LabHours,
+                ct,
+                excludedSectionId: section.Id);
             section.InstructorId = request.InstructorId.Value;
         }
 
@@ -531,6 +546,15 @@ public class CourseSectionLifecycleService(
         if (term != null && term.IsCancelled)
             throw new InvalidOperationException("Şube yeniden açmak için dönem iptal edilmemiş olmalıdır.");
 
+        if (section.InstructorId.HasValue)
+        {
+            await ValidateInstructorWeeklyLoadLimitAsync(
+                section.InstructorId.Value,
+                section.TermId,
+                section.Course.TheoryHours + section.Course.LabHours,
+                ct);
+        }
+
         section.Status = CourseSectionStatus.Active;
 
         var hasAccessPolicy = await _context.CourseAccessPolicies
@@ -564,6 +588,40 @@ public class CourseSectionLifecycleService(
         _forecastCacheInvalidator.InvalidateForecastContext();
     }
 
+    private async Task ValidateInstructorWeeklyLoadLimitAsync(
+        int instructorId,
+        int termId,
+        int weeklyHoursToAdd,
+        CancellationToken ct,
+        int? excludedSectionId = null)
+    {
+        if (weeklyHoursToAdd <= 0)
+            return;
+
+        var instructor = await _context.Instructors
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == instructorId, ct)
+            ?? throw new InvalidOperationException("Atanan öğretim üyesi bulunamadı.");
+
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, ct);
+        var effectiveMaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours);
+
+        var assignedWeeklyHours = await _context.CourseSections
+            .AsNoTracking()
+            .Where(cs =>
+                cs.InstructorId == instructorId
+                && cs.TermId == termId
+                && cs.Status == CourseSectionStatus.Active
+                && (!excludedSectionId.HasValue || cs.Id != excludedSectionId.Value))
+            .SumAsync(cs => cs.Course.TheoryHours + cs.Course.LabHours, ct);
+
+        var projectedWeeklyHours = assignedWeeklyHours + weeklyHoursToAdd;
+        if (projectedWeeklyHours > effectiveMaxWeeklyHours)
+        {
+            throw new InvalidOperationException(
+                $"Ogretim uyesi haftalik ders saati limiti asiliyor ({projectedWeeklyHours}/{effectiveMaxWeeklyHours} saat).");
+        }
+    }
     /// <summary>
     /// Bir dersin tüm şubelerini DB'den fiziksel siler (hard delete).
     /// CloseAllSectionsAsync'in aksine geri alınamaz; ders "hiç açılmamış gibi" olur.
@@ -897,5 +955,4 @@ public class CourseSectionLifecycleService(
             TransferredCount: registrations.Count,
             TransferredStudentIds: registrations.Select(r => r.StudentId).ToList());
     }
-
 }

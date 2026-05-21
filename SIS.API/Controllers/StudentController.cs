@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.CalendarGenerator.Services;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.DTOs;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
@@ -21,12 +22,21 @@ public class StudentController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly IAcademicCalendarRuleService _calendarRuleService;
+    private readonly IWebModuleControlService _webModuleControls;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public StudentController(AppDbContext context, IGpaCalculationService gpaCalculationService, IAcademicCalendarRuleService calendarRuleService)
+    public StudentController(
+        AppDbContext context,
+        IGpaCalculationService gpaCalculationService,
+        IAcademicCalendarRuleService calendarRuleService,
+        ISystemConfigProvider systemConfig,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _calendarRuleService = calendarRuleService;
+        _systemConfig = systemConfig;
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     /// <summary>
@@ -71,9 +81,14 @@ public class StudentController : ControllerBase
             classYear = Math.Clamp(elapsedYears - frozenYears, 1, maxYears);
         }
 
-        // ECTS limit based on CGPA
-        var ectsLimit = student.Cgpa >= 2.50m ? 48 :
-                        student.Cgpa >= 2.00m ? 42 : 30;
+        var ectsLimitBelow200 = await _systemConfig.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
+        var ectsLimit200To249 = await _systemConfig.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
+        var ectsLimitAbove250 = await _systemConfig.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
+        var ectsLimit = student.Cgpa >= 2.50m
+            ? ectsLimitAbove250
+            : student.Cgpa >= 2.00m
+                ? ectsLimit200To249
+                : ectsLimitBelow200;
 
         // Advisor info
         string? advisorName = null;
@@ -520,6 +535,14 @@ public class StudentController : ControllerBase
         if (student == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
+        var evaluationEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptApplicationEvaluationEnabled", true);
+        if (!evaluationEnabled)
+            return BadRequest(new { error = "Sosyal transkript değerlendirme akışı sistem konfigürasyonunda kapalı." });
+
+        var evaluationAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-application-evaluation");
+        if (!evaluationAccess.IsOpen)
+            return BadRequest(new { error = evaluationAccess.Message ?? "Sosyal transkript değerlendirme akışı şu anda kapalı." });
+
         var history = await _gpaCalculationService.GetTermGpaHistoryAsync(student.Id);
         return Ok(history);
     }
@@ -545,6 +568,14 @@ public class StudentController : ControllerBase
 
         if (student == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
+
+        var objectionEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptObjectionEnabled", true);
+        if (!objectionEnabled)
+            return BadRequest(new { error = "Sosyal transkript itiraz akışı sistem konfigürasyonunda kapalı." });
+
+        var objectionAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-student-objection");
+        if (!objectionAccess.IsOpen)
+            return BadRequest(new { error = objectionAccess.Message ?? "Sosyal transkript itiraz akışı şu anda kapalı." });
 
         var registration = await _context.CourseRegistrations
             .AsNoTracking()
@@ -668,20 +699,29 @@ public class StudentController : ControllerBase
         var programName = activeProgram?.Program?.Name ?? string.Empty;
         var facultyName = activeProgram?.Program?.Department?.Faculty?.Name ?? string.Empty;
         var ownGrades = gradesByRegistration.GetValueOrDefault(registration.Id, new List<StudentGrade>());
-        var hasAnyComponentScore = ownGrades.Any(grade => grade.Score != null);
-        var hasAllComponentScores = components.Count > 0
-            && components.All(component => ownGrades.Any(grade =>
+        var componentVisibility = await BuildComponentVisibilityMapAsync(term.Id, components);
+        var visibleComponents = components
+            .Where(component => componentVisibility.GetValueOrDefault(component.Id, true))
+            .ToList();
+        var hasAnyComponentScore = visibleComponents.Any(component =>
+            ownGrades.Any(grade => grade.GradeComponentId == component.Id && grade.Score != null));
+        var hasAllComponentScores = visibleComponents.Count > 0
+            && visibleComponents.All(component => ownGrades.Any(grade =>
                 grade.GradeComponentId == component.Id && grade.Score != null));
         var hasFinalizedGrade = section.IsFinalized
             && hasGradingCriteria
             && registration.Grade != null
             && hasAllComponentScores;
-        var isResultFinalized = await _calendarRuleService.CanStudentSeeLetterGradeAsync(
+        var calendarAllowsLetterGrade = await _calendarRuleService.CanStudentSeeLetterGradeAsync(
             section.TermId,
             hasFinalizedGrade,
             registration.Grade != null,
             DateTime.UtcNow);
-        var studentWeightedAverage = CalculateWeightedAverage(registration.Id);
+        var moduleAllowsLetterGrade = await CanStudentSeeLetterGradeAsync(section.TermId);
+        var isResultFinalized = calendarAllowsLetterGrade && moduleAllowsLetterGrade;
+        var studentWeightedAverage = visibleComponents.Count == components.Count
+            ? CalculateWeightedAverage(registration.Id)
+            : null;
 
         var componentStatistics = components
             .Select(component =>
@@ -693,6 +733,7 @@ public class StudentController : ControllerBase
                 var studentScore = gradesByRegistration.TryGetValue(registration.Id, out var ownGrades)
                     ? ownGrades.FirstOrDefault(grade => grade.GradeComponentId == component.Id)?.Score
                     : null;
+                var isVisible = componentVisibility.GetValueOrDefault(component.Id, true);
 
                 return new StudentComponentStatisticsDto
                 {
@@ -705,7 +746,7 @@ public class StudentController : ControllerBase
                     AverageScore = componentScores.Count > 0
                         ? Math.Round(componentScores.Average(), 2, MidpointRounding.AwayFromZero)
                         : null,
-                    StudentScore = studentScore
+                    StudentScore = isVisible ? studentScore : null
                 };
             })
             .ToList();
@@ -788,6 +829,14 @@ public class StudentController : ControllerBase
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
         if (activeProgram == null)
             return NotFound(new { error = "Aktif program bulunamadi." });
+
+        var transcriptEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptStudentApplicationEnabled", true);
+        if (!transcriptEnabled)
+            return BadRequest(new { error = "Sosyal transkript başvuru akışı sistem konfigürasyonunda kapalı." });
+
+        var transcriptAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-student-application");
+        if (!transcriptAccess.IsOpen)
+            return BadRequest(new { error = transcriptAccess.Message ?? "Sosyal transkript başvuru akışı şu anda kapalı." });
 
         var registrations = await _context.CourseRegistrations
             .AsNoTracking()
@@ -1025,14 +1074,83 @@ public class StudentController : ControllerBase
         var result = new Dictionary<int, bool>();
         foreach (var termId in termIds.Distinct())
         {
-            result[termId] = await _calendarRuleService.CanStudentSeeLetterGradeAsync(
-                termId,
-                isFinalized: true,
-                hasGrade: true,
-                nowUtc: DateTime.UtcNow);
+            result[termId] = await CanStudentSeeLetterGradeAsync(termId);
         }
 
         return result;
+    }
+
+    private async Task<Dictionary<int, bool>> BuildComponentVisibilityMapAsync(int termId, IEnumerable<GradeComponent> components)
+    {
+        var result = new Dictionary<int, bool>();
+
+        foreach (var component in components)
+        {
+            var controlCode = ResolvePublicationControlCode(component.Name);
+            var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
+            result[component.Id] = access.IsOpen;
+        }
+
+        return result;
+    }
+
+    private async Task<bool> CanStudentSeeLetterGradeAsync(int termId)
+    {
+        var finalAccess = await _webModuleControls.EvaluateAsync("letter-grade-publication", termId);
+        if (finalAccess.IsOpen)
+            return true;
+
+        var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
+        return makeupAccess.IsOpen;
+    }
+
+    private async Task<WebModuleAccessResult> ResolveStudentModuleAccessAsync(int studentId, string controlCode)
+    {
+        var activeTermId = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Where(registration => registration.StudentId == studentId
+                && registration.CourseSection.TermId == registration.CourseSection.Term.Id
+                && registration.Status != RegistrationStatus.Draft
+                && registration.Status != RegistrationStatus.Dropped)
+            .OrderByDescending(registration => registration.CourseSection.Term.TermStart)
+            .Select(registration => (int?)registration.CourseSection.TermId)
+            .FirstOrDefaultAsync();
+
+        if (!activeTermId.HasValue)
+        {
+            var now = DateTime.UtcNow;
+            activeTermId = await _context.AcademicTerms
+                .AsNoTracking()
+                .Where(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now)
+                .OrderByDescending(term => term.TermStart)
+                .Select(term => (int?)term.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        return await _webModuleControls.EvaluateAsync(controlCode, activeTermId);
+    }
+
+    private static string ResolvePublicationControlCode(string componentName)
+    {
+        var normalized = componentName.Trim().ToLowerInvariant();
+
+        if (normalized.Contains("mazeret") || normalized.Contains("excuse"))
+        {
+            return normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize")
+                ? "midterm-excuse-grade-publication"
+                : "makeup-grade-publication";
+        }
+
+        if (normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize"))
+            return "midterm-grade-publication";
+
+        if (normalized.Contains("bütünleme") || normalized.Contains("butunleme") || normalized.Contains("makeup") || normalized.Contains("yys"))
+            return "makeup-grade-publication";
+
+        if (normalized.Contains("yarıyıl") || normalized.Contains("yariyil") || normalized.Contains("final"))
+            return "final-grade-publication";
+
+        return "letter-grade-publication";
     }
 
     private static bool IsPassedGrade(GradeCode grade) =>

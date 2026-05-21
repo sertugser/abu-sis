@@ -19,6 +19,7 @@ export interface SectionDto {
   classroomName: string;
   schedule: string;
   isActive: boolean;
+  quotaVisible: boolean;
 }
 
 export interface StudentCourseDto {
@@ -108,4 +109,6 @@ export interface ActiveTermDto {
   studentRegistrationEnabled: boolean;
   studentRegistrationOpenAt: string | null;
   studentRegistrationMessage: string | null;
+  isFreezeApplicationOpen: boolean;
+  studentFreezeApplicationMessage: string | null;
 }

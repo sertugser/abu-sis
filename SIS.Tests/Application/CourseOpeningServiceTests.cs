@@ -131,6 +131,55 @@ public class CourseOpeningServiceTests
     }
 
     [Fact]
+    public async Task GetDepartmentInstructorsAsync_UsesConfiguredWeeklyHoursByTitle()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+
+        var professor = AddInstructor(context, 1, 1001, DepartmentId, title: "Prof. Dr.", maxWeeklyHours: 10);
+        var lecturer = AddInstructor(context, 2, 1002, DepartmentId, title: "Öğr. Gör.", maxWeeklyHours: 16);
+        var queryService = CreateQueryService(context, systemConfig: new FakeSystemConfigProvider(new Dictionary<string, string>
+        {
+            ["Instructor.MaxWeeklyHours.Professor"] = "18",
+            ["Instructor.MaxWeeklyHours.Lecturer"] = "28",
+        }));
+
+        var result = await queryService.GetDepartmentInstructorsAsync(DepartmentId, TermId, CancellationToken.None);
+
+        result.Single(i => i.InstructorId == professor.Id).MaxWeeklyHours.Should().Be(18);
+        result.Single(i => i.InstructorId == lecturer.Id).MaxWeeklyHours.Should().Be(28);
+    }
+
+    [Fact]
+    public async Task OpenCourseAsync_WhenConfiguredWeeklyHoursWouldBeExceeded_Throws()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+
+        var instructor = AddInstructor(context, 1, 1001, DepartmentId, title: "Prof. Dr.", maxWeeklyHours: 30);
+        var existingCourse = AddCourse(context, 1, "CENG101");
+        AddSection(context, 1, existingCourse.Id, instructorId: instructor.Id);
+
+        var newCourse = AddCourse(context, 2, "CENG102");
+        var service = CreateService(context, systemConfig: new FakeSystemConfigProvider(new Dictionary<string, string>
+        {
+            ["Instructor.MaxWeeklyHours.Professor"] = "4",
+        }));
+
+        var act = () => service.OpenCourseAsync(DepartmentId, TermId, new OpenCourseRequest
+        {
+            CourseId = newCourse.Id,
+            SectionCount = 1,
+            CapacityPerSection = 40,
+            InstructorId = instructor.Id,
+        }, CancellationToken.None);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*haftalik ders saati limiti asiliyor*");
+    }
+
+    [Fact]
     public async Task OpenCourseAsync_WhenApprovedQuotaRemains_AppendsNewSectionsWithoutReplacingPolicies()
     {
         using var context = CreateContext();
@@ -368,7 +417,13 @@ public class CourseOpeningServiceTests
         context.SaveChanges();
     }
 
-    private static Instructor AddInstructor(AppDbContext context, int id, int userId, int departmentId)
+    private static Instructor AddInstructor(
+        AppDbContext context,
+        int id,
+        int userId,
+        int departmentId,
+        string title = "Dr.",
+        int maxWeeklyHours = 12)
     {
         context.Users.Add(new ApplicationUser
         {
@@ -386,8 +441,8 @@ public class CourseOpeningServiceTests
             Id = id,
             UserId = userId,
             DepartmentId = departmentId,
-            Title = "Dr.",
-            MaxWeeklyHours = 12
+            Title = title,
+            MaxWeeklyHours = maxWeeklyHours
         };
 
         context.Instructors.Add(instructor);
@@ -436,13 +491,15 @@ public class CourseOpeningServiceTests
         int capacity = 40,
         int enrolledCount = 0,
         bool isActive = true,
-        int sectionNumber = 1)
+        int sectionNumber = 1,
+        int? instructorId = null)
     {
         var section = new CourseSection
         {
             Id = id,
             CourseId = courseId,
             TermId = TermId,
+            InstructorId = instructorId,
             Capacity = capacity,
             EnrolledCount = enrolledCount,
             SectionNumber = sectionNumber,
@@ -490,29 +547,40 @@ public class CourseOpeningServiceTests
     // Test'lerde çoğu metod LifecycleService'tedir; sadece GetCurriculumCoursesForOpeningAsync
     // QueryService'tedir. CreateService default olarak Lifecycle döner (geriye dönük uyum).
 
-    private static CourseSectionLifecycleService CreateService(AppDbContext context, IEnrollmentForecastService? forecastService = null)
+    private static CourseSectionLifecycleService CreateService(
+        AppDbContext context,
+        IEnrollmentForecastService? forecastService = null,
+        ISystemConfigProvider? systemConfig = null)
     {
         _ = forecastService; // Lifecycle servisi forecast kullanmıyor; parametre query yardımcı testleri için tutuldu
         var cacheInvalidator = Mock.Of<IEnrollmentForecastCacheInvalidator>();
-        var systemConfig = new FakeSystemConfigProvider();
+        systemConfig ??= new FakeSystemConfigProvider();
         var helpers = new CourseOpeningHelpers(context);
         return new CourseSectionLifecycleService(context, cacheInvalidator, systemConfig, helpers);
     }
 
-    private static CourseOpeningQueryService CreateQueryService(AppDbContext context, IEnrollmentForecastService? forecastService = null)
+    private static CourseOpeningQueryService CreateQueryService(
+        AppDbContext context,
+        IEnrollmentForecastService? forecastService = null,
+        ISystemConfigProvider? systemConfig = null)
     {
         forecastService ??= Mock.Of<IEnrollmentForecastService>();
+        systemConfig ??= new FakeSystemConfigProvider();
         var helpers = new CourseOpeningHelpers(context);
-        return new CourseOpeningQueryService(context, forecastService, helpers);
+        return new CourseOpeningQueryService(context, forecastService, helpers, systemConfig);
     }
 
     /// <summary>Mock.Of default 0 döner ve fallback'i ezer; bu fake fallback'i doğru iletir.</summary>
-    private sealed class FakeSystemConfigProvider : ISystemConfigProvider
+    private sealed class FakeSystemConfigProvider(IReadOnlyDictionary<string, string>? values = null) : ISystemConfigProvider
     {
-        public Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default) => Task.FromResult(fallback);
-        public Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default) => Task.FromResult(fallback);
-        public Task<string> GetStringAsync(string key, string fallback, CancellationToken ct = default) => Task.FromResult(fallback);
-        public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default) => Task.FromResult(fallback);
+        public Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && int.TryParse(value, out var parsed) ? parsed : fallback);
+        public Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && decimal.TryParse(value, out var parsed) ? parsed : fallback);
+        public Task<string> GetStringAsync(string key, string fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) ? value : fallback);
+        public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && bool.TryParse(value, out var parsed) ? parsed : fallback);
         public void InvalidateCache(string key) { }
     }
 }

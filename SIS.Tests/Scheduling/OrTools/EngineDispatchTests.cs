@@ -91,6 +91,25 @@ public class EngineDispatchTests
         dto.Assignments.Should().BeEmpty();
         dto.Failures.Should().BeEmpty();
         dto.Stats.ElapsedSeconds.Should().BeApproximately(0.5, 0.01);
+        dto.Stats.Engine.Should().Be("v2-ortools");
+        dto.Stats.SearchStrategy.Should().Be("auto");
+        dto.Stats.UnsatCoreEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunAsync_InvalidEngine_ThrowsInvalidOperationException()
+    {
+        var (engine, _, _) = BuildAutoScheduleEngine(
+            engineFlag: "legacy-v1",
+            solverResult: BuildEmptySuccessResult());
+
+        var act = async () => await engine.RunAsync(
+            new AutoScheduleRequest { TermId = 1, FacultyId = 1, Seed = 42 },
+            userId: null,
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Schedule.Engine*");
     }
 
     [Fact]

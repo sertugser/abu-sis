@@ -2,6 +2,8 @@
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.CalendarGenerator.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -36,7 +38,7 @@ public class CalendarGeneratorTests : IDisposable
         _templateService = new CalendarTemplateService(_context);
         _holidayService = new HolidayCalculatorService(_context, _templateService);
         _ruleService = new AcademicCalendarRuleService(_context);
-        _timeSlotService = new TimeSlotService(_context);
+        _timeSlotService = new TimeSlotService(_context, Mock.Of<ISystemConfigProvider>());
         _generatorService = new CalendarGeneratorService(_context, _templateService, _holidayService, _ruleService, _timeSlotService);
     }
 
@@ -1422,6 +1424,5 @@ public class CalendarGeneratorTests : IDisposable
     private static string Json<T>(T value) =>
         JsonSerializer.Serialize(value, TestJsonOptions);
 }
-
 
 

@@ -40,9 +40,16 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const url = error.config?.url ?? '';
-    if (error.response?.status === 401 && !isLoginRequest(url)) {
+    const isAuthEndpoint = url.includes('/auth/');
+    if (error.response?.status === 401 && isAuthEndpoint && !url.includes('/auth/login')) {
       clearStoredAuth({ reason: 'unauthorized' });
       redirectToLogin();
+    }
+    if (error.response?.status === 403 && error.response?.data?.code === 'PasswordChangeRequired') {
+      localStorage.setItem('sis_password_change_required', 'true');
+      if (window.location.pathname !== '/sifre-degistir') {
+        window.location.href = '/sifre-degistir';
+      }
     }
     return Promise.reject(error);
   }

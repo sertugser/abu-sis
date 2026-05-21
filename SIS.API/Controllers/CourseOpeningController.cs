@@ -475,15 +475,17 @@ public class CourseOpeningController(
         }).ToList();
 
         var assignedWeeklyHours = assignedSections.Sum(s => s.WeeklyHours);
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, ct);
+        var effectiveMaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours);
 
         return Ok(new InstructorWorkloadDto
         {
             InstructorId = instructor.Id,
             FullName = fullName,
             Title = instructor.Title,
-            MaxWeeklyHours = instructor.MaxWeeklyHours,
+            MaxWeeklyHours = effectiveMaxWeeklyHours,
             AssignedWeeklyHours = assignedWeeklyHours,
-            RemainingCapacity = Math.Max(0, instructor.MaxWeeklyHours - assignedWeeklyHours),
+            RemainingCapacity = Math.Max(0, effectiveMaxWeeklyHours - assignedWeeklyHours),
             AssignedSections = assignedSections,
         });
     }

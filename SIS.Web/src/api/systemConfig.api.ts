@@ -1,6 +1,11 @@
 import apiClient from './axios';
 import { getFilenameFromContentDisposition, type DownloadableFile } from '../lib/download';
 
+export interface SystemConfigValueOptionDto {
+  value: string;
+  label: string;
+}
+
 export interface SystemConfigDto {
   id: number;
   key: string;
@@ -8,6 +13,11 @@ export interface SystemConfigDto {
   description: string;
   category: string;
   dataType: string;
+  displayName: string;
+  groupKey: string;
+  groupLabel: string;
+  displayOrder: number;
+  options: SystemConfigValueOptionDto[];
 }
 
 export interface SystemConfigImportResult {

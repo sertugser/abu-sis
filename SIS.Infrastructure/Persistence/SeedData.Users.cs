@@ -277,12 +277,21 @@ public static partial class SeedData
                 Email = email,
                 FirstName = firstName,
                 LastName = lastName,
-                EmailConfirmed = true
+                EmailConfirmed = true,
+                PasswordChangedAtUtc = DateTime.UtcNow
             };
             var result = await userManager.CreateAsync(user, password);
             if (!result.Succeeded)
                 throw new InvalidOperationException(
                     $"Failed to create user '{email}': {string.Join(", ", result.Errors.Select(e => e.Description))}");
+        }
+        else if (user.PasswordChangedAtUtc == null)
+        {
+            user.PasswordChangedAtUtc = DateTime.UtcNow;
+            var updateResult = await userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+                throw new InvalidOperationException(
+                    $"Failed to update user '{email}': {string.Join(", ", updateResult.Errors.Select(e => e.Description))}");
         }
 
         if (!await userManager.IsInRoleAsync(user, role))

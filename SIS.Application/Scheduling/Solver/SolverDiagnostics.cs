@@ -9,6 +9,8 @@ public sealed record SolverDiagnostics
     public required long Branches { get; init; }
     public required long Conflicts { get; init; }
     public required double ObjectiveValue { get; init; }
+    public string? SearchStrategy { get; init; }
+    public bool? UnsatCoreEnabled { get; init; }
     public IReadOnlyList<UnsatCoreEntry> UnsatCore { get; init; } = [];
 }
 

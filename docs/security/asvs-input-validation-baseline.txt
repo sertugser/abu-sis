@@ -31,6 +31,7 @@ BulkValidateCellsRequestDto
 ComponentDto
 CopyCurriculumRequest
 CreateAccessRuleRequest
+CreateAcademicCvActivityDto
 CreateAnnouncementCategoryDto
 CreateAnnouncementDto
 CreateAttendanceSessionRequest
@@ -79,6 +80,9 @@ SimulateConstraintChangeRequest
 SimulateMoveRequest
 SubmitEvaluationDto
 SubmitQrAttendanceRequest
+UpdateAcademicCvActivityDto
+UpdateInstructorProfileDto
+UpdateWebModuleControlDto
 SwapSectionsRequestDto
 SystemConfigImportItemDto
 TransferFromTermRequest

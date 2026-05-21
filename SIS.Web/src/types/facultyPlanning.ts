@@ -186,6 +186,12 @@ export interface AutoScheduleStats {
   distinctCourseCount: number;
   /** Başarılı atamaların kullandığı farklı `Classroom` sayısı. */
   usedClassroomCount: number;
+  /** Çalıştırılan planlama motoru anahtarı. */
+  engine: string;
+  /** CP-SAT arama stratejisi. */
+  searchStrategy: string;
+  /** Infeasible durumda UNSAT core açıklamaları üretiliyor mu. */
+  unsatCoreEnabled: boolean;
 }
 
 export interface AutoSchedulePreviewItem {

@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.API.Filters;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -17,15 +18,34 @@ public class StudentManagementController : ControllerBase
 {
     private readonly IAdminStudentService _service;
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfig;
     private readonly IAcademicScopeGuard _scopeGuard;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
+        ISystemConfigProvider systemConfig)
+        : this(service, context, systemConfig, new AcademicScopeGuard(context))
+    {
+    }
+
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard)
+    {
+    }
+
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        ISystemConfigProvider systemConfig,
         IAcademicScopeGuard scopeGuard)
     {
         _service = service;
         _context = context;
+        _systemConfig = systemConfig;
         _scopeGuard = scopeGuard;
     }
 
@@ -48,7 +68,31 @@ public class StudentManagementController : ControllerBase
             : filter with { DepartmentIds = scope.DepartmentIds };
 
         var result = await _service.GetStudentsAsync(appliedFilter);
-        return Ok(result);
+        if (!await ShouldMaskTranscriptSummaryAsync())
+            return Ok(result);
+
+        var items = result.Items
+            .Select(item => new
+            {
+                item.Id,
+                item.StudentNumber,
+                item.FirstName,
+                item.LastName,
+                item.Email,
+                Cgpa = (decimal?)null,
+                CompletedSemesters = (int?)null,
+                item.Status,
+                item.ProgramName,
+                item.ProgramCode,
+                item.DepartmentName,
+                item.AdvisorName,
+                TranscriptAccessible = false,
+                TranscriptAccessMessage = "Akademisyen transkript erisimi sistem ayari nedeniyle kapali."
+            })
+            .Cast<object>()
+            .ToList();
+
+        return Ok(new PagedResult<object>(items, result.TotalCount, result.Page, result.PageSize));
     }
 
     [HttpGet("{id:int}")]
@@ -77,7 +121,31 @@ public class StudentManagementController : ControllerBase
             if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, studentDeptId.Value)) return Forbid();
         }
 
-        return Ok(result);
+        if (!await ShouldMaskTranscriptSummaryAsync())
+            return Ok(result);
+
+        return Ok(new
+        {
+            result.Id,
+            result.StudentNumber,
+            result.FirstName,
+            result.LastName,
+            result.Email,
+            Cgpa = (decimal?)null,
+            Sgpa = (decimal?)null,
+            CompletedSemesters = (int?)null,
+            FrozenSemesterCount = (int?)null,
+            result.Status,
+            result.IsScholarshipStudent,
+            result.HasFinancialBlock,
+            result.ProgramName,
+            result.ProgramCode,
+            result.DepartmentName,
+            result.AdvisorName,
+            result.AdvisorId,
+            TranscriptAccessible = false,
+            TranscriptAccessMessage = "Akademisyen transkript erisimi sistem ayari nedeniyle kapali."
+        });
     }
 
     [HttpPost]
@@ -363,6 +431,17 @@ public async Task<IActionResult> UpdateBulkAdvisorAssignmentSettings(
             return instructor.DepartmentId == departmentId;
 
         return false;
+    }
+
+    private async Task<bool> ShouldMaskTranscriptSummaryAsync(CancellationToken ct = default)
+    {
+        var transcriptClosed = await _systemConfig.GetBoolAsync("Instructor.TranscriptClosed", false, ct);
+        if (!transcriptClosed)
+            return false;
+
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hasCentralAdminRole = roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff");
+        return !hasCentralAdminRole && roles.Overlaps(new[] { "Instructor", "AcademicAdvisor", "Dean", "DepartmentManager" });
     }
 }
 

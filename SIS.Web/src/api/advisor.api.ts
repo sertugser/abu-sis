@@ -20,6 +20,12 @@ export interface PendingApproval {
   curriculumCompletedEcts: number;
 }
 
+export interface PendingApprovalListResponse {
+  calculationMethod: string;
+  calculationMethodLabel: string;
+  items: PendingApproval[];
+}
+
 export interface PendingRegistrationItem {
   registrationId: number;
   courseSectionId: number;
@@ -41,7 +47,7 @@ export interface FailedCourse {
 }
 
 export const getPendingApprovals = () =>
-  apiClient.get<PendingApproval[]>('/advisor/pending-approvals').then(r => r.data);
+  apiClient.get<PendingApprovalListResponse>('/advisor/pending-approvals').then(r => r.data);
 
 export const approveStudent = (studentId: number, note?: string) =>
   apiClient.post('/advisor/approve', { studentId, note });

@@ -14,14 +14,6 @@ public partial class CourseRegistrationService
     public async Task<RegistrationResponseDto> AddToPlanAsync(int studentId, int courseSectionId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
-
         var section = await _context.CourseSections
             .Include(cs => cs.Course)
             .FirstOrDefaultAsync(cs => cs.Id == courseSectionId);
@@ -37,6 +29,14 @@ public partial class CourseRegistrationService
                     new() { Rule = "SectionExists", Message = "Ders sectionu bulunamadi." }
                 }
             };
+            return response;
+        }
+
+        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync(studentId, section.TermId);
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
             return response;
         }
 

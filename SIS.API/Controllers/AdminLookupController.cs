@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -9,7 +10,7 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize]
-public class AdminLookupController(AppDbContext db) : ControllerBase
+public class AdminLookupController(AppDbContext db, ISystemConfigProvider systemConfig) : ControllerBase
 {
     [HttpGet("departments")]
     [RequirePermission("lookup.department")]
@@ -41,7 +42,9 @@ public class AdminLookupController(AppDbContext db) : ControllerBase
     [RequirePermission("lookup.advisor")]
     public async Task<IActionResult> GetAdvisors()
     {
-        var advisors = await (
+        var enableAdvisorOptOutOptions = await systemConfig.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true);
+
+        var query = (
             from i in db.Instructors
             join u in db.Users on i.UserId equals u.Id
             join d in db.Departments on i.DepartmentId equals d.Id
@@ -49,10 +52,23 @@ public class AdminLookupController(AppDbContext db) : ControllerBase
             select new
             {
                 i.Id,
+                i.AdvisorOptOutRequested,
                 FullName = i.Title + " " + u.FirstName + " " + u.LastName,
                 DepartmentName = d.Name,
-            }
-        ).ToListAsync();
+            });
+
+        if (enableAdvisorOptOutOptions)
+            query = query.Where(item => !item.AdvisorOptOutRequested);
+
+        var advisors = await query
+            .Select(item => new
+            {
+                item.Id,
+                item.FullName,
+                item.DepartmentName,
+            })
+            .ToListAsync();
+
         return Ok(advisors);
     }
 }

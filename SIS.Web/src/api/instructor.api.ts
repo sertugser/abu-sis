@@ -6,9 +6,29 @@ export interface InstructorProfile {
   firstName: string;
   lastName: string;
   email: string;
+  departmentId: number;
   departmentName: string;
   facultyName: string;
   maxWeeklyHours: number;
+  officeHours: string;
+  advisorOptOutRequested: boolean;
+  requireOfficeHoursOnProfileUpdate: boolean;
+  primaryEmailImmutable: boolean;
+  enableAdvisorOptOutOptions: boolean;
+  profileOrgUnitUpdateDeadline: string;
+  canUpdateDepartment: boolean;
+  simplifyDashboardStatistics: boolean;
+  faqUrl: string;
+  academicCvActiveYear: number;
+  academicCvApprovedActivityEditable: boolean;
+  academicCvAutoApprove: boolean;
+}
+
+export interface UpdateInstructorProfileDto {
+  email: string;
+  departmentId: number;
+  officeHours?: string;
+  advisorOptOutRequested: boolean;
 }
 
 export interface InstructorScheduleBlock {
@@ -78,8 +98,38 @@ export interface SectionStudentsResponse {
   students: SectionStudent[];
 }
 
+export interface AcademicCvActivity {
+  id: number;
+  activityYear: number;
+  title: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string | null;
+  approvedAt?: string | null;
+  canEdit: boolean;
+}
+
+export interface AcademicCvResponse {
+  activeYear: number;
+  approvedActivityEditable: boolean;
+  autoApprove: boolean;
+  activities: AcademicCvActivity[];
+}
+
+export interface CreateAcademicCvActivityDto {
+  activityYear: number;
+  title: string;
+  description?: string;
+}
+
 export async function getInstructorProfile(): Promise<InstructorProfile> {
   const { data } = await apiClient.get('/instructor/profile');
+  return data;
+}
+
+export async function updateInstructorProfile(dto: UpdateInstructorProfileDto): Promise<InstructorProfile> {
+  const { data } = await apiClient.put('/instructor/profile', dto);
   return data;
 }
 
@@ -97,5 +147,20 @@ export async function getInstructorTerms(): Promise<InstructorTerm[]> {
 
 export async function getSectionStudents(sectionId: number): Promise<SectionStudentsResponse> {
   const { data } = await apiClient.get(`/instructor/section/${sectionId}/students`);
+  return data;
+}
+
+export async function getAcademicCv(): Promise<AcademicCvResponse> {
+  const { data } = await apiClient.get('/instructor/academic-cv');
+  return data;
+}
+
+export async function createAcademicCvActivity(dto: CreateAcademicCvActivityDto): Promise<AcademicCvResponse> {
+  const { data } = await apiClient.post('/instructor/academic-cv', dto);
+  return data;
+}
+
+export async function updateAcademicCvActivity(id: number, dto: CreateAcademicCvActivityDto): Promise<AcademicCvResponse> {
+  const { data } = await apiClient.put(`/instructor/academic-cv/${id}`, dto);
   return data;
 }

@@ -154,6 +154,49 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.AcademicCvActivity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ActivityYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("InstructorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstructorId", "ActivityYear");
+
+                    b.ToTable("AcademicCvActivities");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
                 {
                     b.Property<int>("Id")
@@ -2644,6 +2687,8 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AdvisorOptOutRequested")
+                        .HasColumnType("boolean");
                     b.Property<int?>("AdvisorAssignmentCapacity")
                         .HasColumnType("integer");
 
@@ -2658,6 +2703,10 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("MaxWeeklyHours")
                         .HasColumnType("integer");
+
+                    b.Property<string>("OfficeHours")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -4019,6 +4068,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<DateTime?>("PasswordChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
@@ -4099,6 +4151,17 @@ namespace SIS.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.AcademicCvActivity", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Instructor", "Instructor")
+                        .WithMany("AcademicCvActivities")
+                        .HasForeignKey("InstructorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Instructor");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.AcademicProgram", b =>
@@ -5456,6 +5519,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.Instructor", b =>
                 {
+                    b.Navigation("AcademicCvActivities");
+
                     b.Navigation("Sections");
                 });
 

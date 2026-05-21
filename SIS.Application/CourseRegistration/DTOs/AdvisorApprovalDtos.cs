@@ -1,5 +1,12 @@
 namespace SIS.Application.CourseRegistration.DTOs;
 
+public class PendingApprovalListDto
+{
+    public string CalculationMethod { get; set; } = "standard";
+    public string CalculationMethodLabel { get; set; } = "Standart";
+    public List<PendingApprovalDto> Items { get; set; } = new();
+}
+
 public class PendingApprovalDto
 {
     public int StudentId { get; set; }

@@ -25,6 +25,7 @@ namespace SIS.Infrastructure.Services;
 public partial class SchedulingService : ISchedulingService
 {
     private readonly AppDbContext _context;
+    private readonly ISystemConfigProvider _systemConfig;
     private readonly IConstraintStateLoader _constraintStateLoader;
     private readonly IScheduleWriter _scheduleWriter;
     private readonly IRuleEngine _ruleEngine;
@@ -33,9 +34,11 @@ public partial class SchedulingService : ISchedulingService
         AppDbContext context,
         IConstraintStateLoader constraintStateLoader,
         IScheduleWriter scheduleWriter,
-        IRuleEngine ruleEngine)
+        IRuleEngine ruleEngine,
+        ISystemConfigProvider? systemConfig = null)
     {
         _context = context;
+        _systemConfig = systemConfig ?? new NullSystemConfigProvider();
         _constraintStateLoader = constraintStateLoader;
         _scheduleWriter = scheduleWriter;
         _ruleEngine = ruleEngine;

@@ -10,7 +10,19 @@ using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
 
-public record SystemConfigDto(int Id, string Key, string Value, string? Description, string Category, string DataType);
+public record SystemConfigValueOptionDto(string Value, string Label);
+public record SystemConfigDto(
+    int Id,
+    string Key,
+    string Value,
+    string? Description,
+    string Category,
+    string DataType,
+    string DisplayName,
+    string GroupKey,
+    string GroupLabel,
+    int DisplayOrder,
+    IReadOnlyList<SystemConfigValueOptionDto> Options);
 public record UpdateSystemConfigDto(string Value);
 public record SystemConfigImportItemDto(string Key, string Value);
 
@@ -21,6 +33,86 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
 {
     private readonly AppDbContext _context = context;
     private readonly ISystemConfigProvider _configProvider = configProvider;
+    private sealed record SystemConfigPresentation(
+        string DisplayName,
+        string GroupKey,
+        string GroupLabel,
+        int DisplayOrder,
+        IReadOnlyList<SystemConfigValueOptionDto>? Options = null);
+
+    private static readonly IReadOnlyList<SystemConfigValueOptionDto> BooleanOptions =
+    [
+        new("false", "Hayır"),
+        new("true", "Evet"),
+    ];
+
+    private static readonly IReadOnlyList<SystemConfigValueOptionDto> LanguageOptions =
+    [
+        new("tr-TR", "Türkçe"),
+        new("en-US", "İngilizce"),
+    ];
+
+    private static readonly IReadOnlyList<SystemConfigValueOptionDto> AdvisingCalculationMethodOptions =
+    [
+        new("standard", "Standart"),
+        new("load-based", "Yük Bazlı"),
+    ];
+
+    private static readonly HashSet<string> SchedulerEngineValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "v2-ortools",
+        "cp-sat",
+    };
+
+    private static readonly HashSet<string> SchedulerSearchStrategyValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "auto",
+        "fixed",
+        "portfolio",
+    };
+
+    private static readonly Dictionary<string, SystemConfigPresentation> PresentationMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Application.SocialTranscriptStudentApplicationEnabled"] = new("Sosyal Transkript Öğrenci Başvuru", "application", "Başvuru", 10),
+        ["Application.SocialTranscriptApplicationEvaluationEnabled"] = new("Sosyal Transkript Başvuru Değerlendirme", "application", "Başvuru", 20),
+        ["Application.SocialTranscriptObjectionEnabled"] = new("Sosyal Transkript Öğrenci Başvuru İtiraz", "application", "Başvuru", 30),
+        ["Application.RegistrationFreezeApplicationEnabled"] = new("Kayıt Dondurma Başvuru", "application", "Başvuru", 40),
+        ["Application.CourseWithdrawalEnabled"] = new("Ders Silme Başvurusu Açık", "application", "Başvuru", 50),
+        ["Instructor.StudentContactInfoVisible"] = new("Akademisyen için Öğrenci E-Posta ve GSM Bilgilerini Göster", "instructor", "Akademisyen", 10),
+        ["Instructor.AcademicCvActiveYear"] = new("Akademik CV Faaliyet Girişinde Aktif Yıl", "instructor", "Akademisyen", 20),
+        ["Instructor.AcademicCvApprovedActivityEditable"] = new("Akademik CV Faaliyet Girişinde Onaylı Faaliyet Değiştirilebilir", "instructor", "Akademisyen", 30),
+        ["Instructor.AcademicCvAutoApprove"] = new("Akademik CV Faaliyet Girişinde Otomatik Onayla", "instructor", "Akademisyen", 40),
+        ["Instructor.PhotoRequestAutoApprove"] = new("Akademik Fotoğraf Talebinde Otomatik Onayla", "instructor", "Akademisyen", 50),
+        ["Instructor.SimplifyDashboardStatistics"] = new("Akademisyen açılış sayfasındaki istatistikleri sadeleştir", "instructor", "Akademisyen", 60),
+        ["Instructor.ProfileOrgUnitUpdateDeadline"] = new("Akademisyen Birim, Fakülte, Bölüm, Program Girilen Tarihe Kadar Güncelleme Yapabilir", "instructor", "Akademisyen", 70),
+        ["Instructor.EnableAdvisorOptOutOptions"] = new("Akademisyen Danışmanlık Yapmak İstemiyorum Seçeneklerini Aç", "instructor", "Akademisyen", 80),
+        ["Instructor.DefaultLoginLanguage"] = new("Akademisyen Giriş Sayfası Varsayılan Dil", "instructor", "Akademisyen", 90, LanguageOptions),
+        ["Instructor.HideGradeEntryStatistics"] = new("Akademisyen Not Girişinde İstatistik Kapalı", "instructor", "Akademisyen", 100),
+        ["Instructor.RequireOfficeHoursOnProfileUpdate"] = new("Akademisyen Profil Bilgileri Girilirken Ofis Saatlerini Tanımlamaya Zorla", "instructor", "Akademisyen", 110),
+        ["Instructor.FaqUrl"] = new("Akademisyen Sıkça Sorulan Sorular Bağlantı Adresi", "instructor", "Akademisyen", 120),
+        ["Instructor.TranscriptClosed"] = new("Akademisyen Transkript Kapalı", "instructor", "Akademisyen", 130),
+        ["Instructor.PrimaryEmailImmutable"] = new("Akademisyen 1.e-posta Adresini Değiştiremez", "instructor", "Akademisyen", 140),
+        ["Instructor.AdvisingCalculationMethod"] = new("Danışmanlık Hesaplama Yöntemi", "instructor", "Akademisyen", 150, AdvisingCalculationMethodOptions),
+        ["Registration.HideQuotaInCatalog"] = new("Ders kayıt özet sayfasında kontenjan bilgilerini gizle", "registration-controls", "Ders Kayıt Kontrolleri", 10),
+        ["Registration.AllowNonCurriculumCourseSelection"] = new("Ders Kayıtta Müfredat/Bölüm Dışı Ders Listesinde Programının Dışında Ders Alabilsin mi", "registration-controls", "Ders Kayıt Kontrolleri", 20),
+        ["Registration.EctsLimit.CgpaBelow200"] = new("CGPA 2.00 altı öğrenciler için AKTS üst sınırı", "registration-controls", "Ders Kayıt Kontrolleri", 30),
+        ["Registration.EctsLimit.Cgpa200To249"] = new("CGPA 2.00 - 2.49 öğrenciler için AKTS üst sınırı", "registration-controls", "Ders Kayıt Kontrolleri", 40),
+        ["Registration.EctsLimit.CgpaAbove250"] = new("CGPA 2.50 ve üzeri öğrenciler için AKTS üst sınırı", "registration-controls", "Ders Kayıt Kontrolleri", 50),
+        ["GPA.RetentionThreshold"] = new("Sınıfta kalma için minimum AGNO eşiği", "registration-controls", "Ders Kayıt Kontrolleri", 60),
+        ["Withdrawal.MaxCount.Undergraduate"] = new("Lisans öğrencisi toplam dersten çekilme hakkı", "registration-controls", "Ders Kayıt Kontrolleri", 70),
+        ["Withdrawal.MaxCount.Associate"] = new("Önlisans öğrencisi toplam dersten çekilme hakkı", "registration-controls", "Ders Kayıt Kontrolleri", 80),
+        ["Localization.DefaultLanguage"] = new("Sistem varsayılan dili", "general", "Genel", 20, LanguageOptions),
+        ["Security.PasswordRotationEnabled"] = new("Kullanıcıları periyodik şifre değişimine zorla", "general", "Genel", 30),
+        ["Security.PasswordRotationMonths"] = new("Şifre değiştirme periyodu (ay)", "general", "Genel", 40),
+        ["Audit.RetentionDays"] = new("Denetim kayıtlarını saklama süresi (gün)", "general", "Genel", 50),
+        ["Schedule.AfternoonEndTime"] = new("Öğleden sonra son dersin en geç bitiş saati", "schedule", "Ders/Ders Programı", 10),
+        ["Schedule.BreakBetweenSlotsMinutes"] = new("İki ders arası mola süresi (dakika)", "schedule", "Ders/Ders Programı", 20),
+        ["Schedule.EveningSlotCount"] = new("Akşam ders slot sayısı", "schedule", "Ders/Ders Programı", 30),
+        ["Schedule.LunchBreak.IsHard"] = new("Öğle arasını zorunlu kural olarak uygula", "schedule", "Ders/Ders Programı", 40),
+        ["Schedule.WeekendOnlineOnly"] = new("Hafta sonu slotları sadece çevrim içi olsun", "schedule", "Ders/Ders Programı", 50),
+        ["CourseOpening.DefaultCapacityPerSection"] = new("Ders açılırken / aktarımda fallback şube başı kontenjan", "course-opening", "Ders/Ders Programı", 60),
+        ["CourseOpening.MaxSectionsPerCourse"] = new("Bir ders için tek seferde açılabilecek max şube sayısı", "course-opening", "Ders/Ders Programı", 70),
+    };
 
     private static readonly Dictionary<string, (decimal? Min, decimal? Max)> NumericLimits = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -32,6 +124,29 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["GPA.RetentionThreshold"] = (0, 4),
         ["Withdrawal.MaxCount.Undergraduate"] = (0, 20),
         ["Withdrawal.MaxCount.Associate"] = (0, 20),
+        ["Instructor.AcademicCvActiveYear"] = (2000, 2100),
+        ["Instructor.MaxWeeklyHours.Professor"] = (0, 60),
+        ["Instructor.MaxWeeklyHours.AssociateProfessor"] = (0, 60),
+        ["Instructor.MaxWeeklyHours.AssistantProfessor"] = (0, 60),
+        ["Instructor.MaxWeeklyHours.Lecturer"] = (0, 60),
+        ["Classroom.AmphiThreshold"] = (0, 500),
+        ["Classroom.OccupancyTarget.Min"] = (0, 100),
+        ["Classroom.OccupancyTarget.Max"] = (0, 100),
+        ["SoftConstraint.S2.MaxDailyHours"] = (0, 24),
+        ["SoftConstraint.S3.MaxSectionsPerSlot"] = (0, 100),
+        ["SoftConstraint.S4.MinCoPairThreshold"] = (0, 1000),
+        ["SoftConstraint.S7.MaxGapSlots"] = (0, 20),
+        ["SoftConstraint.Weight.S1"] = (0, 10),
+        ["SoftConstraint.Weight.S2"] = (0, 10),
+        ["SoftConstraint.Weight.S3"] = (0, 10),
+        ["SoftConstraint.Weight.S4"] = (0, 10),
+        ["SoftConstraint.Weight.S5"] = (0, 10),
+        ["SoftConstraint.Weight.S7"] = (0, 10),
+        ["SoftConstraint.Weight.S8"] = (0, 10),
+        ["SoftConstraint.Weight.S9"] = (0, 10),
+        ["SoftConstraint.Weight.S12"] = (0, 10),
+        ["Scheduling.MaxBacktrackingDepth"] = (0, 20),
+        ["Schedule.MaxConsecutiveHours"] = (1, 12),
         ["Schedule.SlotDurationMinutes"] = (30, 180),
         ["Schedule.BreakBetweenSlotsMinutes"] = (0, 60),
         ["Schedule.EveningSlotCount"] = (0, 10),
@@ -48,6 +163,16 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         "Schedule.LunchBreakStart",
         "Schedule.LunchBreakEnd",
         "Schedule.EveningStartTime",
+    };
+
+    private static readonly HashSet<string> DateKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Instructor.ProfileOrgUnitUpdateDeadline",
+    };
+
+    private static readonly HashSet<string> UrlKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Instructor.FaqUrl",
     };
 
     private static readonly HashSet<string> DayNames = new(StringComparer.OrdinalIgnoreCase)
@@ -75,10 +200,13 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(c => c.Category == category);
 
-        var configs = await query
-            .OrderBy(c => c.Category).ThenBy(c => c.Key)
-            .Select(c => new SystemConfigDto(c.Id, c.Key, c.Value, c.Description, c.Category, c.DataType))
-            .ToListAsync(ct);
+        var configs = (await query
+            .ToListAsync(ct))
+            .Select(MapToDto)
+            .OrderBy(config => config.GroupLabel, StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true))
+            .ThenBy(config => config.DisplayOrder)
+            .ThenBy(config => config.DisplayName, StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true))
+            .ToList();
 
         return Ok(configs);
     }
@@ -89,13 +217,12 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
     {
         var config = await _context.SystemConfigs.AsNoTracking()
             .Where(c => c.Id == id)
-            .Select(c => new SystemConfigDto(c.Id, c.Key, c.Value, c.Description, c.Category, c.DataType))
             .FirstOrDefaultAsync(ct);
 
         if (config == null)
             return NotFound(new { error = "Konfigürasyon bulunamadı." });
 
-        return Ok(config);
+        return Ok(MapToDto(config));
     }
 
     [HttpGet("limits")]
@@ -135,23 +262,80 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
 
         _configProvider.InvalidateCache(config.Key);
 
-        return Ok(new SystemConfigDto(config.Id, config.Key, config.Value, config.Description, config.Category, config.DataType));
+        return Ok(MapToDto(config));
     }
 
     [HttpGet("export")]
     [RequirePermission("menu.system-config.export")]
     public async Task<IActionResult> Export(CancellationToken ct)
     {
-        var configs = await _context.SystemConfigs
+        var configs = (await _context.SystemConfigs
             .AsNoTracking()
-            .OrderBy(c => c.Category)
-            .ThenBy(c => c.Key)
-            .Select(c => new SystemConfigDto(c.Id, c.Key, c.Value, c.Description, c.Category, c.DataType))
-            .ToListAsync(ct);
+            .ToListAsync(ct))
+            .Select(MapToDto)
+            .OrderBy(config => config.GroupLabel, StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true))
+            .ThenBy(config => config.DisplayOrder)
+            .ThenBy(config => config.DisplayName, StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true))
+            .ToList();
 
         var json = JsonSerializer.Serialize(configs, ExportJsonOptions);
         var fileName = $"system-config-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
         return File(Encoding.UTF8.GetBytes(json), "application/json", fileName);
+    }
+
+    private static SystemConfigDto MapToDto(SIS.Domain.Entities.SystemConfig config)
+    {
+        var presentation = ResolvePresentation(config);
+        var options = presentation.Options
+            ?? (string.Equals(config.DataType, "bool", StringComparison.OrdinalIgnoreCase)
+                ? BooleanOptions
+                : []);
+
+        return new SystemConfigDto(
+            config.Id,
+            config.Key,
+            config.Value,
+            config.Description,
+            config.Category,
+            config.DataType,
+            presentation.DisplayName,
+            presentation.GroupKey,
+            presentation.GroupLabel,
+            presentation.DisplayOrder,
+            options);
+    }
+
+    private static SystemConfigPresentation ResolvePresentation(SIS.Domain.Entities.SystemConfig config)
+    {
+        if (PresentationMap.TryGetValue(config.Key, out var presentation))
+            return presentation;
+
+        var (groupKey, groupLabel, baseOrder) = ResolveGroup(config.Category);
+        return new SystemConfigPresentation(
+            config.Description ?? config.Key,
+            groupKey,
+            groupLabel,
+            baseOrder + Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(config.Key)) % 10_000);
+    }
+
+    private static (string GroupKey, string GroupLabel, int BaseOrder) ResolveGroup(string category)
+    {
+        return category.Trim().ToLowerInvariant() switch
+        {
+            "instructor" => ("instructor", "Akademisyen", 10_000),
+            "application" => ("application", "Başvuru", 20_000),
+            "registrationcontrol" => ("registration-controls", "Ders Kayıt Kontrolleri", 30_000),
+            "registration" => ("registration-controls", "Ders Kayıt Kontrolleri", 30_000),
+            "gpa" => ("registration-controls", "Ders Kayıt Kontrolleri", 30_000),
+            "schedule" => ("schedule", "Ders/Ders Programı", 40_000),
+            "scheduling" => ("schedule", "Ders/Ders Programı", 40_000),
+            "courseopening" => ("course-opening", "Ders/Ders Programı", 40_000),
+            "attendance" => ("general", "Genel", 50_000),
+            "security" => ("general", "Genel", 50_000),
+            "localization" => ("general", "Genel", 50_000),
+            "general" => ("general", "Genel", 50_000),
+            _ => ("general", "Genel", 90_000),
+        };
     }
 
     [HttpPost("import")]
@@ -294,6 +478,18 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
                     return false;
                 }
 
+                if (DateKeys.Contains(key))
+                {
+                    if (!DateOnly.TryParseExact(rawValue.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateValue))
+                    {
+                        error = "Tarih değeri yyyy-MM-dd formatında girilmelidir (ör. 2026-05-05).";
+                        return false;
+                    }
+
+                    normalizedValue = dateValue.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    return true;
+                }
+
                 if (TimeKeys.Contains(key))
                 {
                     if (!TimeOnly.TryParseExact(rawValue.Trim(), "HH:mm", CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
@@ -323,6 +519,45 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
                     }
 
                     normalizedValue = string.Join(",", days);
+                    return true;
+                }
+
+                if (string.Equals(key, "Schedule.Engine", StringComparison.OrdinalIgnoreCase))
+                {
+                    var trimmedValue = rawValue.Trim();
+                    if (!SchedulerEngineValues.Contains(trimmedValue))
+                    {
+                        error = "Geçerli motor değerleri: v2-ortools, cp-sat";
+                        return false;
+                    }
+
+                    normalizedValue = trimmedValue.ToLowerInvariant();
+                    return true;
+                }
+
+                if (string.Equals(key, "Schedule.OrTools.SearchStrategy", StringComparison.OrdinalIgnoreCase))
+                {
+                    var trimmedValue = rawValue.Trim();
+                    if (!SchedulerSearchStrategyValues.Contains(trimmedValue))
+                    {
+                        error = "Geçerli arama stratejileri: auto, fixed, portfolio";
+                        return false;
+                    }
+
+                    normalizedValue = trimmedValue.ToLowerInvariant();
+                    return true;
+                }
+
+                if (UrlKeys.Contains(key))
+                {
+                    if (!Uri.TryCreate(rawValue.Trim(), UriKind.Absolute, out var uri)
+                        || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    {
+                        error = "Geçerli bir http/https URL değeri girilmelidir.";
+                        return false;
+                    }
+
+                    normalizedValue = uri.ToString();
                     return true;
                 }
 

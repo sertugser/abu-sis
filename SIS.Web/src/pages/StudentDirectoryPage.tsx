@@ -29,7 +29,8 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-function cgpaColor(cgpa: number) {
+function cgpaColor(cgpa: number | null) {
+  if (cgpa === null) return 'text-muted-foreground';
   if (cgpa >= 3.0) return 'text-green-600';
   if (cgpa >= 2.0) return 'text-yellow-600';
   return 'text-red-600';
@@ -232,11 +233,17 @@ export default function StudentDirectoryPage() {
                     <div className="text-xs text-muted-foreground/70">{student.departmentName}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`font-semibold ${cgpaColor(student.cgpa)}`}>
-                      {student.cgpa.toFixed(2)}
-                    </span>
+                    {student.transcriptAccessible === false ? (
+                      <span className="text-xs font-medium text-muted-foreground">Kapalı</span>
+                    ) : (
+                      <span className={`font-semibold ${cgpaColor(student.cgpa)}`}>
+                        {student.cgpa?.toFixed(2) ?? '—'}
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">{student.completedSemesters}</td>
+                  <td className="px-4 py-3 text-center text-muted-foreground">
+                    {student.completedSemesters ?? '—'}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">{student.advisorName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <Badge variant={STATUS_VARIANT[student.status] ?? 'secondary'}>
@@ -286,6 +293,11 @@ export default function StudentDirectoryPage() {
           {selectedStudent && (
             <div className="space-y-4 py-2">
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {selectedStudent.transcriptAccessible === false && (
+                  <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {selectedStudent.transcriptAccessMessage ?? 'Transkript özeti bu kullanıcı için kapalı.'}
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Öğrenci No</p>
                   <p className="font-mono font-semibold mt-0.5">{selectedStudent.studentNumber}</p>
@@ -313,13 +325,17 @@ export default function StudentDirectoryPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">GNO</p>
-                  <p className={`font-semibold mt-0.5 ${cgpaColor(selectedStudent.cgpa)}`}>
-                    {selectedStudent.cgpa.toFixed(2)} / 4.00
-                  </p>
+                  {selectedStudent.transcriptAccessible === false ? (
+                    <p className="mt-0.5 text-muted-foreground">Kapalı</p>
+                  ) : (
+                    <p className={`font-semibold mt-0.5 ${cgpaColor(selectedStudent.cgpa)}`}>
+                      {selectedStudent.cgpa?.toFixed(2) ?? '—'} / 4.00
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tamamlanan Dönem</p>
-                  <p className="mt-0.5">{selectedStudent.completedSemesters}</p>
+                  <p className="mt-0.5">{selectedStudent.completedSemesters ?? '—'}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Danışman</p>
