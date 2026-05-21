@@ -96,7 +96,10 @@ public sealed class SolverRequestBuilder
         var instructorMaxHours = await _context.Instructors
             .AsNoTracking()
             .Where(i => instructorIds.Contains(i.Id))
-            .ToDictionaryAsync(i => i.Id, i => i.MaxWeeklyHours, cancellationToken);
+            .ToDictionaryAsync(
+                i => i.Id,
+                i => i.MaxWeeklyHours,
+                cancellationToken);
 
         // Plan 6 Task 1 — Course → Year mapping from CurriculumCourses.
         // year = (SuggestedSemester - 1) / 2 (0..3 = 1.-4. sınıf).

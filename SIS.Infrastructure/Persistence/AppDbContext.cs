@@ -26,6 +26,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     // DbSets
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
+    public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<AcademicProgram> AcademicPrograms => Set<AcademicProgram>();
@@ -155,6 +156,18 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(i => i.DepartmentId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AcademicCvActivity>(e =>
+        {
+            e.Property(a => a.Title).IsRequired().HasMaxLength(200);
+            e.Property(a => a.Description).HasMaxLength(2000);
+            e.HasIndex(a => new { a.InstructorId, a.ActivityYear });
+
+            e.HasOne(a => a.Instructor)
+             .WithMany(i => i.AcademicCvActivities)
+             .HasForeignKey(a => a.InstructorId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Faculty ─────────────────────────────────────────────

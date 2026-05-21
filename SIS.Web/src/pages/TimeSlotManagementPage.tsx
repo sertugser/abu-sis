@@ -110,10 +110,21 @@ export default function TimeSlotManagementPage() {
   // Tüm 7 günü sırayla göster — admin hafta sonu için de slot ekleyebilsin.
   // Sıralama: Pzt, Sal, Çar, Per, Cuma, Cts, Paz.
   const DAY_ORDER: DayOfWeekName[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const visibleDays = DAY_ORDER.map(d => ({
+  const allowedDaySet = useMemo(() => new Set(settings.workDays), [settings.workDays]);
+  const visibleDays = DAY_ORDER.filter(d => allowedDaySet.has(d) || slotsByDay.has(d)).map(d => ({
     value: d,
     label: DAY_OF_WEEK_OPTIONS.find(o => o.value === d)!.label,
   }));
+
+  const daySelectOptions = useMemo(() => {
+    const editableDays = DAY_OF_WEEK_OPTIONS.filter(option => allowedDaySet.has(option.value));
+    if (editableDays.length > 0) return editableDays;
+    return DAY_OF_WEEK_OPTIONS.filter(option => DAY_ORDER.slice(0, 5).includes(option.value));
+  }, [allowedDaySet]);
+
+  function isAllowedDay(day: DayOfWeekName): boolean {
+    return allowedDaySet.has(day);
+  }
 
   /** Akıllı Öner: seçili gün için bir sonraki slotu hesapla, form'a doldur + reason mesajı göster */
   function applySuggestion(forDay?: DayOfWeekName, durationMinutes?: number) {
@@ -139,10 +150,18 @@ export default function TimeSlotManagementPage() {
   }
 
   function openCreate(presetDay?: DayOfWeekName) {
-    // Dialog'u BOŞ aç — kullanıcı Akıllı Öner butonuna basınca form dolsun
+    const defaultDay = presetDay && isAllowedDay(presetDay)
+      ? presetDay
+      : daySelectOptions[0]?.value ?? 'Monday';
+    const startTime = settings.morningStartTime;
+    const endTime = minutesToTime(parseTimeToMinutes(startTime) + settings.slotDurationMinutes);
+
     setForm({
       ...emptyForm(),
-      dayOfWeek: presetDay ?? 'Monday',
+      dayOfWeek: defaultDay,
+      startTime,
+      endTime,
+      allowedMode: computeAllowedModeFor(defaultDay, startTime, settings),
     });
     setFormError('');
     setSuggestionMessage('');
@@ -183,6 +202,20 @@ export default function TimeSlotManagementPage() {
   function validate(): string | null {
     if (!form.startTime || !form.endTime) return 'Başlangıç ve bitiş saati zorunludur.';
     if (form.endTime <= form.startTime) return 'Bitiş başlangıçtan sonra olmalı.';
+    if (!isAllowedDay(form.dayOfWeek)) return 'Seçilen gün sistemde ders günü olarak tanımlı değil.';
+
+    const duration = parseTimeToMinutes(form.endTime) - parseTimeToMinutes(form.startTime);
+    if (duration !== settings.slotDurationMinutes)
+      return `Slot süresi sistem ayarı gereği tam ${settings.slotDurationMinutes} dakika olmalıdır.`;
+
+    if (
+      settings.lunchBreakIsHard &&
+      form.startTime < settings.lunchBreakEnd &&
+      form.endTime > settings.lunchBreakStart
+    ) {
+      return `Öğle arası sistem ayarı gereği ${settings.lunchBreakStart}–${settings.lunchBreakEnd} aralığında slot tanımlanamaz.`;
+    }
+
     return null;
   }
 
@@ -379,13 +412,15 @@ export default function TimeSlotManagementPage() {
                     <span className="text-[11px] text-slate-400 tabular-nums">{daySlots.length}</span>
                     {isTermEditable && (
                       <>
-                        <button
-                          onClick={() => openCreate(day.value)}
-                          className="h-5 w-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-0 group-hover/col:opacity-100 transition"
-                          title={`${day.label} gününe yeni slot ekle (akıllı öner)`}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
+                        {isAllowedDay(day.value) && (
+                          <button
+                            onClick={() => openCreate(day.value)}
+                            className="h-5 w-5 inline-flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 opacity-0 group-hover/col:opacity-100 transition"
+                            title={`${day.label} gününe yeni slot ekle (akıllı öner)`}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        )}
                         {daySlots.length > 0 && (
                           <button
                             onClick={() => setCopyFromDay(day.value)}
@@ -454,18 +489,28 @@ export default function TimeSlotManagementPage() {
                 value={form.dayOfWeek}
                 onChange={e => { setForm({ ...form, dayOfWeek: e.target.value as DayOfWeekName }); setSuggestionMessage(''); }}
               >
-                {DAY_OF_WEEK_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                {[
+                  ...daySelectOptions,
+                  ...(daySelectOptions.some(option => option.value === form.dayOfWeek)
+                    ? []
+                    : DAY_OF_WEEK_OPTIONS.filter(option => option.value === form.dayOfWeek)),
+                ].map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Ders günleri: {daySelectOptions.map(day => day.label).join(', ')}
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium block mb-1">Başlangıç</label>
                 <Input type="time" value={form.startTime} onChange={e => { setForm({ ...form, startTime: e.target.value }); setSuggestionMessage(''); }} />
+                <p className="text-xs text-muted-foreground mt-1">En erken başlangıç: {settings.morningStartTime}</p>
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1">Bitiş</label>
                 <Input type="time" value={form.endTime} onChange={e => { setForm({ ...form, endTime: e.target.value }); setSuggestionMessage(''); }} />
+                <p className="text-xs text-muted-foreground mt-1">Sabit süre: {settings.slotDurationMinutes} dk</p>
               </div>
             </div>
 
@@ -626,7 +671,7 @@ export default function TimeSlotManagementPage() {
               Hedef günde aynı saat varsa o slot atlanır, çakışma üretilmez.
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {DAY_OF_WEEK_OPTIONS.filter(d => d.value !== copyFromDay).map(d => (
+              {daySelectOptions.filter(d => d.value !== copyFromDay).map(d => (
                 <Button
                   key={d.value}
                   size="sm"
@@ -665,6 +710,7 @@ function ConfigInfoCard({ settings }: { settings: ScheduleSettings }) {
         </Link>
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <InfoRow icon={<Sparkles className="h-3 w-3" />} label="Ders günleri" value={settings.workDays.map(dayLabelFor).join(', ')} />
         <InfoRow icon={<Coffee className="h-3 w-3" />} label="Öğle arası" value={`${settings.lunchBreakStart}–${settings.lunchBreakEnd}`} />
         <InfoRow icon={<Sunset className="h-3 w-3" />} label="Yüz-yüze cutoff" value={settings.faceToFaceCutoffTime} />
         <InfoRow icon={<Moon className="h-3 w-3" />} label="Akşam slotu" value={`${settings.eveningStartTime}+`} />
@@ -682,6 +728,26 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       <span className="font-medium text-slate-700 tabular-nums">{value}</span>
     </div>
   );
+}
+
+function dayLabelFor(day: DayOfWeekName): string {
+  return DAY_OF_WEEK_OPTIONS.find(option => option.value === day)?.label ?? day;
+}
+
+function computeAllowedModeFor(
+  day: DayOfWeekName,
+  startTime: string,
+  settings: ScheduleSettings,
+): TimeSlotAllowedMode {
+  if (parseTimeToMinutes(startTime) >= parseTimeToMinutes(settings.faceToFaceCutoffTime)) {
+    return 'OnlineOnly';
+  }
+
+  if (settings.weekendOnlineOnly && (day === 'Saturday' || day === 'Sunday')) {
+    return 'OnlineOnly';
+  }
+
+  return 'Both';
 }
 
 // ── Slot satırı — kompakt, hover'da aksiyon butonları ────────────────────

@@ -32,6 +32,7 @@ export interface GradesResponse {
   courseCode: string;
   courseName: string;
   isFinalized: boolean;
+  hideStatistics?: boolean;
   components: GradeComponent[];
   students: StudentGradeRow[];
 }

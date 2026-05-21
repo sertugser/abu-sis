@@ -24,6 +24,17 @@ export function useUpdateSystemConfig() {
     mutationFn: ({ id, value }: { id: number; value: string }) => updateSystemConfig(id, value),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentTranscript });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.termGpaHistory });
+      qc.invalidateQueries({ queryKey: ['studentGradeStatistics'] });
+      qc.invalidateQueries({ queryKey: ['grades'] });
+      qc.invalidateQueries({ queryKey: ['advisor'] });
+      qc.invalidateQueries({ queryKey: ['sectionStudents'] });
+      qc.invalidateQueries({ queryKey: ['sectionDetail'] });
+      qc.invalidateQueries({ queryKey: ['instructorSections'] });
+      qc.invalidateQueries({ queryKey: ['instructorProfile'] });
       qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
@@ -37,6 +48,17 @@ export function useImportSystemConfigs() {
     mutationFn: (payload: unknown) => importSystemConfigs(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.systemConfigs });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.activeTerm });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.studentTranscript });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.termGpaHistory });
+      qc.invalidateQueries({ queryKey: ['studentGradeStatistics'] });
+      qc.invalidateQueries({ queryKey: ['grades'] });
+      qc.invalidateQueries({ queryKey: ['advisor'] });
+      qc.invalidateQueries({ queryKey: ['sectionStudents'] });
+      qc.invalidateQueries({ queryKey: ['sectionDetail'] });
+      qc.invalidateQueries({ queryKey: ['instructorSections'] });
+      qc.invalidateQueries({ queryKey: ['instructorProfile'] });
       qc.invalidateQueries({ queryKey: ['studentAttendanceStatus'] });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },

@@ -56,6 +56,8 @@ public sealed class AutoScheduleEngine
         {
             await ReportAsync("started", 0, detail: "Program oluşturma başlatılıyor...");
 
+            var engineKey = await ResolveEngineAsync(ct);
+
             var seed = request.Seed ?? (int)(DateTime.UtcNow.Ticks % int.MaxValue);
 
             await ReportAsync("v2-building-request", 10,
@@ -147,7 +149,7 @@ public sealed class AutoScheduleEngine
             await ReportAsync("complete", 100,
                 detail: $"Program oluşturuldu ({FormatSolverStatus(solverResult.Status)}, {solverResult.Diagnostics.ElapsedSeconds:F1} sn).");
 
-            return MapSolverResultToPreviewDto(solverResult, solverRequest, seed);
+            return MapSolverResultToPreviewDto(solverResult, solverRequest, seed, engineKey);
         }
         catch (OperationCanceledException)
         {
@@ -178,6 +180,25 @@ public sealed class AutoScheduleEngine
         _ => status.ToString().ToLowerInvariant()
     };
 
+    private async Task<string> ResolveEngineAsync(CancellationToken ct)
+    {
+        var configuredEngine = await _configProvider.GetStringAsync(
+            "Schedule.Engine",
+            "v2-ortools",
+            ct);
+
+        var effectiveEngine = string.IsNullOrWhiteSpace(configuredEngine)
+            ? "v2-ortools"
+            : configuredEngine.Trim();
+        var normalized = effectiveEngine.ToLowerInvariant();
+        return normalized switch
+        {
+            "v2-ortools" or "cp-sat" => normalized,
+            _ => throw new InvalidOperationException(
+                $"Geçersiz Schedule.Engine değeri: '{configuredEngine}'. Desteklenen değerler: v2-ortools, cp-sat.")
+        };
+    }
+
     /// <summary>
     /// SolverResult → AutoSchedulePreviewDto mapping. CP-SAT'ın ürettiği Assignment ve Failure
     /// listelerini frontend'in beklediği DTO formatına çevirir.
@@ -185,7 +206,8 @@ public sealed class AutoScheduleEngine
     private static AutoSchedulePreviewDto MapSolverResultToPreviewDto(
         SolverResult result,
         SolverRequest solverRequest,
-        int seed)
+        int seed,
+        string engineKey)
     {
         var sectionLookup = solverRequest.Sections.ToDictionary(s => s.Id, s => s);
         var classroomLookup = solverRequest.Classrooms.ToDictionary(c => c.Id, c => c);
@@ -288,7 +310,10 @@ public sealed class AutoScheduleEngine
             {
                 ElapsedSeconds = result.Diagnostics.ElapsedSeconds,
                 DistinctCourseCount = distinctCourseCount,
-                UsedClassroomCount = usedClassroomCount
+                UsedClassroomCount = usedClassroomCount,
+                Engine = engineKey,
+                SearchStrategy = result.Diagnostics.SearchStrategy ?? "auto",
+                UnsatCoreEnabled = result.Diagnostics.UnsatCoreEnabled ?? true
             }
         };
     }

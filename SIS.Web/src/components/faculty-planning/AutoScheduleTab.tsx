@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlotAssignDialog } from './SlotAssignDialog';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  CheckCircle2, XCircle,
+  AlertTriangle, CheckCircle2, XCircle,
   RotateCcw, Trash2,
 } from 'lucide-react';
 import {
@@ -18,6 +19,7 @@ import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/f
 import { CalendarGrid } from './CalendarGrid';
 import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
+import { toApiError } from '@/lib/apiError';
 
 interface AutoScheduleTabProps {
   facultyId: number;
@@ -60,6 +62,7 @@ export function AutoScheduleTab({
   const [userSelectedRunId, setUserSelectedRunId] = useState<number | null>(null);
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const [assignSlot, setAssignSlot] = useState<{
     day: number;
     slotOrder: number;
@@ -98,9 +101,14 @@ export function AutoScheduleTab({
       onTriggerConsumed?.(triggerRun);
       setUserSelectedRunId(null);
       setLastAppliedIds([]);
+      setRunError(null);
       applyMutation.reset();
       previewMutation.mutate({ facultyId, termId }, {
         onSuccess: () => setShowResultModal(true),
+        onError: (error) => {
+          const apiError = toApiError(error, 'Otomatik programlama başlatılamadı.');
+          setRunError(apiError.message);
+        },
       });
     }
   }, [triggerRun, consumedTriggerRun, onTriggerConsumed, termId, facultyId, previewMutation, applyMutation]);
@@ -128,6 +136,7 @@ export function AutoScheduleTab({
     previewMutation.reset();
     setUserSelectedRunId(null);
     setLastAppliedIds([]);
+    setRunError(null);
     applyMutation.reset();
     setShowResultModal(false);
   }, [previewMutation, applyMutation]);
@@ -242,6 +251,13 @@ export function AutoScheduleTab({
 
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
+
+      {runError && (
+        <Alert variant="destructive" className="mb-3">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{runError}</AlertDescription>
+        </Alert>
+      )}
 
       {/* ── Takvim — tam alan ──
           overflow-auto: CalendarGrid içerik-bazlı boyutlanıyor; uzun gridlerde dikey scroll

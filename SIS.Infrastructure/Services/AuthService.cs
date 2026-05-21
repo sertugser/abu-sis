@@ -4,8 +4,10 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using SIS.Application.Auth;
 using SIS.Application.Auth.DTOs;
 using SIS.Application.Auth.Services;
+using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services;
@@ -14,11 +16,16 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        IConfiguration configuration,
+        ISystemConfigProvider systemConfig)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _systemConfig = systemConfig;
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto loginDto)
@@ -72,23 +79,7 @@ public class AuthService : IAuthService
         // 5. If success: reset failed count via userManager.ResetAccessFailedCountAsync
         await _userManager.ResetAccessFailedCountAsync(user);
 
-        // 6. Get user roles
-        var roles = await _userManager.GetRolesAsync(user);
-
-        // 7. Generate JWT token with claims
-        var token = GenerateJwtToken(user, roles);
-
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var expiresInMinutes = double.Parse(jwtSettings["ExpiresInMinutes"]!);
-
-        // 8. Return AuthResponseDto
-        return new AuthResponseDto
-        {
-            Success = true,
-            Token = token,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(expiresInMinutes),
-            Roles = roles.ToArray()
-        };
+        return await BuildAuthResponseAsync(user);
     }
 
     public async Task<AuthResponseDto> RefreshTokenAsync(string token)
@@ -150,17 +141,7 @@ public class AuthService : IAuthService
                 };
             }
 
-            var roles = await _userManager.GetRolesAsync(user);
-            var newToken = GenerateJwtToken(user, roles);
-            var expiresInMinutes = double.Parse(jwtSettings["ExpiresInMinutes"]!);
-
-            return new AuthResponseDto
-            {
-                Success = true,
-                Token = newToken,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(expiresInMinutes),
-                Roles = roles.ToArray()
-            };
+            return await BuildAuthResponseAsync(user);
         }
         catch
         {
@@ -172,7 +153,65 @@ public class AuthService : IAuthService
         }
     }
 
-    private string GenerateJwtToken(ApplicationUser user, IList<string> roles)
+    public async Task<AuthResponseDto> ChangePasswordAsync(int userId, ChangePasswordDto dto, CancellationToken ct = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return new AuthResponseDto
+            {
+                Success = false,
+                Error = "User not found."
+            };
+        }
+
+        var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+        if (!result.Succeeded)
+        {
+            return new AuthResponseDto
+            {
+                Success = false,
+                Error = string.Join(", ", result.Errors.Select(e => e.Description))
+            };
+        }
+
+        user.PasswordChangedAtUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
+        return await BuildAuthResponseAsync(user, false);
+    }
+
+    private async Task<AuthResponseDto> BuildAuthResponseAsync(ApplicationUser user, bool? forcePasswordChangeRequired = null)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        var passwordChangeRequired = forcePasswordChangeRequired ?? await IsPasswordChangeRequiredAsync(user);
+        var token = GenerateJwtToken(user, roles, passwordChangeRequired);
+
+        var jwtSettings = _configuration.GetSection("Jwt");
+        var expiresInMinutes = double.Parse(jwtSettings["ExpiresInMinutes"]!);
+
+        return new AuthResponseDto
+        {
+            Success = true,
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(expiresInMinutes),
+            Roles = roles.ToArray(),
+            PasswordChangeRequired = passwordChangeRequired
+        };
+    }
+
+    private async Task<bool> IsPasswordChangeRequiredAsync(ApplicationUser user)
+    {
+        var rotationEnabled = await _systemConfig.GetBoolAsync("Security.PasswordRotationEnabled", true);
+        if (!rotationEnabled)
+            return false;
+
+        var rotationMonths = await _systemConfig.GetIntAsync("Security.PasswordRotationMonths", 6);
+        var lastChangedAt = user.PasswordChangedAtUtc ?? DateTime.UtcNow;
+        return lastChangedAt.AddMonths(rotationMonths) <= DateTime.UtcNow;
+    }
+
+    private string GenerateJwtToken(ApplicationUser user, IList<string> roles, bool passwordChangeRequired)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetRequiredJwtKey()));
@@ -182,6 +221,7 @@ public class AuthService : IAuthService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
+            new(AuthClaimTypes.PasswordChangeRequired, passwordChangeRequired ? "true" : "false"),
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 

@@ -34,6 +34,11 @@ import {
   CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Sparkles, Calendar, Clock,
 } from 'lucide-react';
 
+function getEctsExplanation(cgpa: number, ectsLimit: number): string {
+  if (cgpa >= 2.50) return `GANO 2.50 ve üstü olduğundan ${ectsLimit} AKTS alınabilir.`;
+  if (cgpa >= 2.00) return `GANO 2.00-2.49 arasında olduğundan ${ectsLimit} AKTS alınabilir.`;
+  return `GANO 2.00 altında olduğundan ${ectsLimit} AKTS alınabilir.`;
+}
 const TAKE_TYPE_COLORS: Record<string, string> = {
   Zorunlu: 'text-primary',
   Secmeli: 'text-accent-foreground',
@@ -401,8 +406,8 @@ export default function CourseCatalogPage() {
                   className="h-2 flex-1 max-w-[320px]"
                 />
                 {student && (
-                  <span className="text-xs text-muted-foreground hidden lg:inline">
-                    GANO {student.cgpa.toFixed(2)} → en fazla {ectsLimit} AKTS
+                  <span className="text-[11px] text-muted-foreground hidden lg:inline">
+                    ({getEctsExplanation(student.cgpa, ectsLimit)})
                   </span>
                 )}
               </div>

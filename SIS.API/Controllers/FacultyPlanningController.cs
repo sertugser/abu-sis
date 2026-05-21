@@ -106,8 +106,15 @@ public class FacultyPlanningController : ControllerBase
         if (!TryGetUserId(out var userId)) return Unauthorized();
         if (!await HasFacultyAccessAsync(userId, request.FacultyId, ct)) return Forbid();
 
-        var result = await _service.AutoSchedulePreviewAsync(request, userId.ToString(), ct);
-        return Ok(result);
+        try
+        {
+            var result = await _service.AutoSchedulePreviewAsync(request, userId.ToString(), ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("apply-schedule")]

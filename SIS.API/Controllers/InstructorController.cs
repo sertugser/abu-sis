@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
 
@@ -19,17 +21,37 @@ public class InstructorController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
-    private readonly IWebModuleSettingsProvider _webSettings;
+    private readonly IWebModuleControlService _webModuleControls;
+    private readonly ISystemConfigProvider _systemConfig;
 
     public InstructorController(
         AppDbContext context,
         ISchedulingService schedulingService,
-        IWebModuleSettingsProvider? webSettings = null)
+        ISystemConfigProvider systemConfig,
+        IWebModuleSettingsProvider? webSettings = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _schedulingService = schedulingService;
-        _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _systemConfig = systemConfig;
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
+
+    public sealed record UpdateInstructorProfileDto(
+        string Email,
+        int DepartmentId,
+        string? OfficeHours,
+        bool AdvisorOptOutRequested);
+
+    public sealed record CreateAcademicCvActivityDto(
+        int ActivityYear,
+        string Title,
+        string? Description);
+
+    public sealed record UpdateAcademicCvActivityDto(
+        int ActivityYear,
+        string Title,
+        string? Description);
 
     /// <summary>
     /// GET api/instructor/profile — get the authenticated instructor's profile.
@@ -46,6 +68,14 @@ public class InstructorController : ControllerBase
         var department = await _context.Departments
             .Include(d => d.Faculty)
             .FirstOrDefaultAsync(d => d.Id == instructor.DepartmentId);
+        var simplifyDashboardStatistics = await _systemConfig.GetBoolAsync("Instructor.SimplifyDashboardStatistics", false);
+        var faqUrl = await _systemConfig.GetStringAsync("Instructor.FaqUrl", string.Empty);
+        var requireOfficeHours = await _systemConfig.GetBoolAsync("Instructor.RequireOfficeHoursOnProfileUpdate", false);
+        var primaryEmailImmutable = await _systemConfig.GetBoolAsync("Instructor.PrimaryEmailImmutable", false);
+        var enableAdvisorOptOutOptions = await _systemConfig.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true);
+        var deadlineText = await _systemConfig.GetStringAsync("Instructor.ProfileOrgUnitUpdateDeadline", string.Empty);
+        var canUpdateDepartment = CanUpdateDepartment(deadlineText);
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig);
 
         return Ok(new
         {
@@ -56,8 +86,186 @@ public class InstructorController : ControllerBase
             Email = user?.Email ?? "",
             DepartmentName = department?.Name ?? "",
             FacultyName = department?.Faculty?.Name ?? "",
-            MaxWeeklyHours = instructor.MaxWeeklyHours
+            MaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours),
+            DepartmentId = instructor.DepartmentId,
+            OfficeHours = instructor.OfficeHours,
+            AdvisorOptOutRequested = instructor.AdvisorOptOutRequested,
+            RequireOfficeHoursOnProfileUpdate = requireOfficeHours,
+            PrimaryEmailImmutable = primaryEmailImmutable,
+            EnableAdvisorOptOutOptions = enableAdvisorOptOutOptions,
+            ProfileOrgUnitUpdateDeadline = deadlineText,
+            CanUpdateDepartment = canUpdateDepartment,
+            SimplifyDashboardStatistics = simplifyDashboardStatistics,
+            FaqUrl = faqUrl,
+            AcademicCvActiveYear = await _systemConfig.GetIntAsync("Instructor.AcademicCvActiveYear", DateTime.UtcNow.Year),
+            AcademicCvApprovedActivityEditable = await _systemConfig.GetBoolAsync("Instructor.AcademicCvApprovedActivityEditable", false),
+            AcademicCvAutoApprove = await _systemConfig.GetBoolAsync("Instructor.AcademicCvAutoApprove", false)
         });
+    }
+
+    [HttpPut("profile")]
+    [RequirePermission("menu.derslerim.view")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateInstructorProfileDto dto, CancellationToken cancellationToken)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == instructor.UserId, cancellationToken);
+        if (user == null)
+            return NotFound(new { error = "Kullanici kaydi bulunamadi." });
+
+        var requireOfficeHours = await _systemConfig.GetBoolAsync("Instructor.RequireOfficeHoursOnProfileUpdate", false, cancellationToken);
+        var primaryEmailImmutable = await _systemConfig.GetBoolAsync("Instructor.PrimaryEmailImmutable", false, cancellationToken);
+        var enableAdvisorOptOutOptions = await _systemConfig.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true, cancellationToken);
+        var deadlineText = await _systemConfig.GetStringAsync("Instructor.ProfileOrgUnitUpdateDeadline", string.Empty, cancellationToken);
+
+        var normalizedEmail = dto.Email.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedEmail))
+            return BadRequest(new { error = "E-posta bos birakilamaz." });
+
+        if (requireOfficeHours && string.IsNullOrWhiteSpace(dto.OfficeHours))
+            return BadRequest(new { error = "Sistem ayarina gore ofis saati tanimi zorunludur." });
+
+        var emailChanged = !string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase);
+        if (primaryEmailImmutable && emailChanged)
+            return BadRequest(new { error = "Birincil e-posta adresi sistem ayari nedeniyle degistirilemez." });
+
+        if (dto.DepartmentId != instructor.DepartmentId && !CanUpdateDepartment(deadlineText))
+            return BadRequest(new { error = $"Birim/Bolum guncelleme suresi doldu. Son tarih: {deadlineText}" });
+
+        if (!enableAdvisorOptOutOptions && dto.AdvisorOptOutRequested != instructor.AdvisorOptOutRequested)
+            return BadRequest(new { error = "Danismanlik tercih degisikligi su anda sistem ayarinda kapali." });
+
+        var departmentExists = await _context.Departments
+            .AsNoTracking()
+            .AnyAsync(d => d.Id == dto.DepartmentId, cancellationToken);
+        if (!departmentExists)
+            return BadRequest(new { error = "Secilen bolum bulunamadi." });
+
+        if (emailChanged)
+        {
+            var lookupEmail = normalizedEmail.ToUpperInvariant();
+            var emailInUse = await _context.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Id != user.Id && u.NormalizedEmail == lookupEmail, cancellationToken);
+            if (emailInUse)
+                return BadRequest(new { error = "Bu e-posta adresi baska bir kullanici tarafindan kullaniliyor." });
+
+            user.Email = normalizedEmail;
+            user.UserName = normalizedEmail;
+            user.NormalizedEmail = lookupEmail;
+            user.NormalizedUserName = lookupEmail;
+        }
+
+        instructor.DepartmentId = dto.DepartmentId;
+        instructor.OfficeHours = dto.OfficeHours?.Trim() ?? string.Empty;
+        instructor.AdvisorOptOutRequested = dto.AdvisorOptOutRequested;
+        instructor.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetProfile();
+    }
+
+    [HttpGet("academic-cv")]
+    [RequirePermission("menu.derslerim.view")]
+    public async Task<IActionResult> GetAcademicCv(CancellationToken cancellationToken)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var activeYear = await _systemConfig.GetIntAsync("Instructor.AcademicCvActiveYear", DateTime.UtcNow.Year, cancellationToken);
+        var approvedEditable = await _systemConfig.GetBoolAsync("Instructor.AcademicCvApprovedActivityEditable", false, cancellationToken);
+        var autoApprove = await _systemConfig.GetBoolAsync("Instructor.AcademicCvAutoApprove", false, cancellationToken);
+
+        var activities = await _context.AcademicCvActivities
+            .AsNoTracking()
+            .Where(a => a.InstructorId == instructor.Id)
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new
+            {
+                a.Id,
+                a.ActivityYear,
+                a.Title,
+                a.Description,
+                Status = a.Status.ToString(),
+                a.CreatedAt,
+                a.UpdatedAt,
+                a.ApprovedAt,
+                CanEdit = a.Status != ApprovalStepStatus.Approved || approvedEditable
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new
+        {
+            ActiveYear = activeYear,
+            ApprovedActivityEditable = approvedEditable,
+            AutoApprove = autoApprove,
+            Activities = activities
+        });
+    }
+
+    [HttpPost("academic-cv")]
+    [RequirePermission("menu.derslerim.view")]
+    public async Task<IActionResult> CreateAcademicCvActivity([FromBody] CreateAcademicCvActivityDto dto, CancellationToken cancellationToken)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var validationError = await ValidateAcademicCvPayload(dto.ActivityYear, dto.Title, cancellationToken);
+        if (validationError != null)
+            return BadRequest(new { error = validationError });
+
+        var autoApprove = await _systemConfig.GetBoolAsync("Instructor.AcademicCvAutoApprove", false, cancellationToken);
+        var activity = new AcademicCvActivity
+        {
+            InstructorId = instructor.Id,
+            ActivityYear = dto.ActivityYear,
+            Title = dto.Title.Trim(),
+            Description = dto.Description?.Trim() ?? string.Empty,
+            Status = autoApprove ? ApprovalStepStatus.Approved : ApprovalStepStatus.Pending,
+            CreatedAt = DateTime.UtcNow,
+            ApprovedAt = autoApprove ? DateTime.UtcNow : null
+        };
+
+        _context.AcademicCvActivities.Add(activity);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetAcademicCv(cancellationToken);
+    }
+
+    [HttpPut("academic-cv/{id:int}")]
+    [RequirePermission("menu.derslerim.view")]
+    public async Task<IActionResult> UpdateAcademicCvActivity(int id, [FromBody] UpdateAcademicCvActivityDto dto, CancellationToken cancellationToken)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var validationError = await ValidateAcademicCvPayload(dto.ActivityYear, dto.Title, cancellationToken);
+        if (validationError != null)
+            return BadRequest(new { error = validationError });
+
+        var activity = await _context.AcademicCvActivities
+            .FirstOrDefaultAsync(a => a.Id == id && a.InstructorId == instructor.Id, cancellationToken);
+        if (activity == null)
+            return NotFound(new { error = "Faaliyet kaydi bulunamadi." });
+
+        var approvedEditable = await _systemConfig.GetBoolAsync("Instructor.AcademicCvApprovedActivityEditable", false, cancellationToken);
+        if (activity.Status == ApprovalStepStatus.Approved && !approvedEditable)
+            return BadRequest(new { error = "Onayli faaliyet kaydi sistem ayari nedeniyle duzenlenemez." });
+
+        activity.ActivityYear = dto.ActivityYear;
+        activity.Title = dto.Title.Trim();
+        activity.Description = dto.Description?.Trim() ?? string.Empty;
+        activity.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetAcademicCv(cancellationToken);
     }
 
     /// <summary>
@@ -197,7 +405,9 @@ public class InstructorController : ControllerBase
         var userMap = await _context.Users
             .Where(u => studentUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id);
-        var showStudentPhone = await _webSettings.GetBoolAsync("InstructorPanel", "ShowStudentPhone", false);
+        var contactInfoVisible = await _systemConfig.GetBoolAsync("Instructor.StudentContactInfoVisible", true);
+        var phoneVisibility = await _webModuleControls.EvaluateAsync("instructor-student-phone");
+        var showStudentPhone = contactInfoVisible && phoneVisibility.IsOpen;
 
         var students = registrations.Select(r =>
         {
@@ -208,7 +418,7 @@ public class InstructorController : ControllerBase
                 StudentNumber = r.Student.StudentNumber,
                 FirstName = user?.FirstName ?? "",
                 LastName = user?.LastName ?? "",
-                Email = user?.Email ?? "",
+                Email = contactInfoVisible ? user?.Email ?? "" : "",
                 PhoneNumber = showStudentPhone ? user?.PhoneNumber ?? "" : "",
                 Status = r.Status.ToString(),
                 Grade = r.Grade?.ToString()
@@ -313,5 +523,28 @@ public class InstructorController : ControllerBase
         _context.CourseSections
             .AsNoTracking()
             .AnyAsync(section => section.Id == sectionId && section.InstructorId == instructorId, cancellationToken);
+
+    private async Task<string?> ValidateAcademicCvPayload(int activityYear, string title, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return "Faaliyet basligi bos birakilamaz.";
+
+        var activeYear = await _systemConfig.GetIntAsync("Instructor.AcademicCvActiveYear", DateTime.UtcNow.Year, cancellationToken);
+        if (activityYear != activeYear)
+            return $"Akademik CV kayitlari yalnizca aktif yil ({activeYear}) icin girilebilir.";
+
+        return null;
+    }
+
+    private static bool CanUpdateDepartment(string deadlineText)
+    {
+        if (string.IsNullOrWhiteSpace(deadlineText))
+            return true;
+
+        if (!DateOnly.TryParseExact(deadlineText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var deadline))
+            return true;
+
+        return DateOnly.FromDateTime(DateTime.UtcNow) <= deadline;
+    }
 
 }

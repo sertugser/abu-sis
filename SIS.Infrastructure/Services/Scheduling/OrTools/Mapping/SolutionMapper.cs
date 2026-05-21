@@ -21,7 +21,9 @@ public sealed class SolutionMapper
         IReadOnlyList<UnsatCoreEntry> unsatCore,
         SolverRequest request,
         double elapsedSeconds,
-        DecisionVariables? variables = null)
+        DecisionVariables? variables = null,
+        string searchStrategy = "auto",
+        bool unsatCoreEnabled = true)
     {
         // Plan 9 Issue 2 — When the model build flagged unsupported sections (e.g. multi-interval
         // lab × parallel rooms), surface them with the encoder-supplied mitigation message and
@@ -56,6 +58,8 @@ public sealed class SolutionMapper
                 Branches = 0,
                 Conflicts = 0,
                 ObjectiveValue = 0,
+                SearchStrategy = searchStrategy,
+                UnsatCoreEnabled = unsatCoreEnabled,
                 UnsatCore = unsatCore
             }
         };
@@ -90,7 +94,9 @@ public sealed class SolutionMapper
         ScheduleModelBuildResult build,
         SolverRequest request,
         double elapsedSeconds,
-        CpSolverStatus status)
+        CpSolverStatus status,
+        string searchStrategy = "auto",
+        bool unsatCoreEnabled = true)
     {
         var assignments = new List<Assignment>();
         var failures = new List<Failure>();
@@ -237,6 +243,8 @@ public sealed class SolutionMapper
                 Branches = SafeNumBranches(solver),
                 Conflicts = SafeNumConflicts(solver),
                 ObjectiveValue = SafeObjectiveValue(solver),
+                SearchStrategy = searchStrategy,
+                UnsatCoreEnabled = unsatCoreEnabled,
                 UnsatCore = new List<UnsatCoreEntry>()
             }
         };
@@ -271,7 +279,9 @@ public sealed class SolutionMapper
         CpSolver solver,
         ScheduleModelBuildResult build,
         SolverRequest request,
-        double elapsedSeconds)
+        double elapsedSeconds,
+        string searchStrategy = "auto",
+        bool unsatCoreEnabled = true)
     {
         // Plan 9 Issue 2 — Skip already-flagged unsupported sections from the generic timeout
         // failure so they keep their actionable mitigation message.
@@ -298,6 +308,8 @@ public sealed class SolutionMapper
                 Branches = SafeNumBranches(solver),
                 Conflicts = SafeNumConflicts(solver),
                 ObjectiveValue = 0,
+                SearchStrategy = searchStrategy,
+                UnsatCoreEnabled = unsatCoreEnabled,
                 UnsatCore = new List<UnsatCoreEntry>()
             }
         };

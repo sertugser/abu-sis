@@ -26,6 +26,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     private readonly IAdvisorConstraintService? _advisorConstraintService;
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleSettingsProvider _webSettings;
+    private readonly IWebModuleControlService _webModuleControls;
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
@@ -34,7 +35,8 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
         IAdvisorConstraintService? advisorConstraintService = null,
-        IWebModuleSettingsProvider? webSettings = null)
+        IWebModuleSettingsProvider? webSettings = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _validationService = validationService;
@@ -42,6 +44,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         _config = config ?? new NullSystemConfigProvider();
         _advisorConstraintService = advisorConstraintService;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
@@ -735,29 +738,100 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         return (int)Math.Ceiling(totalHours * limitPercent / 100m);
     }
 
-    private async Task<ValidationResultDto?> ValidateStudentRegistrationWebModuleAsync()
+    private async Task<ValidationResultDto?> ValidateStudentRegistrationWebModuleAsync(int studentId, int? termId = null)
     {
-        var enabled = await _webSettings.GetBoolAsync("StudentPanel", "CourseRegistrationEnabled", true);
-        if (!enabled)
-        {
-            return CreateWebModuleError(
-                "WebModuleDisabled",
-                "Ders kayıt işlemleri web modül ayarlarından kapatılmıştır.");
-        }
+        var controlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, termId);
+        return await ValidateModuleAsync(controlCode, termId, "WebModuleRegistrationClosed", "Ders kayıt işlemleri şu anda kullanılamıyor.");
+    }
 
-        var openAt = await _webSettings.GetTimeAsync("StudentPanel", "CourseRegistrationOpenAt", TimeOnly.MinValue);
-        if (openAt > TimeOnly.MinValue)
-        {
-            var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);
-            if (TimeOnly.FromDateTime(localNow) < openAt)
-            {
-                return CreateWebModuleError(
-                    "WebModuleOpenAt",
-                    $"Ders kayıt işlemleri bugün saat {openAt.ToString("HH:mm", CultureInfo.InvariantCulture)} itibarıyla açılacaktır.");
-            }
-        }
+    private async Task<ValidationResultDto?> ValidateStudentAddDropWebModuleAsync(int studentId, int? termId = null)
+    {
+        var controlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+        return await ValidateModuleAsync(controlCode, termId, "WebModuleAddDropClosed", "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
+    }
 
-        return null;
+    private async Task<ValidationResultDto?> ValidateStudentWithdrawalWebModuleAsync(int studentId, int? termId = null)
+    {
+        return await ValidateModuleAsync("student-withdrawal", termId, "WebModuleWithdrawalClosed", "Dersten çekilme işlemleri şu anda kullanılamıyor.");
+    }
+
+    private async Task<string> ResolveStudentRegistrationControlCodeAsync(int studentId, int? termId)
+    {
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        if (student is null)
+            return "student-course-registration";
+
+        if (student.CompletedSemesters == 0)
+            return "student-new-course-registration";
+
+        return IsOverNormalStudyDuration(student)
+            ? "student-extended-course-registration"
+            : "student-course-registration";
+    }
+
+    private async Task<string> ResolveStudentAddDropControlCodeAsync(int studentId)
+    {
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        return student?.CompletedSemesters == 0
+            ? "student-new-add-drop"
+            : "student-add-drop";
+    }
+
+    private async Task<string> ResolveAdvisorApprovalControlCodeAsync(int studentId, int termId, DateTime nowUtc)
+    {
+        var term = await _context.AcademicTerms
+            .AsNoTracking()
+            .Include(item => item.AcademicCalendar)
+            .FirstOrDefaultAsync(item => item.Id == termId);
+
+        if (term?.IsAddDropOpen(nowUtc) == true)
+            return "advisor-add-drop-approval";
+
+        var student = await LoadStudentModuleProfileAsync(studentId);
+        return student?.CompletedSemesters == 0
+            ? "advisor-new-student-registration-approval"
+            : "advisor-registration-approval";
+    }
+
+    private async Task<Domain.Entities.Student?> LoadStudentModuleProfileAsync(int studentId)
+    {
+        return await _context.Students
+            .Include(student => student.StudentPrograms)
+                .ThenInclude(program => program.Program)
+            .FirstOrDefaultAsync(student => student.Id == studentId);
+    }
+
+    private static bool IsOverNormalStudyDuration(Domain.Entities.Student student)
+    {
+        var activeProgram = student.StudentPrograms
+            .FirstOrDefault(program => program.Type == StudentProgramType.Main && program.IsActive);
+
+        if (activeProgram?.Program == null)
+            return false;
+
+        var normalDurationSemesters = activeProgram.Program.DegreeLevel switch
+        {
+            DegreeLevel.Associate => 4,
+            DegreeLevel.Bachelor => 8,
+            DegreeLevel.Master => 4,
+            DegreeLevel.Doctorate => 8,
+            _ => 8
+        };
+
+        return student.CompletedSemesters >= normalDurationSemesters;
+    }
+
+    private async Task<ValidationResultDto?> ValidateModuleAsync(
+        string controlCode,
+        int? termId,
+        string rule,
+        string fallbackMessage)
+    {
+        var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
+        if (access.IsOpen)
+            return null;
+
+        return CreateWebModuleError(rule, access.Message ?? fallbackMessage);
     }
 
     private static ValidationResultDto CreateWebModuleError(string rule, string message)

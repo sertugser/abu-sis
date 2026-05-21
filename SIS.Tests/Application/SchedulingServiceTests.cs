@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
@@ -89,6 +90,36 @@ public class SchedulingServiceTests : IDisposable
 (DayOfWeek.Tuesday, 9, 0, 11, 0));
 
         var result = await _service.ValidateExistingAsync(ActiveTermId);
+
+        result.IsValid.Should().BeFalse();
+        result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "WeeklyLoadConflict");
+    }
+
+    [Fact]
+    public async Task ValidateExistingAsync_WhenConfiguredWeeklyHoursIsLower_UsesSystemConfigLimit()
+    {
+        var instructor = AddInstructor(1, 101, maxWeeklyHours: 20, title: "Prof. Dr.");
+        var classroom1 = AddClassroom(1, "C101", 50);
+        var classroom2 = AddClassroom(2, "C102", 50);
+        var course1 = AddCourse(1, "CS301", theoryHours: 2);
+        var course2 = AddCourse(2, "CS302", theoryHours: 2);
+
+        AddSection(1, course1.Id, instructor.Id, classroom1.Id, ActiveTermId, 30,
+            (DayOfWeek.Monday, 9, 0, 11, 0));
+        AddSection(2, course2.Id, instructor.Id, classroom2.Id, ActiveTermId, 30,
+            (DayOfWeek.Tuesday, 9, 0, 11, 0));
+
+        var service = new SchedulingService(
+            _context,
+            new ConstraintStateLoader(_context),
+            new ScheduleWriter(_context),
+            SIS.Tests.Scheduling.Rules.TestRuleHelpers.BuildEngine(),
+            new FakeSystemConfigProvider(new Dictionary<string, string>
+            {
+                ["Instructor.MaxWeeklyHours.Professor"] = "3",
+            }));
+
+        var result = await service.ValidateExistingAsync(ActiveTermId);
 
         result.IsValid.Should().BeFalse();
         result.Conflicts.Should().Contain(conflict => conflict.ConflictType == "WeeklyLoadConflict");
@@ -623,7 +654,12 @@ public class SchedulingServiceTests : IDisposable
         _context.SaveChanges();
     }
 
-    private Instructor AddInstructor(int id, int userId, int maxWeeklyHours, int departmentId = DepartmentId)
+    private Instructor AddInstructor(
+        int id,
+        int userId,
+        int maxWeeklyHours,
+        int departmentId = DepartmentId,
+        string title = "Dr.")
     {
         _context.Users.Add(new ApplicationUser
         {
@@ -640,7 +676,7 @@ public class SchedulingServiceTests : IDisposable
             Id = id,
             UserId = userId,
             DepartmentId = departmentId,
-            Title = "Dr.",
+            Title = title,
             MaxWeeklyHours = maxWeeklyHours
         };
 
@@ -766,6 +802,25 @@ public class SchedulingServiceTests : IDisposable
 
     // Plan 12 Faz 7 — V1 ConstraintEvaluationService silindi; SchedulingService artık
     // ConstraintStateLoader + RuleEngine ile kuruluyor.
+
+    private sealed class FakeSystemConfigProvider(IReadOnlyDictionary<string, string>? values = null) : ISystemConfigProvider
+    {
+        public Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && int.TryParse(value, out var parsed) ? parsed : fallback);
+
+        public Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && decimal.TryParse(value, out var parsed) ? parsed : fallback);
+
+        public Task<string> GetStringAsync(string key, string fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) ? value : fallback);
+
+        public Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default)
+            => Task.FromResult(values != null && values.TryGetValue(key, out var value) && bool.TryParse(value, out var parsed) ? parsed : fallback);
+
+        public void InvalidateCache(string key)
+        {
+        }
+    }
 
     public void Dispose()
     {

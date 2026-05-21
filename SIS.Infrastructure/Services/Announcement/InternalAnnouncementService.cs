@@ -14,6 +14,7 @@ public class InternalAnnouncementService : IInternalAnnouncementService
 {
     private readonly AppDbContext _context;
     private readonly IWebModuleSettingsProvider _webSettings;
+    private readonly IWebModuleControlService _webModuleControls;
     private readonly IAnnouncementSettingsProvider _settingsProvider;
     private readonly IAnnouncementHtmlSanitizer _sanitizer;
     private readonly IAnnouncementAttachmentService? _attachmentService;
@@ -23,12 +24,14 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         IAnnouncementSettingsProvider settingsProvider,
         IAnnouncementHtmlSanitizer sanitizer,
         IWebModuleSettingsProvider? webSettings = null,
-        IAnnouncementAttachmentService? attachmentService = null)
+        IAnnouncementAttachmentService? attachmentService = null,
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _settingsProvider = settingsProvider;
         _sanitizer = sanitizer;
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
+        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
         _attachmentService = attachmentService;
     }
 
@@ -45,6 +48,9 @@ public class InternalAnnouncementService : IInternalAnnouncementService
         int? maxResults,
         CancellationToken ct = default)
     {
+        var feedAccess = await _webModuleControls.EvaluateAsync("announcements-feed", ct: ct);
+        if (!feedAccess.IsOpen)
+            return [];
         var scope = BuildScope(userId, roles, userDepartmentId, userFacultyId, userEnrolledSectionIds, advisorUserId, userStudentYear);
 
         IQueryable<InternalAnnouncement> query = _context.InternalAnnouncements

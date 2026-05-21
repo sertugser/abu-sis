@@ -309,7 +309,9 @@ function StudentApprovalCard({ student }: { student: PendingApproval }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdvisorDashboardPage() {
-  const { data: students, isLoading, error } = usePendingApprovals();
+  const { data, isLoading, error } = usePendingApprovals();
+  const students = data?.items ?? [];
+  const calculationMethodLabel = data?.calculationMethodLabel ?? 'Standart';
 
   return (
     <div className="space-y-6">
@@ -351,7 +353,7 @@ export default function AdvisorDashboardPage() {
       {!isLoading && !error && students && students.length > 0 && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            {students.length} ogrenci onay bekliyor
+            {students.length} ogrenci onay bekliyor · Onceliklendirme: {calculationMethodLabel}
           </p>
           {students.map(student => (
             <StudentApprovalCard key={student.studentId} student={student} />

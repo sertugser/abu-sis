@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Rules;
@@ -28,6 +29,12 @@ public partial class SchedulingService
         CancellationToken cancellationToken)
     {
         var sections = await LoadActiveSectionsAsync(termId, excludedSectionId, departmentId, cancellationToken);
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+        foreach (var section in sections)
+        {
+            if (section.Instructor != null)
+                section.Instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(section.Instructor.Title, section.Instructor.MaxWeeklyHours);
+        }
         var (termName, scopeName) = await LoadTermAndScopeNamesAsync(termId, departmentId, cancellationToken);
 
         var instructorIds = sections
@@ -309,6 +316,8 @@ public partial class SchedulingService
             }
             else
             {
+                var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, cancellationToken);
+                instructor.MaxWeeklyHours = weeklyHoursPolicy.Resolve(instructor.Title, instructor.MaxWeeklyHours);
                 instructorName = await GetInstructorNameAsync(instructor, cancellationToken);
             }
         }

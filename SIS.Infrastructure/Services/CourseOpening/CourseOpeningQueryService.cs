@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.CourseOpening.DTOs;
 using SIS.Application.CourseOpening.Services;
 using SIS.Application.EnrollmentForecast.Services;
@@ -14,11 +15,13 @@ namespace SIS.Infrastructure.Services.CourseOpening;
 public class CourseOpeningQueryService(
     AppDbContext context,
     IEnrollmentForecastService forecastService,
-    CourseOpeningHelpers helpers) : ICourseOpeningQueryService
+    CourseOpeningHelpers helpers,
+    ISystemConfigProvider? systemConfig = null) : ICourseOpeningQueryService
 {
     private readonly AppDbContext _context = context;
     private readonly IEnrollmentForecastService _forecastService = forecastService;
     private readonly CourseOpeningHelpers _helpers = helpers;
+    private readonly ISystemConfigProvider _systemConfig = systemConfig ?? new NullSystemConfigProvider();
 
     public async Task<OpenedCourseListDto> GetOpenedCoursesAsync(int departmentId, int termId, CancellationToken ct = default)
     {
@@ -312,6 +315,7 @@ public class CourseOpeningQueryService(
         int? termId = null,
         CancellationToken ct = default)
     {
+        var weeklyHoursPolicy = await InstructorWeeklyHoursPolicy.LoadAsync(_systemConfig, ct);
         var scopedDepartmentIds = departmentIds
             .Where(id => id > 0)
             .Distinct()
@@ -401,6 +405,7 @@ public class CourseOpeningQueryService(
             var name = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
             departmentInfoMap.TryGetValue(i.DepartmentId, out var departmentInfo);
             workloadMap.TryGetValue(i.Id, out var assignedHours);
+            var effectiveMaxWeeklyHours = weeklyHoursPolicy.Resolve(i.Title, i.MaxWeeklyHours);
             currentStudentCountMap.TryGetValue(i.Id, out var currentStudents);
             return new InstructorOptionDto
             {
@@ -409,7 +414,7 @@ public class CourseOpeningQueryService(
                 DepartmentId = i.DepartmentId,
                 DepartmentName = departmentInfo?.Name ?? "",
                 DepartmentCode = departmentInfo?.Code ?? "",
-                MaxWeeklyHours = i.MaxWeeklyHours,
+                MaxWeeklyHours = effectiveMaxWeeklyHours,
                 AssignedWeeklyHours = assignedHours,
                 AdvisorAssignmentCapacity = i.AdvisorAssignmentCapacity,
                 IsAvailableForAdvisorAssignment = i.IsAvailableForAdvisorAssignment ?? true,
@@ -420,6 +425,12 @@ public class CourseOpeningQueryService(
         .ThenBy(i => i.FullName)
         .ToList();
     }
+
+    public Task<List<InstructorOptionDto>> GetDepartmentInstructorsAsync(
+        int departmentId,
+        int? termId = null,
+        CancellationToken ct = default)
+        => GetDepartmentInstructorsAsync(new[] { departmentId }, termId, ct);
 
     public async Task<List<ExternalCourseDto>> GetExternalCoursesAsync(int departmentId, int termId, CancellationToken ct = default)
     {

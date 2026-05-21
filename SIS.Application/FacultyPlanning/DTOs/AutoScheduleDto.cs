@@ -87,6 +87,15 @@ public class AutoScheduleStats
 
     /// <summary>Başarılı atamaların kullandığı farklı <c>Classroom</c> sayısı.</summary>
     public int UsedClassroomCount { get; set; }
+
+    /// <summary>Çalıştırılan planlama motoru anahtarı.</summary>
+    public string Engine { get; set; } = string.Empty;
+
+    /// <summary>CP-SAT arama stratejisi.</summary>
+    public string SearchStrategy { get; set; } = string.Empty;
+
+    /// <summary>Infeasible durumda UNSAT core açıklamaları üretiliyor mu.</summary>
+    public bool UnsatCoreEnabled { get; set; }
 }
 
 public class ApplyScheduleRequest
