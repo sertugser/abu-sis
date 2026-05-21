@@ -42,6 +42,42 @@ const URL_CONFIG_KEYS = new Set<string>([
   'Instructor.FaqUrl',
 ]);
 
+const HIDDEN_CONFIG_PREFIXES = [
+  'SoftConstraint.',
+  'Schedule.SA.',
+  'Schedule.MRV.',
+  'Schedule.LNS.',
+  'Schedule.Candidate.',
+  'Schedule.OrTools.',
+  'Suggestion.',
+] as const;
+
+const HIDDEN_CONFIG_KEYS = new Set<string>([
+  'Schedule.Engine',
+  'Scheduling.MaxBacktrackingDepth',
+  'Classroom.AmphiThreshold',
+  'Classroom.OccupancyTarget.Min',
+  'Classroom.OccupancyTarget.Max',
+  'Schedule.CurriculumConflictMode',
+  'Schedule.AllowSameCourseSectionOverlap',
+  'Schedule.TheoryLabSplitThreshold',
+  'Schedule.SplittableBlockTypes',
+  'Schedule.ClassroomTypeRequirementEnabled',
+  'Schedule.AmphiThresholdEnabled',
+  'Schedule.LunchBreak.IsHard',
+  'Schedule.MaxConsecutiveHours',
+  'Schedule.Lab.MaxBlockHours',
+  'Schedule.DefaultInstructorMaxWeeklyHours',
+  'Schedule.MaxDailyHoursPerInstructor',
+]);
+
+function shouldHideConfig(config: SystemConfigDto) {
+  if (HIDDEN_CONFIG_KEYS.has(config.key))
+    return true;
+
+  return HIDDEN_CONFIG_PREFIXES.some(prefix => config.key.startsWith(prefix));
+}
+
 export default function SystemConfigPage() {
   const { data: configs, isLoading, isError } = useSystemConfigs();
   const { data: limits } = useConfigLimits();
@@ -99,6 +135,7 @@ export default function SystemConfigPage() {
 
   const sortedConfigs = useMemo(
     () => [...(configs ?? [])]
+      .filter(config => !shouldHideConfig(config))
       .sort((left, right) =>
         left.groupLabel.localeCompare(right.groupLabel, 'tr')
         || left.displayOrder - right.displayOrder

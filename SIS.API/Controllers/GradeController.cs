@@ -1145,13 +1145,15 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
     private async Task<IActionResult?> EnsureGradeEntryModuleOpenAsync(int termId, string componentName, string fallbackMessage)
     {
-        var genericGate = await EnsureGradeEntryModuleOpenAsync(termId, fallbackMessage);
-        if (genericGate is not null)
-            return genericGate;
+        var genericAccess = await _webModuleControls.EvaluateAsync("instructor-grade-entry", termId);
+        if (string.Equals(genericAccess.SelectedMode, WebModuleControlModes.Closed, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = genericAccess.Message ?? fallbackMessage });
 
         var controlCode = ResolveGradeEntryControlCode(componentName);
         if (string.Equals(controlCode, "instructor-grade-entry", StringComparison.OrdinalIgnoreCase))
-            return null;
+            return genericAccess.IsOpen
+                ? null
+                : BadRequest(new { error = genericAccess.Message ?? fallbackMessage });
 
         var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
         if (access.IsOpen)

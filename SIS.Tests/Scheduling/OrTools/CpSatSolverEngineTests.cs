@@ -31,7 +31,9 @@ public class CpSatSolverEngineTests
         int timeLimitSeconds = 30,
         int numWorkers = 8,
         int randomSeed = 42,
-        bool logToConsole = false)
+        bool logToConsole = false,
+        string searchStrategy = "auto",
+        bool unsatCoreEnabled = true)
     {
         var configMock = new Mock<ISystemConfigProvider>();
         configMock.Setup(x => x.GetIntAsync("Schedule.OrTools.TimeLimitSeconds", It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -42,6 +44,10 @@ public class CpSatSolverEngineTests
             .ReturnsAsync(randomSeed);
         configMock.Setup(x => x.GetBoolAsync("Schedule.OrTools.LogToConsole", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(logToConsole);
+        configMock.Setup(x => x.GetStringAsync("Schedule.OrTools.SearchStrategy", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchStrategy);
+        configMock.Setup(x => x.GetBoolAsync("Schedule.OrTools.UnsatCoreEnabled", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(unsatCoreEnabled);
 
         var encoders = new IConstraintEncoder[] { new ClassroomConflictEncoder() };
         var modelBuilder = new ScheduleModelBuilder(encoders);
@@ -64,7 +70,9 @@ public class CpSatSolverEngineTests
         IConstraintEncoder[] encoders,
         int timeLimitSeconds = 30,
         int numWorkers = 8,
-        int randomSeed = 42)
+        int randomSeed = 42,
+        string searchStrategy = "auto",
+        bool unsatCoreEnabled = true)
     {
         var configMock = new Mock<ISystemConfigProvider>();
         configMock.Setup(x => x.GetIntAsync("Schedule.OrTools.TimeLimitSeconds", It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -75,6 +83,10 @@ public class CpSatSolverEngineTests
             .ReturnsAsync(randomSeed);
         configMock.Setup(x => x.GetBoolAsync("Schedule.OrTools.LogToConsole", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
+        configMock.Setup(x => x.GetStringAsync("Schedule.OrTools.SearchStrategy", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchStrategy);
+        configMock.Setup(x => x.GetBoolAsync("Schedule.OrTools.UnsatCoreEnabled", It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(unsatCoreEnabled);
 
         var modelBuilder = new ScheduleModelBuilder(encoders);
         var mapper = new SolutionMapper();
@@ -150,7 +162,9 @@ public class CpSatSolverEngineTests
         var (engine, configMock) = BuildEngineWithConfig(
             timeLimitSeconds: 60,
             numWorkers: 4,
-            randomSeed: 123);
+            randomSeed: 123,
+            searchStrategy: "portfolio",
+            unsatCoreEnabled: false);
 
         var request = new SolverRequest
         {
@@ -181,6 +195,38 @@ public class CpSatSolverEngineTests
         configMock.Verify(x => x.GetIntAsync("Schedule.OrTools.NumWorkers", It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         configMock.Verify(x => x.GetIntAsync("Schedule.OrTools.RandomSeed", It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         configMock.Verify(x => x.GetBoolAsync("Schedule.OrTools.LogToConsole", It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        configMock.Verify(x => x.GetStringAsync("Schedule.OrTools.SearchStrategy", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        configMock.Verify(x => x.GetBoolAsync("Schedule.OrTools.UnsatCoreEnabled", It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task SolveAsync_InvalidSearchStrategy_ThrowsInvalidOperationException()
+    {
+        var (engine, _) = BuildEngineWithConfig(searchStrategy: "heuristic-x");
+        var request = new SolverRequest
+        {
+            TermId = 1,
+            FacultyId = 1,
+            Sections = new[] { Section(1, 100, 3, 0) },
+            Classrooms = new List<ClassroomInput>
+            {
+                new() { Id = 9, Name = "C 005", Capacity = 50, Type = ClassroomType.Lecture }
+            },
+            TimeSlots = new List<TimeSlotInput>
+            {
+                new()
+                {
+                    Id = 1, DayOfWeek = DayOfWeek.Monday, SlotOrder = 1,
+                    StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(9, 50),
+                    AllowedMode = TimeSlotAllowedMode.Both
+                }
+            }
+        };
+
+        var act = async () => await engine.SolveAsync(request, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Schedule.OrTools.SearchStrategy*");
     }
 
     [Fact]

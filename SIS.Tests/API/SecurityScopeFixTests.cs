@@ -8,6 +8,7 @@ using SIS.API.Authorization;
 using SIS.API.Controllers;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -141,6 +142,81 @@ public class SecurityScopeFixTests
     }
 
     [Fact]
+    public async Task GradeSubmit_ComponentSpecificOpen_Allows_When_GenericPeriodClosed()
+    {
+        await using var context = CreateContext();
+        SeedGradeEntryGraph(context);
+        await context.SaveChangesAsync();
+
+        var controller = CreateGradeController(
+            context,
+            userId: 100,
+            webModuleControls: new StubWebModuleControlService(new Dictionary<string, WebModuleAccessResult>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["instructor-grade-entry"] = new(
+                    IsEnabled: true,
+                    IsOpen: false,
+                    SelectedMode: WebModuleControlModes.GradeEntryPeriod,
+                    SelectedModeLabel: "Not Giriş Süre Tanımlarına Bağlı",
+                    EffectiveStateLabel: "Kapalı",
+                    Message: "Not girişi süreci şu anda not giriş süre tanımlarında açık değil."),
+                ["midterm-grade-entry"] = new(
+                    IsEnabled: true,
+                    IsOpen: true,
+                    SelectedMode: WebModuleControlModes.Open,
+                    SelectedModeLabel: "Açık",
+                    EffectiveStateLabel: "Açık",
+                    Message: null)
+            }));
+
+        var result = await controller.SubmitGrades(1, new GradeController.GradeSubmitDto
+        {
+            ComponentId = 1,
+            Grades = []
+        });
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task GradeSubmit_GenericClosed_StillBlocks_Even_When_ComponentSpecificOpen()
+    {
+        await using var context = CreateContext();
+        SeedGradeEntryGraph(context);
+        await context.SaveChangesAsync();
+
+        var controller = CreateGradeController(
+            context,
+            userId: 100,
+            webModuleControls: new StubWebModuleControlService(new Dictionary<string, WebModuleAccessResult>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["instructor-grade-entry"] = new(
+                    IsEnabled: true,
+                    IsOpen: false,
+                    SelectedMode: WebModuleControlModes.Closed,
+                    SelectedModeLabel: "Kapalı",
+                    EffectiveStateLabel: "Kapalı",
+                    Message: "Not girişi modülü kapalı."),
+                ["midterm-grade-entry"] = new(
+                    IsEnabled: true,
+                    IsOpen: true,
+                    SelectedMode: WebModuleControlModes.Open,
+                    SelectedModeLabel: "Açık",
+                    EffectiveStateLabel: "Açık",
+                    Message: null)
+            }));
+
+        var result = await controller.SubmitGrades(1, new GradeController.GradeSubmitDto
+        {
+            ComponentId = 1,
+            Grades = []
+        });
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        badRequest.Value.Should().BeEquivalentTo(new { error = "Not girişi modülü kapalı." });
+    }
+
+    [Fact]
     public async Task QrSubmit_AnonymousUser_ReturnsUnauthorizedForActiveToken()
     {
         await using var context = CreateContext();
@@ -221,9 +297,16 @@ public class SecurityScopeFixTests
         return controller;
     }
 
-    private static GradeController CreateGradeController(AppDbContext context, int userId)
+    private static GradeController CreateGradeController(
+        AppDbContext context,
+        int userId,
+        IWebModuleControlService? webModuleControls = null)
     {
-        var controller = new GradeController(context, Mock.Of<IGpaCalculationService>(), new FakeClock());
+        var controller = new GradeController(
+            context,
+            Mock.Of<IGpaCalculationService>(),
+            new FakeClock(),
+            webModuleControls: webModuleControls);
         SetUser(controller, userId, "Instructor");
         return controller;
     }
@@ -389,5 +472,78 @@ public class SecurityScopeFixTests
             QrExpiresAt = DateTime.UtcNow.AddMinutes(10),
             CreatedAt = DateTime.UtcNow
         });
+    }
+
+    private static void SeedGradeEntryGraph(AppDbContext context)
+    {
+        SeedFacultyDepartmentGraph(context);
+        context.Users.Add(new ApplicationUser { Id = 100, UserName = "instructor", Email = "instructor@example.test" });
+        var instructor = AddInstructor(context, id: 10, userId: 100, departmentId: 1);
+
+        var term = new AcademicTerm
+        {
+            Id = 1,
+            Name = "2026 Spring",
+            ShortName = "26S",
+            EnglishName = "2026 Spring",
+            ShortEnglishName = "26S",
+            Year = 2026,
+            TermStart = DateTime.UtcNow.AddDays(-30),
+            TermEnd = DateTime.UtcNow.AddDays(30)
+        };
+
+        var course = new Course
+        {
+            Id = 1,
+            Code = "CENG101",
+            Name = "Intro",
+            DepartmentId = 1
+        };
+
+        var section = new CourseSection
+        {
+            Id = 1,
+            CourseId = course.Id,
+            Course = course,
+            TermId = term.Id,
+            Term = term,
+            InstructorId = instructor.Id,
+            Instructor = instructor,
+            Capacity = 30
+        };
+
+        var component = new GradeComponent
+        {
+            Id = 1,
+            CourseId = course.Id,
+            Course = course,
+            AcademicTermId = term.Id,
+            AcademicTerm = term,
+            Name = "Ara Sınav",
+            ExamType = "Midterm",
+            Weight = 40,
+            Order = 1
+        };
+
+        context.AddRange(term, course, section, component);
+    }
+
+    private sealed class StubWebModuleControlService(IDictionary<string, WebModuleAccessResult> results) : IWebModuleControlService
+    {
+        public WebModuleControlDefinition? GetDefinition(string code) => null;
+
+        public Task<IReadOnlyList<WebModuleControlSummary>> GetSummariesAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WebModuleControlSummary>>([]);
+
+        public Task<WebModuleAccessResult> EvaluateAsync(string code, int? termId = null, CancellationToken ct = default)
+            => Task.FromResult(results.TryGetValue(code, out var result)
+                ? result
+                : new WebModuleAccessResult(
+                    IsEnabled: true,
+                    IsOpen: true,
+                    SelectedMode: WebModuleControlModes.Open,
+                    SelectedModeLabel: "Açık",
+                    EffectiveStateLabel: "Açık",
+                    Message: null));
     }
 }

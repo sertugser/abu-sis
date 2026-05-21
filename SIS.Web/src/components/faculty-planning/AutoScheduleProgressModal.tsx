@@ -28,6 +28,12 @@ const FAILURE_LABELS: Record<string, string> = {
   ConstraintRelax: 'Kısıt ihlali',
 };
 
+const SEARCH_STRATEGY_LABELS: Record<string, string> = {
+  auto: 'Otomatik',
+  fixed: 'Sabit',
+  portfolio: 'Portföy',
+};
+
 export type ProgressStage = 'idle' | 'started' | 'v2-building-request' | 'v2-solving' | 'complete' | 'failed';
 
 interface ScheduleProgressEvent {
@@ -599,6 +605,17 @@ function ResultPanel({
                 {stats.distinctCourseCount} ders
               </span>
             </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">
+              Motor: {stats.engine || 'v2-ortools'}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              Arama: {SEARCH_STRATEGY_LABELS[stats.searchStrategy] ?? stats.searchStrategy ?? 'auto'}
+            </Badge>
+            <Badge variant="outline" className="text-[10px]">
+              UNSAT core: {stats.unsatCoreEnabled ? 'Açık' : 'Kapalı'}
+            </Badge>
           </div>
         </div>
 

@@ -58,6 +58,19 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         new("load-based", "Yük Bazlı"),
     ];
 
+    private static readonly HashSet<string> SchedulerEngineValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "v2-ortools",
+        "cp-sat",
+    };
+
+    private static readonly HashSet<string> SchedulerSearchStrategyValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "auto",
+        "fixed",
+        "portfolio",
+    };
+
     private static readonly Dictionary<string, SystemConfigPresentation> PresentationMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Application.SocialTranscriptStudentApplicationEnabled"] = new("Sosyal Transkript Öğrenci Başvuru", "application", "Başvuru", 10),
@@ -506,6 +519,32 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
                     }
 
                     normalizedValue = string.Join(",", days);
+                    return true;
+                }
+
+                if (string.Equals(key, "Schedule.Engine", StringComparison.OrdinalIgnoreCase))
+                {
+                    var trimmedValue = rawValue.Trim();
+                    if (!SchedulerEngineValues.Contains(trimmedValue))
+                    {
+                        error = "Geçerli motor değerleri: v2-ortools, cp-sat";
+                        return false;
+                    }
+
+                    normalizedValue = trimmedValue.ToLowerInvariant();
+                    return true;
+                }
+
+                if (string.Equals(key, "Schedule.OrTools.SearchStrategy", StringComparison.OrdinalIgnoreCase))
+                {
+                    var trimmedValue = rawValue.Trim();
+                    if (!SchedulerSearchStrategyValues.Contains(trimmedValue))
+                    {
+                        error = "Geçerli arama stratejileri: auto, fixed, portfolio";
+                        return false;
+                    }
+
+                    normalizedValue = trimmedValue.ToLowerInvariant();
                     return true;
                 }
 

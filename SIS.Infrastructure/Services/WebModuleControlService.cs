@@ -127,7 +127,7 @@ public class WebModuleControlService : IWebModuleControlService
                 SelectedMode: selectedOption.Code,
                 SelectedModeLabel: selectedOption.Label,
                 EffectiveStateLabel: "Kapalı",
-                Message: ResolveMessage(announcement, $"{definition.Title} modülü kapatılmıştır.")),
+                Message: $"{definition.Title} modülü kapatılmıştır."),
 
             WebModuleControlModes.TermEventBased => await EvaluateTermEventBasedAccessAsync(
                 definition,
@@ -185,13 +185,19 @@ public class WebModuleControlService : IWebModuleControlService
                 Message: null),
         };
 
-        if (definition.Code == "student-course-registration" && result.IsOpen)
+        if (selectedMode == WebModuleControlModes.TermEventBased
+            && definition.Code == "student-course-registration"
+            && result.IsOpen)
             result = await ApplyDailyRegistrationOpeningAsync(result, announcement, ct);
 
-        if (definition.Code == "student-new-course-registration" && result.IsOpen)
+        if (selectedMode == WebModuleControlModes.TermEventBased
+            && definition.Code == "student-new-course-registration"
+            && result.IsOpen)
             result = await ApplyDailyRegistrationOpeningAsync(result, announcement, ct);
 
-        if (definition.Code == "student-extended-course-registration" && result.IsOpen)
+        if (selectedMode == WebModuleControlModes.TermEventBased
+            && definition.Code == "student-extended-course-registration"
+            && result.IsOpen)
             result = await ApplyDailyRegistrationOpeningAsync(result, announcement, ct);
 
         return result;

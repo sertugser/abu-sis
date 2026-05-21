@@ -144,7 +144,8 @@ function ModuleControlRow({
 
   const isDirty = mode !== module.selectedMode || announcement !== (module.announcement ?? '');
   const selectedOption = module.options.find(option => option.code === mode) ?? module.options[0];
-  const isClosedState = mode === 'closed' || module.effectiveStateLabel.toLocaleLowerCase('tr-TR') === 'kapalı';
+  const preview = getPreviewState(module.title, mode, module, isDirty);
+  const isClosedState = preview.label.toLocaleLowerCase('tr-TR') === 'kapalı';
 
   function handleSave() {
     mutation.mutate(
@@ -177,17 +178,17 @@ function ModuleControlRow({
               'rounded-md border px-2.5 py-1 text-[11px] font-semibold',
               isClosedState
                 ? 'border-red-200 bg-red-100 text-red-700'
-                : module.isCurrentlyOpen
+                : preview.isOpen
                   ? 'border-emerald-200 bg-emerald-100 text-emerald-700'
                   : 'border-amber-200 bg-amber-100 text-amber-700',
             )}>
-              {module.effectiveStateLabel}
+              {preview.label}
             </span>
           </div>
 
           <p className="text-xs text-slate-500">{module.description}</p>
-          {module.effectiveMessage && (
-            <p className="text-xs leading-5 text-slate-600">{module.effectiveMessage}</p>
+          {preview.message && (
+            <p className="text-xs leading-5 text-slate-600">{preview.message}</p>
           )}
         </div>
 
@@ -241,4 +242,50 @@ function ModuleControlRow({
       </div>
     </div>
   );
+}
+
+function getPreviewState(
+  title: string,
+  mode: string,
+  module: WebModuleControlSummaryDto,
+  isDirty: boolean,
+): { label: string; message: string | null; isOpen: boolean } {
+  if (!isDirty) {
+    return {
+      label: module.effectiveStateLabel,
+      message: module.effectiveMessage,
+      isOpen: module.isCurrentlyOpen,
+    };
+  }
+
+  if (mode === 'open') {
+    return {
+      label: 'Açık',
+      message: null,
+      isOpen: true,
+    };
+  }
+
+  if (mode === 'closed') {
+    return {
+      label: 'Kapalı',
+      message: `${title} modülü kapatılmıştır.`,
+      isOpen: false,
+    };
+  }
+
+  return {
+    label: 'Takvime Bağlı',
+    message: selectedModePreviewMessage(mode, module),
+    isOpen: false,
+  };
+}
+
+function selectedModePreviewMessage(mode: string, module: WebModuleControlSummaryDto): string {
+  if (mode === module.selectedMode && module.effectiveMessage) {
+    return module.effectiveMessage;
+  }
+
+  const selectedOption = module.options.find(option => option.code === mode);
+  return selectedOption?.description ?? 'İlgili takvim veya süre tanımı aktif olduğunda modül açılır.';
 }

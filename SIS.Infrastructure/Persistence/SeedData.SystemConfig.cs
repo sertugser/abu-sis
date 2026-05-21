@@ -5,6 +5,29 @@ namespace SIS.Infrastructure.Persistence;
 
 public static partial class SeedData
 {
+    private static readonly string[] RemovedSystemConfigKeys =
+    [
+        "Scheduling.MaxBacktrackingDepth",
+        "Schedule.SA.MaxIterations",
+        "Schedule.SA.InitialTemperature",
+        "Schedule.SA.TimeoutSeconds",
+        "Schedule.SA.StagnationLimit",
+        "Schedule.SA.BacktrackLimit",
+        "Schedule.SA.RelocateWeight",
+        "Schedule.SA.SwapWeight",
+        "Schedule.SA.ChainWeight",
+        "Schedule.MRV.ClassroomWeight",
+        "Schedule.MRV.SlotWeight",
+        "Schedule.MRV.LabWeight",
+        "Schedule.MRV.CapacityWeight",
+        "Schedule.LNS.MaxIterations",
+        "Schedule.LNS.TimeoutSeconds",
+        "Schedule.LNS.DestroySize",
+        "Schedule.Candidate.MaxCombinations",
+        "Schedule.Candidate.MaxWindowsPerDay",
+        "Schedule.Candidate.MaxClassroomsPerType",
+    ];
+
     public static async Task SeedSystemConfigAsync(AppDbContext context)
     {
         var configs = new List<SystemConfig>
@@ -107,26 +130,8 @@ public static partial class SeedData
             new() { Key = "SoftConstraint.Weight.S9", Value = "1", Category = "Scheduling", DataType = "decimal", Description = "S9 ağırlığı" },
             new() { Key = "SoftConstraint.Weight.S12", Value = "1", Category = "Scheduling", DataType = "decimal", Description = "S12 ağırlığı" },
 
-            // ── Scheduling Algoritma Parametreleri ───────────────
-            new() { Key = "Scheduling.MaxBacktrackingDepth", Value = "3", Category = "Scheduling", DataType = "int", Description = "Backtracking max derinlik" },
             new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "Schedule", DataType = "bool", Description = "Öğle arası hard constraint mi (true) soft constraint mi (false)" },
             new() { Key = "Schedule.MaxConsecutiveHours", Value = "4", Category = "Schedule", DataType = "int", Description = "Hocanın aralıksız max ardışık ders saati" },
-
-            // ── Otomatik Programlama (SA) Parametreleri ───────────
-            new() { Key = "Schedule.SA.MaxIterations", Value = "10000", Category = "Scheduling", DataType = "int", Description = "SA algoritması max iterasyon sayısı" },
-            new() { Key = "Schedule.SA.InitialTemperature", Value = "100", Category = "Scheduling", DataType = "int", Description = "SA başlangıç sıcaklığı" },
-            new() { Key = "Schedule.SA.TimeoutSeconds", Value = "90", Category = "Scheduling", DataType = "int", Description = "SA zaman aşımı (saniye)" },
-            new() { Key = "Schedule.SA.StagnationLimit", Value = "2000", Category = "Scheduling", DataType = "int", Description = "SA durgunluk limiti (iyileşme olmayan iterasyon)" },
-            new() { Key = "Schedule.SA.BacktrackLimit", Value = "50", Category = "Scheduling", DataType = "int", Description = "Construction solver backtrack limiti" },
-            new() { Key = "Schedule.SA.RelocateWeight", Value = "50", Category = "Scheduling", DataType = "int", Description = "SA relocate hamlesi ağırlığı" },
-            new() { Key = "Schedule.SA.SwapWeight", Value = "35", Category = "Scheduling", DataType = "int", Description = "SA swap hamlesi ağırlığı" },
-            new() { Key = "Schedule.SA.ChainWeight", Value = "15", Category = "Scheduling", DataType = "int", Description = "SA chain-relocate hamlesi ağırlığı" },
-
-            // ── MRV (Minimum Remaining Values) Ağırlıkları ────────
-            new() { Key = "Schedule.MRV.ClassroomWeight", Value = "3", Category = "Scheduling", DataType = "int", Description = "MRV: derslik kısıtı ağırlığı" },
-            new() { Key = "Schedule.MRV.SlotWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: zaman dilimi kısıtı ağırlığı" },
-            new() { Key = "Schedule.MRV.LabWeight", Value = "2", Category = "Scheduling", DataType = "int", Description = "MRV: lab gereksinimi ağırlığı" },
-            new() { Key = "Schedule.MRV.CapacityWeight", Value = "1", Category = "Scheduling", DataType = "int", Description = "MRV: kapasite kısıtı ağırlığı" },
             new() { Key = "Schedule.TheoryLabSplitThreshold", Value = "4", Category = "Scheduling", DataType = "int", Description = "Teori+lab toplamı bu değeri aşarsa ayrı günlere bölünür" },
             new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Scheduling", DataType = "string", Description = "Kapasite yetmeyince paralel oda split'i yapılabilen block tipleri. Virgülle ayrılmış (Theory, Lab). Örn: 80 kişilik lab section'ı L139+L141'e aynı saatte bölünür." },
 
@@ -198,6 +203,21 @@ public static partial class SeedData
             new() { Key = "Suggestion.PhaseFeedbackEnabled", Value = "true", Category = "Suggestion", DataType = "bool", Description = "AÇIK: Amfi/lab dağıtımı sonrası fakültenin tatmin edilmiş ihtiyacı DemandScore'dan düşülür, normal sınıf payı buna göre yeniden hesaplanır." },
             new() { Key = "Suggestion.PhaseFeedbackWeight", Value = "0.5", Category = "Suggestion", DataType = "decimal", Description = "Faz arası feedback'in DemandScore'a etki oranı (0-1). 1.0 = tam düş, 0.0 = hiç düşme, 0.5 = yarısını düş (dengeli)." },
         };
+
+        await context.SystemConfigs
+            .Where(config => RemovedSystemConfigKeys.Contains(config.Key))
+            .ExecuteDeleteAsync();
+
+        configs = configs
+            .Where(config => !RemovedSystemConfigKeys.Contains(config.Key, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        // Bazı eski merge/refactor izlerinde aynı key listede iki kez tanımlanmış olabilir.
+        // Startup seed'inin patlamaması için key bazında tekilleştiriyoruz.
+        configs = configs
+            .GroupBy(config => config.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
 
         var existingKeys = await context.SystemConfigs
             .AsNoTracking()

@@ -68,6 +68,21 @@ public sealed class CpSatSolverEngine : ISolverEngine
             maxLabBlockHours = 2;
         }
 
+        // Solver config fail-fast: veri fizibilitesi ne olursa olsun geçersiz solver ayarları
+        // kullanıcıya hemen döndürülmeli. Bu yüzden strateji/worker/time limit okumaları
+        // preflight'tan önce yapılır.
+        var timeLimit = await _config.GetIntAsync(
+            "Schedule.OrTools.TimeLimitSeconds", FALLBACK_TIME_LIMIT_SECONDS, cancellationToken);
+        var numWorkers = await _config.GetIntAsync(
+            "Schedule.OrTools.NumWorkers", FALLBACK_NUM_WORKERS, cancellationToken);
+        var configuredSeed = await _config.GetIntAsync(
+            "Schedule.OrTools.RandomSeed", FALLBACK_RANDOM_SEED, cancellationToken);
+        var logToConsole = await _config.GetBoolAsync(
+            "Schedule.OrTools.LogToConsole", FALLBACK_LOG_TO_CONSOLE, cancellationToken);
+        var searchStrategy = await ResolveSearchStrategyAsync(cancellationToken);
+        var unsatCoreEnabled = await _config.GetBoolAsync(
+            "Schedule.OrTools.UnsatCoreEnabled", true, cancellationToken);
+
         // ── Pre-flight feasibility check (Plan 3 Task 2) ──────────────────
         // Filter out sections that have NO valid classroom; mark them as failures.
         // Prevents CP-SAT 'all-or-nothing' infeasibility on real-world data.
@@ -128,17 +143,8 @@ public sealed class CpSatSolverEngine : ISolverEngine
             AllowSameCourseSectionOverlap = allowSameCourseSectionOverlap
         };
 
-        // Read solver parameters from SystemConfig (5-min cached). Fallbacks only fire on missing keys.
-        var timeLimit = await _config.GetIntAsync(
-            "Schedule.OrTools.TimeLimitSeconds", FALLBACK_TIME_LIMIT_SECONDS, cancellationToken);
-        var numWorkers = await _config.GetIntAsync(
-            "Schedule.OrTools.NumWorkers", FALLBACK_NUM_WORKERS, cancellationToken);
         // SolverRequest.Seed (if provided) overrides the configured seed for caller-driven determinism.
-        var configuredSeed = await _config.GetIntAsync(
-            "Schedule.OrTools.RandomSeed", FALLBACK_RANDOM_SEED, cancellationToken);
         var randomSeed = reducedRequest.Seed ?? configuredSeed;
-        var logToConsole = await _config.GetBoolAsync(
-            "Schedule.OrTools.LogToConsole", FALLBACK_LOG_TO_CONSOLE, cancellationToken);
 
         var sw = Stopwatch.StartNew();
         var build = _modelBuilder.Build(reducedRequest);
@@ -149,6 +155,7 @@ public sealed class CpSatSolverEngine : ISolverEngine
                 $"num_workers:{numWorkers}",
                 $"max_time_in_seconds:{timeLimit}",
                 $"random_seed:{randomSeed}",
+                $"search_branching:{searchStrategy.CpSatValue}",
                 $"log_search_progress:{(logToConsole ? "true" : "false")}")
         };
 
@@ -178,15 +185,17 @@ public sealed class CpSatSolverEngine : ISolverEngine
         var elapsedSeconds = sw.Elapsed.TotalSeconds;
 
         var solverResult = status switch
-        {
-            CpSolverStatus.Infeasible => _mapper.MapInfeasible(
-                unsatCore: ExtractUnsatCore(solver, build.Assumptions, reducedRequest),
+            {
+                CpSolverStatus.Infeasible => _mapper.MapInfeasible(
+                unsatCore: ExtractUnsatCore(solver, build.Assumptions, reducedRequest, unsatCoreEnabled),
                 reducedRequest,
                 elapsedSeconds,
-                build.Variables),
+                build.Variables,
+                searchStrategy.UiValue,
+                unsatCoreEnabled),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
-                solver, build, reducedRequest, elapsedSeconds, status),
-            _ => BuildTimeoutResult(solver, build, reducedRequest, elapsedSeconds)
+                solver, build, reducedRequest, elapsedSeconds, status, searchStrategy.UiValue, unsatCoreEnabled),
+            _ => BuildTimeoutResult(solver, build, reducedRequest, elapsedSeconds, searchStrategy.UiValue, unsatCoreEnabled)
         };
 
         // Append preflight infeasibles as additional failures
@@ -240,8 +249,12 @@ public sealed class CpSatSolverEngine : ISolverEngine
     private IReadOnlyList<UnsatCoreEntry> ExtractUnsatCore(
         CpSolver solver,
         AssumptionRegistry registry,
-        SolverRequest request)
+        SolverRequest request,
+        bool unsatCoreEnabled)
     {
+        if (!unsatCoreEnabled)
+            return [];
+
         // Plan 2 Task 16: Türkçe sebep mapping UnsatCoreInterpreter'a taşındı.
         return _unsatInterpreter.Interpret(solver, registry, request);
     }
@@ -251,18 +264,43 @@ public sealed class CpSatSolverEngine : ISolverEngine
         ScheduleModelBuildResult build,
         SolverRequest request,
         double elapsedSeconds,
-        CpSolverStatus status)
+        CpSolverStatus status,
+        string searchStrategy,
+        bool unsatCoreEnabled)
     {
-        return _mapper.MapSuccess(solver, build, request, elapsedSeconds, status);
+        return _mapper.MapSuccess(solver, build, request, elapsedSeconds, status, searchStrategy, unsatCoreEnabled);
     }
 
     private SolverResult BuildTimeoutResult(
         CpSolver solver,
         ScheduleModelBuildResult build,
         SolverRequest request,
-        double elapsedSeconds)
+        double elapsedSeconds,
+        string searchStrategy,
+        bool unsatCoreEnabled)
     {
-        return _mapper.MapTimeout(solver, build, request, elapsedSeconds);
+        return _mapper.MapTimeout(solver, build, request, elapsedSeconds, searchStrategy, unsatCoreEnabled);
+    }
+
+    private async Task<(string UiValue, string CpSatValue)> ResolveSearchStrategyAsync(CancellationToken cancellationToken)
+    {
+        var configuredValue = await _config.GetStringAsync(
+            "Schedule.OrTools.SearchStrategy",
+            "auto",
+            cancellationToken);
+
+        var effectiveValue = string.IsNullOrWhiteSpace(configuredValue)
+            ? "auto"
+            : configuredValue.Trim();
+        var normalized = effectiveValue.ToLowerInvariant();
+        return normalized switch
+        {
+            "auto" => ("auto", "AUTOMATIC_SEARCH"),
+            "fixed" => ("fixed", "FIXED_SEARCH"),
+            "portfolio" => ("portfolio", "PORTFOLIO_SEARCH"),
+            _ => throw new InvalidOperationException(
+                $"Geçersiz Schedule.OrTools.SearchStrategy değeri: '{configuredValue}'. Desteklenen değerler: auto, fixed, portfolio.")
+        };
     }
 
     /// <summary>

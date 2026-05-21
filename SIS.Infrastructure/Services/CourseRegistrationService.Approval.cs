@@ -144,7 +144,6 @@ public partial class CourseRegistrationService
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
-            .OrderBy(dto => dto.StudentName)
             .ToList();
 
         // Alttan dersler, müfredat özeti ve plan durumu ekle
@@ -205,7 +204,17 @@ public partial class CourseRegistrationService
             }
         }
 
-        return result;
+        var calculationMethod = await _config.GetStringAsync("Instructor.AdvisingCalculationMethod", "standard");
+        return string.Equals(calculationMethod, "load-based", StringComparison.OrdinalIgnoreCase)
+            ? result
+                .OrderByDescending(dto => dto.EctsLimit > 0 ? (decimal)dto.TotalEcts / dto.EctsLimit : 0m)
+                .ThenByDescending(dto => dto.FailedCourses.Count)
+                .ThenBy(dto => dto.Cgpa)
+                .ThenBy(dto => dto.StudentName)
+                .ToList()
+            : result
+                .OrderBy(dto => dto.StudentName)
+                .ToList();
     }
 
     public async Task<ApprovalResponseDto> ApproveStudentRegistrationsAsync(int advisorInstructorId, ApprovalActionDto dto)
@@ -243,6 +252,22 @@ public partial class CourseRegistrationService
             {
                 Success = false,
                 Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        var approvalControlCode = await ResolveAdvisorApprovalControlCodeAsync(dto.StudentId, activeTerm.Id, nowApprove);
+        var approvalGate = await ValidateModuleAsync(
+            approvalControlCode,
+            activeTerm.Id,
+            "WebModuleAdvisorApprovalClosed",
+            "Danışman onay işlemleri şu anda kullanılamıyor.");
+        if (approvalGate is not null)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = approvalGate.Errors.First().Message,
                 AffectedRegistrations = 0
             };
         }
@@ -302,6 +327,22 @@ public partial class CourseRegistrationService
             {
                 Success = false,
                 Message = "Aktif donem bulunamadi.",
+                AffectedRegistrations = 0
+            };
+        }
+
+        var rejectControlCode = await ResolveAdvisorApprovalControlCodeAsync(dto.StudentId, activeTerm.Id, nowReject);
+        var rejectGate = await ValidateModuleAsync(
+            rejectControlCode,
+            activeTerm.Id,
+            "WebModuleAdvisorApprovalClosed",
+            "Danışman onay işlemleri şu anda kullanılamıyor.");
+        if (rejectGate is not null)
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = rejectGate.Errors.First().Message,
                 AffectedRegistrations = 0
             };
         }

@@ -16,14 +16,6 @@ public partial class CourseRegistrationService
     public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId)
     {
         var response = new RegistrationResponseDto();
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync();
-        if (webModuleGate is not null)
-        {
-            response.Success = false;
-            response.ValidationResult = webModuleGate;
-            return response;
-        }
-
         var registration = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Course)
@@ -43,6 +35,14 @@ public partial class CourseRegistrationService
                     new() { Rule = "RegistrationExists", Message = "Kayit bulunamadi." }
                 }
             };
+            return response;
+        }
+
+        var webModuleGate = await ValidateStudentAddDropWebModuleAsync(studentId, registration.CourseSection.TermId);
+        if (webModuleGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = webModuleGate;
             return response;
         }
 
@@ -156,6 +156,14 @@ public partial class CourseRegistrationService
                     new() { Rule = "RegistrationExists", Message = "Kayit bulunamadi." }
                 }
             };
+            return response;
+        }
+
+        var withdrawalGate = await ValidateStudentWithdrawalWebModuleAsync(studentId, registration.CourseSection.TermId);
+        if (withdrawalGate is not null)
+        {
+            response.Success = false;
+            response.ValidationResult = withdrawalGate;
             return response;
         }
 
