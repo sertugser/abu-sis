@@ -1478,6 +1478,14 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("InternalQuota")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AreGradesPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("GradesPublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 

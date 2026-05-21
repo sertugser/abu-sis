@@ -29,6 +29,8 @@ public class CourseSection
     public bool IsActive => Status == CourseSectionStatus.Active;
 
     public bool IsFinalized { get; set; }
+    public bool AreGradesPublished { get; set; }
+    public DateTime? GradesPublishedAt { get; set; }
     public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
 

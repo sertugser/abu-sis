@@ -41,6 +41,7 @@ export interface InstructorSection {
   schedules: InstructorScheduleBlock[];
   isActive: boolean;
   isFinalized: boolean;
+  areGradesPublished: boolean;
   activeStudents: number;
 }
 

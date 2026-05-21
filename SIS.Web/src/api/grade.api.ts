@@ -18,7 +18,7 @@ export async function getComponents(sectionId: number): Promise<GradeComponent[]
 
 export async function addComponent(
   sectionId: number,
-  component: { name: string; weight: number; order: number }
+  component: { id?: number | null; name: string; weight: number; order: number }
 ): Promise<void> {
   await apiClient.post(`/instructor/section/${sectionId}/components`, component);
 }
@@ -47,6 +47,14 @@ export async function unfinalizeSection(sectionId: number): Promise<void> {
   await apiClient.post(`/instructor/section/${sectionId}/unfinalize`);
 }
 
+export async function publishGrades(sectionId: number): Promise<void> {
+  await apiClient.post(`/instructor/section/${sectionId}/publish`);
+}
+
+export async function unpublishGrades(sectionId: number): Promise<void> {
+  await apiClient.post(`/instructor/section/${sectionId}/unpublish`);
+}
+
 // Harf aralığı
 export async function getGradingCriteria(sectionId: number): Promise<GradingCriteria> {
   const { data } = await apiClient.get(`/instructor/section/${sectionId}/grading-criteria`);
@@ -61,11 +69,10 @@ export async function updateGradingCriteria(
 }
 
 // Excel template indir
-export async function downloadTemplate(sectionId: number, componentId: number): Promise<Blob> {
+export async function downloadTemplate(sectionId: number): Promise<Blob> {
   const { data } = await apiClient.get(
     `/instructor/section/${sectionId}/grades/export-template`,
     {
-      params: { componentId },
       responseType: 'blob',
     }
   );

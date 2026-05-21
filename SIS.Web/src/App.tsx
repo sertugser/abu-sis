@@ -30,6 +30,7 @@ import AttendanceEntryPage from './pages/AttendanceEntryPage';
 import QrAttendancePage from './pages/QrAttendancePage';
 import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
 import GradeEntryPage from './pages/GradeEntryPage';
+import GradeEntryRedirectPage from './pages/GradeEntryRedirectPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import SchedulingEditorPage from './pages/SchedulingEditorPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
@@ -171,8 +172,8 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.yoklama-girisi.view" />}>
                     <Route path="yoklama-girisi" element={<AttendanceEntryPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
-                    <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
+                  <Route element={<RoleProtectedRoute permission="menu.not-girisi.view" />}>
+                    <Route path="not-girisi" element={<GradeEntryRedirectPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.not-girisi.view" />}>
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />

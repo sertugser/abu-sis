@@ -122,6 +122,7 @@ public class InstructorController : ControllerBase
             Schedules = myScheduleBlockMap.GetValueOrDefault(s.Id, new()),
             IsActive = s.IsActive,
             IsFinalized = s.IsFinalized,
+            AreGradesPublished = s.AreGradesPublished,
             ActiveStudents = s.Registrations.Count(r => r.Status == Domain.Enums.RegistrationStatus.Active)
         })
         .OrderBy(s => s.CourseCode)

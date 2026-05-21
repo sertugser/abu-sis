@@ -16,12 +16,13 @@ public static class MenuStructureSeed
 {
     public static async Task SeedAsync(AppDbContext context, CancellationToken ct = default)
     {
+        var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
+
         if (await context.MenuModules.AnyAsync(ct))
         {
+            await EnsureTeachingGradeEntryMenuAsync(context, permissions, ct);
             return; // idempotent
         }
-
-        var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
 
         // â”€â”€â”€ ModÃ¼l 1: Genel Ä°ÅŸlemler (Patch 2C: SADECE Student) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         var genelIslemler = new MenuModule
@@ -369,6 +370,64 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Not Girişi",       "/not-girisi",               "not-girisi",                 5, "menu.not-girisi.view"),
             BuildItem(permissions, "Ders Kısıtları",   "/danisman-ders-kisitlari",  "danisman-ders-kisitlari",    6, "menu.danisman-ders-kisitlari.view"),
         };
+
+        await context.SaveChangesAsync(ct);
+    }
+
+    private static async Task EnsureTeachingGradeEntryMenuAsync(
+        AppDbContext context,
+        IReadOnlyDictionary<string, Permission> permissions,
+        CancellationToken ct)
+    {
+        const string moduleSlug = "ogretim-islemleri";
+        const string itemSlug = "not-girisi";
+
+        var module = await context.MenuModules
+            .Include(m => m.Items)
+                .ThenInclude(i => i.MenuItemPermissions)
+            .FirstOrDefaultAsync(m => m.Slug == moduleSlug, ct);
+
+        if (module is null)
+        {
+            module = new MenuModule
+            {
+                Slug = moduleSlug,
+                Label = "Öğretim İşlemleri",
+                Icon = "GraduationCap",
+                SortOrder = 15,
+                AllowedRolesCsv = "Instructor,AcademicAdvisor,Dean,DepartmentManager",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            context.MenuModules.Add(module);
+            await context.SaveChangesAsync(ct);
+        }
+
+        var item = module.Items.FirstOrDefault(i => i.Slug == itemSlug);
+        if (item is null)
+        {
+            item = BuildItem(permissions, "Not Girişi", "/not-girisi", itemSlug, 5, "menu.not-girisi.view");
+            item.ModuleId = module.Id;
+            context.MenuItems.Add(item);
+        }
+        else
+        {
+            item.Label = "Not Girişi";
+            item.Route = "/not-girisi";
+            item.SortOrder = 5;
+            item.IsActive = true;
+            item.UpdatedAt = DateTime.UtcNow;
+
+            if (permissions.TryGetValue("menu.not-girisi.view", out var permission)
+                && !item.MenuItemPermissions.Any(mip => mip.PermissionId == permission.Id))
+            {
+                item.MenuItemPermissions.Add(new MenuItemPermission
+                {
+                    MenuItemId = item.Id,
+                    PermissionId = permission.Id,
+                });
+            }
+        }
 
         await context.SaveChangesAsync(ct);
     }

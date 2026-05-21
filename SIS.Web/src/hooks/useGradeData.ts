@@ -10,8 +10,10 @@ import {
   getGrades,
   getGradingCriteria,
   previewImport,
+  publishGrades,
   submitGrades,
   unfinalizeSection,
+  unpublishGrades,
   updateGradingCriteria,
 } from '../api/grade.api';
 import type {
@@ -23,7 +25,8 @@ export function useComponents(sectionId: number) {
   return useQuery({
     queryKey: ['gradeComponents', sectionId],
     queryFn: () => getComponents(sectionId),
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -31,7 +34,8 @@ export function useGrades(sectionId: number) {
   return useQuery({
     queryKey: ['grades', sectionId],
     queryFn: () => getGrades(sectionId),
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -39,14 +43,15 @@ export function useGradingCriteria(sectionId: number) {
   return useQuery({
     queryKey: ['gradingCriteria', sectionId],
     queryFn: () => getGradingCriteria(sectionId),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
 export function useAddComponent(sectionId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (component: { name: string; weight: number; order: number }) =>
+    mutationFn: (component: { id?: number | null; name: string; weight: number; order: number }) =>
       addComponent(sectionId, component),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
@@ -96,6 +101,28 @@ export function useUnfinalize(sectionId: number) {
   });
 }
 
+export function usePublishGrades(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => publishGrades(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+      qc.invalidateQueries({ queryKey: ['instructorSections'] });
+    },
+  });
+}
+
+export function useUnpublishGrades(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unpublishGrades(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+      qc.invalidateQueries({ queryKey: ['instructorSections'] });
+    },
+  });
+}
+
 export function useUpdateGradingCriteria(sectionId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -108,7 +135,7 @@ export function useUpdateGradingCriteria(sectionId: number) {
 
 export function useDownloadTemplate(sectionId: number) {
   return useMutation({
-    mutationFn: (componentId: number) => downloadTemplate(sectionId, componentId),
+    mutationFn: () => downloadTemplate(sectionId),
   });
 }
 

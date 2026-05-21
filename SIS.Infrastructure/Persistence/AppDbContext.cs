@@ -436,6 +436,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
 
             e.Property(cs => cs.RowVersion)
              .IsRowVersion();
+
+            e.Property(cs => cs.AreGradesPublished)
+             .HasDefaultValue(false);
         });
 
         builder.Entity<AttendanceSession>(e =>

@@ -170,7 +170,9 @@ public class StudentController : ControllerBase
 
         var gradeVisibilityByTerm = await BuildGradeVisibilityMapAsync(allRegistrations.Select(r => r.CourseSection.TermId));
         bool HasVisibleLetterGrade(CourseRegistration registration) =>
-            registration.Grade != null && gradeVisibilityByTerm.GetValueOrDefault(registration.CourseSection.TermId, true);
+            registration.CourseSection.AreGradesPublished
+            && registration.Grade != null
+            && gradeVisibilityByTerm.GetValueOrDefault(registration.CourseSection.TermId, true);
 
         // 3. Build per-course best registration map
         // For each course: prefer passed > current (no grade) > failed
@@ -673,6 +675,7 @@ public class StudentController : ControllerBase
             && components.All(component => ownGrades.Any(grade =>
                 grade.GradeComponentId == component.Id && grade.Score != null));
         var hasFinalizedGrade = section.IsFinalized
+            && section.AreGradesPublished
             && hasGradingCriteria
             && registration.Grade != null
             && hasAllComponentScores;
@@ -681,7 +684,7 @@ public class StudentController : ControllerBase
             hasFinalizedGrade,
             registration.Grade != null,
             DateTime.UtcNow);
-        var studentWeightedAverage = CalculateWeightedAverage(registration.Id);
+        var studentWeightedAverage = hasFinalizedGrade ? CalculateWeightedAverage(registration.Id) : null;
 
         var componentStatistics = components
             .Select(component =>
@@ -705,7 +708,7 @@ public class StudentController : ControllerBase
                     AverageScore = componentScores.Count > 0
                         ? Math.Round(componentScores.Average(), 2, MidpointRounding.AwayFromZero)
                         : null,
-                    StudentScore = studentScore
+                    StudentScore = hasFinalizedGrade ? studentScore : null
                 };
             })
             .ToList();
@@ -803,7 +806,8 @@ public class StudentController : ControllerBase
 
         var transcriptGradeVisibility = await BuildGradeVisibilityMapAsync(registrations.Select(r => r.CourseSection.TermId));
         registrations = registrations
-            .Where(registration => transcriptGradeVisibility.GetValueOrDefault(registration.CourseSection.TermId, true))
+            .Where(registration => registration.CourseSection.AreGradesPublished
+                && transcriptGradeVisibility.GetValueOrDefault(registration.CourseSection.TermId, true))
             .ToList();
 
         var registrationIds = registrations.Select(registration => registration.Id).ToList();

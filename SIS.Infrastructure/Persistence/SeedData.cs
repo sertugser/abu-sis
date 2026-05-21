@@ -19,6 +19,7 @@ public static partial class SeedData
         await new CalendarTemplateService(context).EnsureDefaultsAsync();
         await SeedUsersAsync(context, userManager);
         await SeedRegistrationsAsync(context);    // Geçmiş dönem transkript verileri (aktif döneme dokunmaz)
+        await SeedGradeEntryTestDataAsync(context);
         // SeedSectionSchedulesAsync devre dışı — schedule'lar scheduling sistemi tarafından oluşturulmalı
         // SystemConfig önce seed edilmeli: TimeSlot generate'i Schedule.* anahtarlarını okuyor (özellikle FaceToFaceCutoffTime + WeekendOnlineOnly için AllowedMode damgalama)
         await SeedSystemConfigAsync(context);

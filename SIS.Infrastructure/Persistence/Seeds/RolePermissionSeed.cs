@@ -589,6 +589,7 @@ public static class RolePermissionSeed
     {
         if (await context.RolePermissions.AnyAsync(ct))
         {
+            await EnsureMissingDefaultRolePermissionsAsync(context, roleManager, ct);
             // Daha önce seed edildi.
             return;
         }
@@ -625,6 +626,59 @@ public static class RolePermissionSeed
         }
 
         context.RolePermissions.AddRange(rolePermissions);
+        await context.SaveChangesAsync(ct);
+    }
+
+    private static async Task EnsureMissingDefaultRolePermissionsAsync(
+        AppDbContext context,
+        RoleManager<IdentityRole<int>> roleManager,
+        CancellationToken ct)
+    {
+        var permissions = await context.Permissions.ToDictionaryAsync(p => p.Key, ct);
+        var existingPairs = await context.RolePermissions
+            .Select(rp => new { rp.RoleId, rp.PermissionId })
+            .ToListAsync(ct);
+        var existingSet = existingPairs
+            .Select(rp => (rp.RoleId, rp.PermissionId))
+            .ToHashSet();
+
+        var missing = new List<RolePermission>();
+
+        foreach (var (roleName, permissionKeys) in RoleDefaults)
+        {
+            var role = await roleManager.FindByNameAsync(roleName);
+            if (role == null)
+            {
+                Console.WriteLine($"[RolePermissionSeed] WARNING: Role '{roleName}' bulunamadÄ±, eksik permission tamamlamasÄ± atlandÄ±.");
+                continue;
+            }
+
+            foreach (var key in permissionKeys)
+            {
+                if (!permissions.TryGetValue(key, out var permission))
+                {
+                    Console.WriteLine($"[RolePermissionSeed] WARNING: Permission '{key}' bulunamadÄ± (rol: {roleName}), eksik permission tamamlamasÄ± atlandÄ±.");
+                    continue;
+                }
+
+                if (existingSet.Contains((role.Id, permission.Id)))
+                    continue;
+
+                missing.Add(new RolePermission
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    GrantedAt = DateTime.UtcNow,
+                    GrantedByUserId = null,
+                });
+                existingSet.Add((role.Id, permission.Id));
+            }
+        }
+
+        if (missing.Count == 0)
+            return;
+
+        context.RolePermissions.AddRange(missing);
         await context.SaveChangesAsync(ct);
     }
 }
