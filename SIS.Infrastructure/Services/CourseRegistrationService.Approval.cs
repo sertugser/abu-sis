@@ -190,7 +190,8 @@ public partial class CourseRegistrationService
 
                 var passedCourseIds = await _context.CourseRegistrations
                     .Include(cr => cr.CourseSection)
-                    .Where(cr => cr.StudentId == dto.StudentId && RegistrationRulePolicy.IsPassedGrade(cr.Grade))
+                    .Where(cr => cr.StudentId == dto.StudentId)
+                    .WherePassedGrade()
                     .Select(cr => cr.CourseSection.CourseId)
                     .Distinct()
                     .ToListAsync();
@@ -245,17 +246,6 @@ public partial class CourseRegistrationService
             };
         }
 
-        // Guard: dönem RegistrationOpen veya AddDrop olmalı
-        if (!activeTerm.IsRegistrationOpen(_clock.UtcNow) && !activeTerm.IsAddDropOpen(_clock.UtcNow))
-        {
-            return new ApprovalResponseDto
-            {
-                Success = false,
-                Message = $"Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
-                AffectedRegistrations = 0
-            };
-        }
-
         var approvalControlCode = await ResolveAdvisorApprovalControlCodeAsync(dto.StudentId, activeTerm.Id, nowApprove);
         var approvalGate = await ValidateModuleAsync(
             approvalControlCode,
@@ -268,6 +258,18 @@ public partial class CourseRegistrationService
             {
                 Success = false,
                 Message = approvalGate.Errors.First().Message,
+                AffectedRegistrations = 0
+            };
+        }
+
+        if (!await IsManualOpenModeAsync(approvalControlCode)
+            && !activeTerm.IsRegistrationOpen(_clock.UtcNow)
+            && !activeTerm.IsAddDropOpen(_clock.UtcNow))
+        {
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = "Danışman onayı sadece kayıt veya ekleme/bırakma döneminde yapılabilir.",
                 AffectedRegistrations = 0
             };
         }

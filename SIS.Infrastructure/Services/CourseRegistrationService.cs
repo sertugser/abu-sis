@@ -834,6 +834,25 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         return CreateWebModuleError(rule, access.Message ?? fallbackMessage);
     }
 
+    private async Task<bool> IsManualOpenModeAsync(string controlCode, CancellationToken ct = default)
+    {
+        var definition = _webModuleControls.GetDefinition(controlCode);
+        if (definition is null)
+            return false;
+
+        var configuredMode = await _webSettings.GetStringAsync(
+            definition.SettingModuleKey,
+            definition.ModeKey,
+            definition.Options[0].Code,
+            ct);
+
+        var normalizedMode = definition.Options
+            .FirstOrDefault(option => string.Equals(option.Code, configuredMode, StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? definition.Options[0].Code;
+
+        return string.Equals(normalizedMode, WebModuleControlModes.Open, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ValidationResultDto CreateWebModuleError(string rule, string message)
     {
         return new ValidationResultDto

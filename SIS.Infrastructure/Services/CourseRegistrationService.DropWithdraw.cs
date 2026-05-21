@@ -38,7 +38,12 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        var webModuleGate = await ValidateStudentAddDropWebModuleAsync(studentId, registration.CourseSection.TermId);
+        var addDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
+        var webModuleGate = await ValidateModuleAsync(
+            addDropControlCode,
+            registration.CourseSection.TermId,
+            "WebModuleAddDropClosed",
+            "Ders ekle/bırak işlemleri şu anda kullanılamıyor.");
         if (webModuleGate is not null)
         {
             response.Success = false;
@@ -48,7 +53,9 @@ public partial class CourseRegistrationService
 
         // Guard: dönem AddDrop aşamasında olmalı
         var dropTerm = registration.CourseSection.Term;
-        if (!dropTerm.IsAddDropOpen(_clock.UtcNow) && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
+        if (!await IsManualOpenModeAsync(addDropControlCode)
+            && !dropTerm.IsAddDropOpen(_clock.UtcNow)
+            && !dropTerm.IsRegistrationOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -82,7 +89,7 @@ public partial class CourseRegistrationService
         // Check add-drop period (FR-48)
         var term = registration.CourseSection.Term;
         var now = DateTime.UtcNow;
-        if (!term.IsAddDropOpen(now))
+        if (!await IsManualOpenModeAsync(addDropControlCode) && !term.IsAddDropOpen(now))
         {
             // Allow dropping Draft items anytime, but Active/PendingAdvisorApproval only during add-drop
             if (registration.Status != RegistrationStatus.Draft)
@@ -159,7 +166,12 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        var withdrawalGate = await ValidateStudentWithdrawalWebModuleAsync(studentId, registration.CourseSection.TermId);
+        const string withdrawalControlCode = "student-withdrawal";
+        var withdrawalGate = await ValidateModuleAsync(
+            withdrawalControlCode,
+            registration.CourseSection.TermId,
+            "WebModuleWithdrawalClosed",
+            "Dersten çekilme işlemleri şu anda kullanılamıyor.");
         if (withdrawalGate is not null)
         {
             response.Success = false;
@@ -169,7 +181,7 @@ public partial class CourseRegistrationService
 
         // Guard: dönem WithdrawalPeriod aşamasında olmalı
         var withdrawTerm = registration.CourseSection.Term;
-        if (!withdrawTerm.IsWithdrawalOpen(_clock.UtcNow))
+        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !withdrawTerm.IsWithdrawalOpen(_clock.UtcNow))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -219,7 +231,7 @@ public partial class CourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (!term.IsWithdrawalOpen(DateTime.UtcNow))
+        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !term.IsWithdrawalOpen(DateTime.UtcNow))
         {
             errors.Add(new ValidationError
             {

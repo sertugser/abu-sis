@@ -1,10 +1,24 @@
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using System.Linq.Expressions;
 
 namespace SIS.Infrastructure.Services;
 
 internal static class RegistrationRulePolicy
 {
+    private static readonly Expression<Func<CourseRegistration, bool>> FailedGradeExpression = registration =>
+        registration.Grade == GradeCode.FF
+        || registration.Grade == GradeCode.NA
+        || registration.Grade == GradeCode.U;
+
+    private static readonly Expression<Func<CourseRegistration, bool>> PassedGradeExpression = registration =>
+        registration.Grade != null
+        && registration.Grade != GradeCode.FF
+        && registration.Grade != GradeCode.NA
+        && registration.Grade != GradeCode.U
+        && registration.Grade != GradeCode.W
+        && registration.Grade != GradeCode.I;
+
     internal static bool IsFailedGrade(GradeCode? grade) =>
         grade is GradeCode.FF or GradeCode.NA or GradeCode.U;
 
@@ -15,6 +29,18 @@ internal static class RegistrationRulePolicy
         && grade != GradeCode.U
         && grade != GradeCode.W
         && grade != GradeCode.I;
+
+    internal static IQueryable<CourseRegistration> WhereFailedGrade(this IQueryable<CourseRegistration> query) =>
+        query.Where(FailedGradeExpression);
+
+    internal static IQueryable<CourseRegistration> WherePassedGrade(this IQueryable<CourseRegistration> query) =>
+        query.Where(PassedGradeExpression);
+
+    internal static IEnumerable<CourseRegistration> WhereFailedGrade(this IEnumerable<CourseRegistration> source) =>
+        source.Where(registration => IsFailedGrade(registration.Grade));
+
+    internal static IEnumerable<CourseRegistration> WherePassedGrade(this IEnumerable<CourseRegistration> source) =>
+        source.Where(registration => IsPassedGrade(registration.Grade));
 
     internal static int GetEctsLimit(decimal cgpa, int limitBelow200 = 30, int limit200To249 = 42, int limitAbove250 = 48) =>
         cgpa >= 2.50m ? limitAbove250 :

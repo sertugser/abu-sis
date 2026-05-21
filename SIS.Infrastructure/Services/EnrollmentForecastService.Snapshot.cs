@@ -34,7 +34,7 @@ public partial class EnrollmentForecastService
         var currentSemester = completedSemesters + 1;
 
         var passedCourseIds = registrations
-            .Where(registration => RegistrationRulePolicy.IsPassedGrade(registration.Grade))
+            .WherePassedGrade()
             .Select(registration => registration.CourseSection.CourseId)
             .ToHashSet();
 
