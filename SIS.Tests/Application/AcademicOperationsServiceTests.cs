@@ -44,6 +44,63 @@ public class AcademicOperationsServiceTests
     }
 
     [Fact]
+    public async Task BulkAssignAdvisorsAsync_AllowsAdvisorFromAnotherAccessibleDepartment()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddDepartment(context, id: 20, code: "SE", name: "Yazilim Muhendisligi");
+        context.Users.Add(new ApplicationUser { Id = 502, UserName = "advisor3", FirstName = "Can", LastName = "Danisman" });
+        AddInstructor(context, id: 102, userId: 502, departmentId: 20, title: "Dr.");
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkAdvisorAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            AdvisorId = 102,
+            ReplaceExisting = false,
+            StudentIds = [1],
+        };
+
+        var result = await service.BulkAssignAdvisorsAsync(request, userId: 1, roles: ["AdministrativeStaff"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(1);
+        result.FailedCount.Should().Be(0);
+        context.Students.Find(1)!.AdvisorId.Should().Be(102);
+    }
+
+    [Fact]
+    public async Task BulkAssignAdvisorsAsync_RejectsAdvisorOutsideUserScope()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddDepartment(context, id: 20, code: "SE", name: "Yazilim Muhendisligi");
+        context.Users.Add(new ApplicationUser { Id = 502, UserName = "advisor3", FirstName = "Can", LastName = "Danisman" });
+        AddInstructor(context, id: 100, userId: 500, departmentId: 10, title: "Dr.");
+        AddInstructor(context, id: 102, userId: 502, departmentId: 20, title: "Dr.");
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkAdvisorAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            AdvisorId = 102,
+            ReplaceExisting = false,
+            StudentIds = [1],
+        };
+
+        var result = await service.BulkAssignAdvisorsAsync(request, userId: 500, roles: ["DepartmentManager"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(0);
+        result.Errors.Should().ContainSingle(error => error.Contains("erisim kapsaminizda degil"));
+        context.Students.Find(1)!.AdvisorId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task BulkAssignCurriculumAsync_AssignsSameProgramStudents_AndReportsProgramMismatch()
     {
         using var context = CreateContext();
@@ -109,6 +166,17 @@ public class AcademicOperationsServiceTests
         context.Departments.Add(new Department { Id = 10, Code = "CENG", Name = "Bilgisayar Mühendisliği", FacultyId = 1 });
         AddProgram(context, id: 1000, departmentId: 10, code: "CENG", name: "Bilgisayar Mühendisliği");
         AddCurriculum(context, id: 2000, programId: 1000, version: "2024");
+    }
+
+    private static void AddDepartment(AppDbContext context, int id, string code, string name)
+    {
+        context.Departments.Add(new Department
+        {
+            Id = id,
+            Code = code,
+            Name = name,
+            FacultyId = 1,
+        });
     }
 
     private static void AddProgram(AppDbContext context, int id, int departmentId, string code, string name)

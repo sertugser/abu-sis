@@ -36,6 +36,11 @@ type GradeListRow = CourseHistoryItemDto & {
   semester: string;
 };
 
+type GradeListRowWithStatistics = GradeListRow & {
+  statistics: StudentGradeStatisticsDto | null;
+  statisticsLoading: boolean;
+};
+
 const GRADE_BADGE_CLASS: Record<string, string> = {
   AA: 'bg-emerald-600 text-white',
   BA: 'bg-emerald-600 text-white',
@@ -82,7 +87,7 @@ export default function GradeListPage() {
     })),
   });
 
-  const rowsWithStatistics = useMemo(() => rows.map((row, index) => ({
+  const rowsWithStatistics = useMemo<GradeListRowWithStatistics[]>(() => rows.map((row, index) => ({
     ...row,
     statistics: gradeStatisticQueries[index]?.data ?? null,
     statisticsLoading: gradeStatisticQueries[index]?.isLoading ?? false,
@@ -168,48 +173,71 @@ export default function GradeListPage() {
 
       <Card className="min-w-0 overflow-hidden border border-[#003366]/20 shadow-md">
         <CardContent className="p-0">
-          <div className="w-full max-w-full overflow-x-auto">
-            <Table className="min-w-[1240px]">
+          <div className="divide-y divide-border 2xl:hidden">
+            {filteredRows.map(row => (
+              <GradeListCourseCard
+                key={row.registrationId}
+                row={row}
+                onOpenStatistics={() => setSelectedRegistrationId(row.registrationId)}
+              />
+            ))}
+          </div>
+
+          <div className="hidden w-full max-w-full overflow-hidden 2xl:block">
+            <Table className="w-full table-fixed text-[13px]">
+              <colgroup>
+                <col className="w-[2.5rem]" />
+                <col className="w-[5.5rem]" />
+                <col className="w-[19%]" />
+                <col className="w-[11%]" />
+                <col className="w-[8rem]" />
+                <col className="w-[14%]" />
+                <col className="w-[3.25rem]" />
+                <col className="w-[3.25rem]" />
+                <col className="w-[3.25rem]" />
+                <col className="w-[4.5rem]" />
+                <col className="w-[3.25rem]" />
+              </colgroup>
               <TableHeader>
                 <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
-                  <TableHead className="w-16 pl-5 text-center text-white">Şb</TableHead>
-                  <TableHead className="w-32 text-white">Ders Kodu</TableHead>
-                  <TableHead className="min-w-[260px] text-white">Ders Adı</TableHead>
-                  <TableHead className="min-w-48 text-white">Öğretim Elemanı</TableHead>
-                  <TableHead className="min-w-36 text-center text-white">Sonuç Durumu</TableHead>
-                  <TableHead className="min-w-[260px] text-white">Sınav Notları</TableHead>
-                  <TableHead className="w-24 text-center text-white">Ort</TableHead>
-                  <TableHead className="text-center text-white">AKTS</TableHead>
-                  <TableHead className="text-center text-white">Not</TableHead>
-                  <TableHead className="min-w-28 text-center text-white">Durumu</TableHead>
-                  <TableHead className="pr-5 text-right text-white">İşlem</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">Şb</TableHead>
+                  <TableHead className="h-11 px-2 text-[12px] leading-tight text-white">Ders Kodu</TableHead>
+                  <TableHead className="h-11 px-2 text-[12px] leading-tight text-white">Ders Adı</TableHead>
+                  <TableHead className="h-11 px-2 text-[12px] leading-tight text-white">Öğretim Elemanı</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">Sonuç Durumu</TableHead>
+                  <TableHead className="h-11 px-2 text-[12px] leading-tight text-white">Sınav Notları</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">Ort</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">AKTS</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">Not</TableHead>
+                  <TableHead className="h-11 px-2 text-center text-[12px] leading-tight text-white">Durumu</TableHead>
+                  <TableHead className="h-11 px-2 text-right text-[12px] leading-tight text-white">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredRows.map((row, index) => (
                   <TableRow key={row.registrationId} className={index % 2 === 1 ? 'bg-muted/10' : undefined}>
-                    <TableCell className="pl-5 text-center font-semibold">{row.sectionNumber}</TableCell>
-                    <TableCell className="font-mono text-sm font-bold text-[#003366]">
+                    <TableCell className="px-2 py-3 text-center font-semibold">{row.sectionNumber}</TableCell>
+                    <TableCell className="px-2 py-3 font-mono text-[13px] font-bold text-[#003366]">
                       {row.courseCode}
                     </TableCell>
-                    <TableCell className="font-medium text-foreground">
+                    <TableCell className="px-2 py-3 font-medium leading-snug text-foreground">
                       {row.courseName}
                       {row.isRepeated && <span className="ml-2 text-xs text-amber-600">(Tekrar)</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{row.instructorName || '-'}</TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="break-words px-2 py-3 text-[13px] leading-snug text-muted-foreground">{row.instructorName || '-'}</TableCell>
+                    <TableCell className="px-2 py-3 text-center">
                       <ResultStatusBadge statistics={row.statistics} isLoading={row.statisticsLoading} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-2 py-3">
                       <ExamScores statistics={row.statistics} isLoading={row.statisticsLoading} />
                     </TableCell>
-                    <TableCell className="text-center font-mono text-sm">
+                    <TableCell className="px-2 py-3 text-center font-mono text-[13px]">
                       {row.statisticsLoading ? '...' : formatWeightedAverage(row.statistics)}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="px-2 py-3 text-center">
                       <Badge variant="secondary" className="font-mono">{row.ects}</Badge>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="px-2 py-3 text-center">
                       {shouldShowLetterGrade(row.statistics) ? (
                         <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', GRADE_BADGE_CLASS[row.statistics!.studentLetterGrade!] ?? 'bg-slate-200 text-slate-700')}>
                           {row.statistics!.studentLetterGrade}
@@ -218,19 +246,21 @@ export default function GradeListPage() {
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="px-2 py-3 text-center">
                       <CourseResultBadge statistics={row.statistics} isLoading={row.statisticsLoading} />
                     </TableCell>
-                    <TableCell className="pr-5 text-right">
+                    <TableCell className="px-2 py-3 text-right">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={() => setSelectedRegistrationId(row.registrationId)}
-                        className="h-8 gap-1.5"
+                        aria-label={`${row.courseCode} sınav istatistiklerini aç`}
+                        title="İstatistik"
+                        className="h-8 w-8 px-0"
                       >
                         <BarChart3 className="h-3.5 w-3.5" />
-                        İstatistik
+                        <span className="sr-only">İstatistik</span>
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -256,7 +286,7 @@ export default function GradeListPage() {
       </Card>
 
       <Dialog open={selectedRegistrationId !== null} onOpenChange={open => { if (!open) setSelectedRegistrationId(null); }}>
-        <DialogContent className="max-h-[92vh] max-w-[min(1280px,calc(100vw-2rem))] overflow-hidden p-0">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[min(1280px,calc(100vw-2rem))] overflow-hidden p-0">
           <DialogHeader className="sr-only">
             <DialogTitle>Sınav İstatistikleri</DialogTitle>
           </DialogHeader>
@@ -273,6 +303,91 @@ export default function GradeListPage() {
   );
 }
 
+function GradeListCourseCard({
+  row,
+  onOpenStatistics,
+}: {
+  row: GradeListRowWithStatistics;
+  onOpenStatistics: () => void;
+}) {
+  return (
+    <article className="min-w-0 space-y-3 bg-card p-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-bold text-[#003366]">{row.courseCode}</span>
+            <Badge variant="secondary" className="font-mono">Şb {row.sectionNumber}</Badge>
+            {row.isRepeated && <span className="text-xs font-semibold text-amber-600">Tekrar</span>}
+          </div>
+          <h2 className="mt-1 break-words text-sm font-semibold leading-snug text-foreground">
+            {row.courseName}
+          </h2>
+          <p className="mt-1 break-words text-xs leading-snug text-muted-foreground">
+            {row.instructorName || '-'}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={onOpenStatistics}
+          aria-label={`${row.courseCode} sınav istatistiklerini aç`}
+          title="İstatistik"
+          className="h-9 w-9 shrink-0"
+        >
+          <BarChart3 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+        <GradeListInfoItem label="Sonuç Durumu">
+          <ResultStatusBadge statistics={row.statistics} isLoading={row.statisticsLoading} />
+        </GradeListInfoItem>
+        <GradeListInfoItem label="Durumu">
+          <CourseResultBadge statistics={row.statistics} isLoading={row.statisticsLoading} />
+        </GradeListInfoItem>
+        <GradeListInfoItem label="Ort">
+          <span className="font-mono text-sm">
+            {row.statisticsLoading ? '...' : formatWeightedAverage(row.statistics)}
+          </span>
+        </GradeListInfoItem>
+        <GradeListInfoItem label="AKTS">
+          <Badge variant="secondary" className="font-mono">{row.ects}</Badge>
+        </GradeListInfoItem>
+        <GradeListInfoItem label="Not">
+          {shouldShowLetterGrade(row.statistics) ? (
+            <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', GRADE_BADGE_CLASS[row.statistics!.studentLetterGrade!] ?? 'bg-slate-200 text-slate-700')}>
+              {row.statistics!.studentLetterGrade}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          )}
+        </GradeListInfoItem>
+        <GradeListInfoItem label="Sınav Notları" className="sm:col-span-2">
+          <ExamScores statistics={row.statistics} isLoading={row.statisticsLoading} />
+        </GradeListInfoItem>
+      </div>
+    </article>
+  );
+}
+
+function GradeListInfoItem({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn('min-w-0 rounded-md border border-border/70 bg-muted/20 px-3 py-2', className)}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
 function ResultStatusBadge({
   statistics,
   isLoading,
@@ -280,11 +395,11 @@ function ResultStatusBadge({
   statistics: StudentGradeStatisticsDto | null | undefined;
   isLoading: boolean;
 }) {
-  if (isLoading) return <Badge variant="outline">Yükleniyor</Badge>;
+  if (isLoading) return <Badge variant="outline" className="whitespace-nowrap text-[11px]">Yükleniyor</Badge>;
 
   return isGradeFinalized(statistics)
-    ? <Badge variant="success">Sonuçlandırıldı</Badge>
-    : <Badge variant="warning">Sonuçlandırılmadı</Badge>;
+    ? <Badge variant="success" className="whitespace-nowrap text-[11px]">Sonuçlandırıldı</Badge>
+    : <Badge variant="warning" className="whitespace-nowrap text-[11px]">Sonuçlandırılmadı</Badge>;
 }
 
 function ExamScores({
@@ -303,7 +418,7 @@ function ExamScores({
 
   if (scores.length === 0) {
     return (
-      <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+      <span className="inline-flex max-w-full rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold leading-tight text-amber-700">
         Not girişi yapılmamış
       </span>
     );
@@ -335,7 +450,7 @@ function CourseResultBadge({
 
   const grade = statistics!.studentLetterGrade!;
   const result = getCourseResult(grade);
-  return <Badge variant={result.variant}>{result.label}</Badge>;
+  return <Badge variant={result.variant} className="whitespace-nowrap text-[11px]">{result.label}</Badge>;
 }
 
 function SummaryCell({ label, value }: { label: string; value: string }) {
@@ -399,12 +514,12 @@ function ExamStatisticsPanel({
 
   return (
     <div className="max-h-[92vh] overflow-auto bg-[#f3f3f3] text-[13px] text-slate-900">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-400 bg-[#e9e9e9] px-2 py-1.5">
+      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-slate-400 bg-[#e9e9e9] px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="font-medium">Sınav İstatistikleri</div>
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex h-7 min-w-56 items-center justify-center gap-1 rounded border border-slate-300 bg-white px-3 text-xs text-slate-600 hover:bg-slate-50"
+          className="inline-flex h-7 w-full min-w-0 items-center justify-center gap-1 rounded border border-slate-300 bg-white px-3 text-xs text-slate-600 hover:bg-slate-50 sm:w-auto sm:min-w-56"
         >
           <Printer className="h-3.5 w-3.5 text-cyan-500" />
           Yazdır
@@ -568,11 +683,11 @@ function InfoRow({
   highlighted?: boolean;
 }) {
   return (
-    <div className={cn('grid grid-cols-[minmax(180px,310px)_1fr] border-b border-slate-200 last:border-b-0', highlighted && 'bg-blue-100')}>
+    <div className={cn('grid grid-cols-1 border-b border-slate-200 last:border-b-0 sm:grid-cols-[minmax(180px,310px)_1fr]', highlighted && 'bg-blue-100')}>
       <div className="px-2 py-1">{label}</div>
       <div className={cn(
         'px-2 py-1',
-        alignRight && 'text-right',
+        alignRight && 'sm:text-right',
         strongValue && 'font-semibold',
         tone === 'red' && 'text-red-600',
         tone === 'blue' && 'text-blue-700'

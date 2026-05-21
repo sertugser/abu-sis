@@ -118,7 +118,7 @@ export interface CalendarVisualizerProps {
   inlineYearView?: boolean;
   filterableLegend?: boolean;
   headerActions?: ReactNode;
-  /** Academic year start (e.g. 2025 for 2025-2026). When provided, the year view shows Sep of this year through Aug of the next. */
+  /** Academic year start (e.g. 2025 for 2025-2026). Year view starts with that September and expands to every month touched by events. */
   academicYearStart?: number;
   onEventDrop?: (event: {
     eventId: VisualizerEvent['id'];
@@ -216,6 +216,34 @@ function eventDateRange(event: VisualizerEvent) {
   };
 }
 
+function shouldRenderWeekdaysOnly(event: VisualizerEvent) {
+  return calendarEventCategory(event.eventType, event.title, event.templateItemKey) === 'exam';
+}
+
+function weekdayDateSegments(startDate: string, endDate: string) {
+  const segments: Array<{ startDate: string; endDate: string }> = [];
+  let cursor = startDate;
+  let segmentStart: string | null = null;
+
+  while (cursor <= endDate) {
+    if (isWeekendDateValue(cursor)) {
+      if (segmentStart) {
+        segments.push({ startDate: segmentStart, endDate: shiftDateValue(cursor, -1) });
+        segmentStart = null;
+      }
+    } else if (!segmentStart) {
+      segmentStart = cursor;
+    }
+
+    cursor = shiftDateValue(cursor, 1);
+  }
+
+  if (segmentStart)
+    segments.push({ startDate: segmentStart, endDate });
+
+  return segments.length > 0 ? segments : [{ startDate, endDate }];
+}
+
 function monthKey(month: ViewMonth) {
   return `${month.y}-${month.m}`;
 }
@@ -231,6 +259,30 @@ function addMonths(month: ViewMonth, delta: number): ViewMonth {
 
 function monthValue(month: ViewMonth) {
   return month.y * 12 + month.m;
+}
+
+function monthFromDateValue(value?: string | null): ViewMonth | null {
+  const input = dateOnly(value);
+  if (!input) return null;
+
+  const [year, month] = input.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12)
+    return null;
+
+  return { y: year, m: month - 1 };
+}
+
+function buildMonthSequence(start: ViewMonth, end: ViewMonth): ViewMonth[] {
+  const months: ViewMonth[] = [];
+  const cursor = { ...start };
+  while (monthValue(cursor) <= monthValue(end)) {
+    months.push({ ...cursor });
+    const next = addMonths(cursor, 1);
+    cursor.y = next.y;
+    cursor.m = next.m;
+  }
+
+  return months;
 }
 
 function buildGrid(year: number, month: number): Day[][] {
@@ -346,31 +398,44 @@ function closestMonthTo(target: ViewMonth, months: ViewMonth[]) {
 }
 
 function buildAcademicYearMonths(events: VisualizerEvent[], fallbackAnchor: ViewMonth, explicitStartYear?: number): ViewMonth[] {
-  // When an explicit academic year start is provided, use it directly
-  if (explicitStartYear !== undefined) {
-    const start = { y: explicitStartYear, m: 8 };
-    return Array.from({ length: 12 }, (_, index) => addMonths(start, index));
-  }
-
-  const eventDates = events
+  const eventMonths = events
     .flatMap(event => [event.startDate, event.endDate])
     .filter(Boolean)
-    .map(date => new Date(date))
-    .filter(date => !Number.isNaN(date.getTime()));
+    .map(date => monthFromDateValue(date))
+    .filter((month): month is ViewMonth => month !== null);
 
-  // Find the EARLIEST event date in a fall month (Sep+) to anchor the academic year.
-  // Using earliest prevents summer events that extend into Sep of the next year
-  // from shifting the entire year view forward by one year.
-  const fallEvent = eventDates
-    .filter(date => date.getMonth() >= 8)
-    .sort((left, right) => left.getTime() - right.getTime())[0];
-  const anchor = fallEvent
-    ? { y: fallEvent.getFullYear(), m: fallEvent.getMonth() }
-    : fallbackAnchor;
-  const startYear = anchor.m >= 8 ? anchor.y : anchor.y - 1;
-  const start = { y: startYear, m: 8 };
+  let start: ViewMonth;
+  if (explicitStartYear !== undefined) {
+    start = { y: explicitStartYear, m: 8 };
+  } else {
+    const eventDates = events
+      .flatMap(event => [event.startDate, event.endDate])
+      .filter(Boolean)
+      .map(date => new Date(date))
+      .filter(date => !Number.isNaN(date.getTime()));
 
-  return Array.from({ length: 12 }, (_, index) => addMonths(start, index));
+    // Find the EARLIEST event date in a fall month (Sep+) to anchor the academic year.
+    // Using earliest prevents summer events that extend into Sep of the next year
+    // from shifting the entire year view forward by one year.
+    const fallEvent = eventDates
+      .filter(date => date.getMonth() >= 8)
+      .sort((left, right) => left.getTime() - right.getTime())[0];
+    const anchor = fallEvent
+      ? { y: fallEvent.getFullYear(), m: fallEvent.getMonth() }
+      : fallbackAnchor;
+    const startYear = anchor.m >= 8 ? anchor.y : anchor.y - 1;
+    start = { y: startYear, m: 8 };
+  }
+
+  let end = addMonths(start, 11);
+  for (const eventMonth of eventMonths) {
+    if (monthValue(eventMonth) < monthValue(start))
+      start = eventMonth;
+    if (monthValue(eventMonth) > monthValue(end))
+      end = eventMonth;
+  }
+
+  return buildMonthSequence(start, end);
 }
 
 function collectDropTargetDates(months: ViewMonth[]) {
@@ -538,19 +603,24 @@ export function CalendarVisualizer({
       if (!range)
         return [];
 
-      return [{
+      const segments = shouldRenderWeekdaysOnly(event)
+        ? weekdayDateSegments(range.startDate, range.endDate)
+        : [range];
+
+      return segments.map(segment => ({
         ...event,
         sourceEventId: event.id,
         sourceStartDate: range.startDate,
         sourceEndDate: range.endDate,
-        startDate: range.startDate,
-        endDate: range.endDate,
-      }];
+        startDate: segment.startDate,
+        endDate: segment.endDate,
+      }));
     }),
     [visibleEvents],
   );
   const allMonths = useMemo(() => buildMonthRange(renderedEvents, initialMonth), [renderedEvents, initialMonth]);
   const academicYearMonths = useMemo(() => buildAcademicYearMonths(renderedEvents, vm, explicitAcademicYearStart), [renderedEvents, vm, explicitAcademicYearStart]);
+  const academicYearLastMonth = academicYearMonths[academicYearMonths.length - 1];
   const eventSignature = useMemo(
     () => renderedEvents.map(event => `${event.id}:${event.startDate}:${event.endDate}:${event.isChangedPreview ? '1' : '0'}`).join('|'),
     [renderedEvents],
@@ -1094,7 +1164,7 @@ export function CalendarVisualizer({
 
   function renderInlineYearView() {
     const firstMonth = academicYearMonths[0];
-    const lastMonth = academicYearMonths[11];
+    const lastMonth = academicYearMonths[academicYearMonths.length - 1];
     const expandedMonthTitle = expandedMonth ? `${MONTH_NAMES[expandedMonth.m]} ${expandedMonth.y}` : '';
 
     return (
@@ -1241,7 +1311,7 @@ export function CalendarVisualizer({
                 <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
                   {academicYearMonths[0] && MONTH_NAMES[academicYearMonths[0].m]} {academicYearMonths[0]?.y}
                   {' - '}
-                  {academicYearMonths[11] && MONTH_NAMES[academicYearMonths[11].m]} {academicYearMonths[11]?.y}
+                  {academicYearLastMonth && MONTH_NAMES[academicYearLastMonth.m]} {academicYearLastMonth?.y}
                 </h2>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {renderLegend('year-legend')}

@@ -22,12 +22,15 @@ import {
 import { cn, formatDate } from '@/lib/utils';
 import {
   AlertCircle,
+  Eye,
+  EyeOff,
   PencilLine,
   Plus,
   RefreshCcw,
   Save,
   Trash2,
 } from 'lucide-react';
+import { useCurriculumStatus } from '../hooks/useCurriculumStatus';
 import { useStudentInfo } from '../hooks/useStudentInfo';
 import { useStudentTranscript } from '../hooks/useStudentTranscript';
 import { STUDENT_STATUS_LABELS } from '../lib/constants';
@@ -44,8 +47,11 @@ import {
   normalizeGrade,
   round2,
   type ScenarioCourse,
+  type ScenarioComputedCourse,
   type ScenarioGrade,
+  type ScenarioTermReport,
 } from '../lib/transcriptScenario';
+import type { CurriculumCourseStatusDto, CurriculumStatusDto } from '../types/curriculum';
 
 interface ScenarioCourseDraft {
   scenarioId: string | null;
@@ -63,22 +69,42 @@ interface ScenarioCourseDraft {
   excludeFromAverage: boolean;
   continuationCourseId: string;
   isAdded: boolean;
+  isPlannedFromCurriculum: boolean;
   wasRepeated: boolean;
   sortOrder: number;
 }
 
 const SELF_CONTINUATION = '__self__';
+const FUTURE_TERM_ID_OFFSET = 900_000;
+
+interface PlannedScenarioCourse {
+  scenarioId: string;
+  courseId: number;
+  termId: number;
+  courseCode: string;
+  courseName: string;
+  credits: number;
+  ects: number;
+  isCompulsory: boolean;
+  prerequisites: string[];
+  prerequisitesMet: boolean;
+}
 
 export default function TranscriptScenarioPage() {
   const transcriptQuery = useStudentTranscript();
   const studentQuery = useStudentInfo();
+  const curriculumStatusQuery = useCurriculumStatus();
   const [scenarioCourses, setScenarioCourses] = useState<ScenarioCourse[] | null>(null);
   const [draft, setDraft] = useState<ScenarioCourseDraft | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [showFutureCourses, setShowFutureCourses] = useState(false);
 
   const transcript = transcriptQuery.data;
   const student = studentQuery.data;
-  const terms = transcript ? buildScenarioTerms(transcript) : [];
+  const curriculumStatus = curriculumStatusQuery.data;
+  const transcriptTerms = transcript ? buildScenarioTerms(transcript) : [];
+  const futureTerms = transcript && curriculumStatus ? buildFutureScenarioTerms(transcriptTerms, curriculumStatus) : [];
+  const terms = [...transcriptTerms, ...futureTerms];
   const initialCourses = transcript ? buildInitialScenarioCourses(transcript) : [];
 
   if (transcript && scenarioCourses === null) {
@@ -104,6 +130,13 @@ export default function TranscriptScenarioPage() {
   const scenarioReport = calculateScenarioReport(terms, scenarioCourses);
   const hasScenarioChanges = !areScenarioCoursesEqual(scenarioCourses, initialCourses);
   const scenarioDelta = round2(scenarioReport.currentCgpa - transcript.currentCgpa);
+  const plannedFutureCourses = curriculumStatus
+    ? buildPlannedFutureCourses(curriculumStatus, scenarioCourses)
+    : [];
+  const plannedCoursesByTermId = groupPlannedCoursesByTermId(plannedFutureCourses);
+  const visibleTermReports = scenarioReport.terms.filter(term =>
+    term.courses.length > 0 || (showFutureCourses && (plannedCoursesByTermId.get(term.termId)?.length ?? 0) > 0)
+  );
   const advisorName = student.advisorName
     ? `${student.advisorTitle ? `${student.advisorTitle} ` : ''}${student.advisorName}`.trim()
     : 'Atanmamış';
@@ -116,7 +149,8 @@ export default function TranscriptScenarioPage() {
   };
 
   const handleAddCourse = () => {
-    const lastTerm = terms[terms.length - 1];
+    const addCourseTerms = showFutureCourses ? terms : transcriptTerms.length > 0 ? transcriptTerms : terms;
+    const lastTerm = addCourseTerms[addCourseTerms.length - 1];
     setDialogError(null);
     setDraft({
       scenarioId: null,
@@ -134,6 +168,31 @@ export default function TranscriptScenarioPage() {
       excludeFromAverage: false,
       continuationCourseId: SELF_CONTINUATION,
       isAdded: true,
+      isPlannedFromCurriculum: false,
+      wasRepeated: false,
+      sortOrder: getNextSortOrder(scenarioCourses),
+    });
+  };
+
+  const handleOpenPlannedCourse = (course: PlannedScenarioCourse) => {
+    setDialogError(null);
+    setDraft({
+      scenarioId: null,
+      sourceRegistrationId: null,
+      courseId: course.courseId,
+      termId: String(course.termId),
+      courseCode: course.courseCode,
+      courseName: course.courseName,
+      credits: String(course.credits),
+      ects: String(course.ects),
+      equivalentCourseIds: [],
+      averageScore: '',
+      grade: 'BB',
+      originalGrade: null,
+      excludeFromAverage: false,
+      continuationCourseId: SELF_CONTINUATION,
+      isAdded: true,
+      isPlannedFromCurriculum: true,
       wasRepeated: false,
       sortOrder: getNextSortOrder(scenarioCourses),
     });
@@ -157,6 +216,7 @@ export default function TranscriptScenarioPage() {
       excludeFromAverage: course.excludeFromAverage,
       continuationCourseId: course.continuationCourseId === course.scenarioId ? SELF_CONTINUATION : course.continuationCourseId,
       isAdded: course.isAdded,
+      isPlannedFromCurriculum: course.isPlannedFromCurriculum,
       wasRepeated: course.wasRepeated,
       sortOrder: course.sortOrder,
     });
@@ -226,6 +286,7 @@ export default function TranscriptScenarioPage() {
       excludeFromAverage: gradeMeta.countsTowardsGpa ? draft.excludeFromAverage : true,
       continuationCourseId,
       isAdded: draft.isAdded,
+      isPlannedFromCurriculum: draft.isPlannedFromCurriculum,
       wasRepeated: continuationCourseId !== scenarioId,
       sortOrder: draft.sortOrder,
     };
@@ -310,6 +371,19 @@ export default function TranscriptScenarioPage() {
               <RefreshCcw className="h-4 w-4" />
               Başlangıç Durumuna Getir
             </Button>
+            <Button
+              type="button"
+              variant={showFutureCourses ? 'default' : 'outline'}
+              onClick={() => setShowFutureCourses(value => !value)}
+              disabled={curriculumStatusQuery.isLoading || plannedFutureCourses.length === 0}
+            >
+              {showFutureCourses ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {curriculumStatusQuery.isLoading
+                ? 'Müfredat Yükleniyor'
+                : showFutureCourses
+                  ? 'Sonraki Dersleri Gizle'
+                  : `Sonraki Dersleri Aç (${plannedFutureCourses.length})`}
+            </Button>
             <Button type="button" onClick={handleAddCourse} disabled={terms.length === 0}>
               <Plus className="h-4 w-4" />
               Yeni Ders Ekle
@@ -323,7 +397,7 @@ export default function TranscriptScenarioPage() {
         </CardContent>
       </Card>
 
-      {scenarioReport.terms.length === 0 ? (
+      {visibleTermReports.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
             Senaryo için gösterilecek ders kaydı bulunmuyor.
@@ -331,7 +405,7 @@ export default function TranscriptScenarioPage() {
         </Card>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
-          {scenarioReport.terms.map(term => (
+          {visibleTermReports.map(term => (
             <Card key={term.termId} className="overflow-hidden rounded-[10px] border border-slate-300 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.10)]">
               <div className="bg-[#6f7073] px-3 py-2 text-[15px] font-bold text-white">
                 {term.termName}
@@ -362,52 +436,23 @@ export default function TranscriptScenarioPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {term.courses.map((course, index) => (
-                      <tr key={course.scenarioId} className={cn('border-b border-slate-200/90', index % 2 === 1 && 'bg-slate-50/30')}>
-                        <td className="px-2 py-2 align-top font-mono text-[12.5px] font-semibold text-[#234983]">
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span>{course.courseCode}</span>
-                            {course.isAdded && (
-                              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-primary">
-                                Yeni
-                              </span>
-                            )}
-                            {course.isRepeated && (
-                              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
-                                Tekrar
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className={cn('px-2 py-2 align-top text-[12.5px] leading-5 text-slate-700 break-words', !course.isPassed && course.countsTowardsGpa && 'text-destructive')}>
-                          {course.courseName}
-                        </td>
-                        <td className="px-1 py-2 text-center align-top font-medium text-slate-700">{course.credits}</td>
-                        <td className="px-1 py-2 text-center align-top font-medium text-slate-700">{course.ects}</td>
-                        <td className="px-1 py-2 text-center align-top font-medium text-slate-700">
-                          {course.averageScore == null ? '—' : formatCompactNumber(course.averageScore)}
-                        </td>
-                        <td className={cn(
-                          'px-1 py-2 text-center align-top font-mono font-bold',
-                          course.isPassed ? 'text-emerald-700' : course.countsTowardsGpa ? 'text-destructive' : 'text-slate-600',
-                        )}>
-                          {course.grade}
-                        </td>
-                        <td className="px-1 py-2 text-center align-top text-[12px] font-semibold text-slate-600">
-                          {course.countsTowardsGpa ? 'D' : '-'}
-                        </td>
-                        <td className="px-1 py-2 text-center align-top">
-                          <button
-                            type="button"
-                            onClick={() => handleEditCourse(course)}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-300 bg-sky-50 text-sky-600 transition-colors hover:bg-sky-100"
-                            title="Dersi düzenle"
-                          >
-                            <PencilLine className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {buildVisibleRowsForTerm(term, showFutureCourses ? plannedCoursesByTermId.get(term.termId) ?? [] : []).map((row, index) =>
+                      row.kind === 'scenario' ? (
+                        <ScenarioCourseRow
+                          key={row.course.scenarioId}
+                          course={row.course}
+                          isStriped={index % 2 === 1}
+                          onEdit={() => handleEditCourse(row.course)}
+                        />
+                      ) : (
+                        <PlannedCourseRow
+                          key={row.course.scenarioId}
+                          course={row.course}
+                          isStriped={index % 2 === 1}
+                          onOpen={() => handleOpenPlannedCourse(row.course)}
+                        />
+                      )
+                    )}
                   </tbody>
                 </table>
 
@@ -638,6 +683,109 @@ function ScenarioEditorDialog({
   );
 }
 
+function ScenarioCourseRow({
+  course,
+  isStriped,
+  onEdit,
+}: {
+  course: ScenarioComputedCourse;
+  isStriped: boolean;
+  onEdit: () => void;
+}) {
+  return (
+    <tr className={cn('border-b border-slate-200/90', isStriped && 'bg-slate-50/30')}>
+      <td className="px-2 py-2 align-top font-mono text-[12.5px] font-semibold text-[#234983]">
+        <div className="flex flex-wrap items-center gap-1">
+          <span>{course.courseCode}</span>
+          {course.isAdded && (
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-primary">
+              {course.isPlannedFromCurriculum ? 'Plan' : 'Yeni'}
+            </span>
+          )}
+          {course.isRepeated && (
+            <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
+              Tekrar
+            </span>
+          )}
+        </div>
+      </td>
+      <td className={cn('break-words px-2 py-2 align-top text-[12.5px] leading-5 text-slate-700', !course.isPassed && course.countsTowardsGpa && 'text-destructive')}>
+        {course.courseName}
+      </td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-700">{course.credits}</td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-700">{course.ects}</td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-700">
+        {course.averageScore == null ? '—' : formatCompactNumber(course.averageScore)}
+      </td>
+      <td className={cn(
+        'px-1 py-2 text-center align-top font-mono font-bold',
+        course.isPassed ? 'text-emerald-700' : course.countsTowardsGpa ? 'text-destructive' : 'text-slate-600',
+      )}>
+        {course.grade}
+      </td>
+      <td className="px-1 py-2 text-center align-top text-[12px] font-semibold text-slate-600">
+        {course.countsTowardsGpa ? 'D' : '-'}
+      </td>
+      <td className="px-1 py-2 text-center align-top">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-300 bg-sky-50 text-sky-600 transition-colors hover:bg-sky-100"
+          title="Dersi düzenle"
+        >
+          <PencilLine className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function PlannedCourseRow({
+  course,
+  isStriped,
+  onOpen,
+}: {
+  course: PlannedScenarioCourse;
+  isStriped: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <tr className={cn('border-b border-slate-200/90 bg-slate-50/70 opacity-60', isStriped && 'bg-slate-100/70')}>
+      <td className="px-2 py-2 align-top font-mono text-[12.5px] font-semibold text-[#234983]">
+        <div className="flex flex-wrap items-center gap-1">
+          <span>{course.courseCode}</span>
+          <span className="rounded-full bg-slate-300/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-slate-700">
+            Plan
+          </span>
+        </div>
+      </td>
+      <td className="break-words px-2 py-2 align-top text-[12.5px] leading-5 text-slate-500">
+        {course.courseName}
+        {!course.prerequisitesMet && course.prerequisites.length > 0 && (
+          <span className="ml-1 text-[11px] text-amber-700">
+            ({course.prerequisites.join(', ')})
+          </span>
+        )}
+      </td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-500">{course.credits}</td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-500">{course.ects}</td>
+      <td className="px-1 py-2 text-center align-top font-medium text-slate-400">—</td>
+      <td className="px-1 py-2 text-center align-top font-mono font-bold text-slate-400">—</td>
+      <td className="px-1 py-2 text-center align-top text-[12px] font-semibold text-slate-400">-</td>
+      <td className="px-1 py-2 text-center align-top">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100"
+          title="Dersi senaryoya aç"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 function TranscriptScenarioLoadingState() {
   return (
     <div className="space-y-6">
@@ -670,6 +818,89 @@ function FormLabel({ label }: { label: string }) {
 
 function findTermName(terms: ReturnType<typeof buildScenarioTerms>, termId: number) {
   return terms.find(term => term.termId === termId)?.termName ?? 'Bilinmeyen Dönem';
+}
+
+function buildFutureScenarioTerms(
+  transcriptTerms: ReturnType<typeof buildScenarioTerms>,
+  curriculumStatus: CurriculumStatusDto,
+) {
+  const semestersWithFutureCourses = curriculumStatus.semesters.filter(semester =>
+    semester.courses.some(course => !course.takenTermLabel)
+  );
+  const baseYear = transcriptTerms.at(-1)?.year ?? new Date().getFullYear();
+
+  return semestersWithFutureCourses.map((semester, index) => ({
+    termId: getFutureTermId(semester.semesterNumber),
+    termName: `Planlanan ${semester.label}`,
+    year: baseYear + Math.floor(index / 2),
+    semester: semester.label,
+    order: transcriptTerms.length + index,
+  }));
+}
+
+function buildPlannedFutureCourses(
+  curriculumStatus: CurriculumStatusDto,
+  scenarioCourses: ScenarioCourse[],
+): PlannedScenarioCourse[] {
+  const activeCourseIds = new Set(
+    scenarioCourses
+      .map(course => course.courseId)
+      .filter((courseId): courseId is number => courseId != null),
+  );
+  const activeCourseCodes = new Set(scenarioCourses.map(course => normalizeCourseCode(course.courseCode)));
+
+  return curriculumStatus.semesters.flatMap(semester =>
+    semester.courses
+      .filter(course => isFutureCurriculumCourse(course, activeCourseIds, activeCourseCodes))
+      .map(course => ({
+        scenarioId: `planned-${semester.semesterNumber}-${course.courseId}`,
+        courseId: course.courseId,
+        termId: getFutureTermId(semester.semesterNumber),
+        courseCode: course.code,
+        courseName: course.name,
+        credits: course.credits,
+        ects: course.ects,
+        isCompulsory: course.isCompulsory,
+        prerequisites: course.prerequisites,
+        prerequisitesMet: course.prerequisitesMet,
+      }))
+  );
+}
+
+function isFutureCurriculumCourse(
+  course: CurriculumCourseStatusDto,
+  activeCourseIds: Set<number>,
+  activeCourseCodes: Set<string>,
+) {
+  return !course.takenTermLabel
+    && !activeCourseIds.has(course.courseId)
+    && !activeCourseCodes.has(normalizeCourseCode(course.code));
+}
+
+function groupPlannedCoursesByTermId(courses: PlannedScenarioCourse[]) {
+  const grouped = new Map<number, PlannedScenarioCourse[]>();
+  for (const course of courses) {
+    const current = grouped.get(course.termId) ?? [];
+    current.push(course);
+    grouped.set(course.termId, current);
+  }
+
+  for (const [termId, termCourses] of grouped) {
+    grouped.set(termId, termCourses.sort((left, right) => left.courseCode.localeCompare(right.courseCode, 'tr-TR')));
+  }
+
+  return grouped;
+}
+
+function buildVisibleRowsForTerm(term: ScenarioTermReport, plannedCourses: PlannedScenarioCourse[]) {
+  return [
+    ...term.courses.map(course => ({ kind: 'scenario' as const, course })),
+    ...plannedCourses.map(course => ({ kind: 'planned' as const, course })),
+  ];
+}
+
+function getFutureTermId(semesterNumber: number) {
+  return FUTURE_TERM_ID_OFFSET + semesterNumber;
 }
 
 function formatNumber(value: number) {

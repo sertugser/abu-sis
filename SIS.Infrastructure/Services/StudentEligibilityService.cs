@@ -341,7 +341,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         var now = DateTime.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
+            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
 
         var students = await _context.Students
             .AsNoTracking()

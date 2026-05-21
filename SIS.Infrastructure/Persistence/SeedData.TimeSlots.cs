@@ -13,7 +13,7 @@ public static partial class SeedData
     public static async Task SeedTimeSlotsAsync(AppDbContext context)
     {
         var now = DateTime.UtcNow;
-        var activeTerm = await context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.TermStart <= now && t.TermEnd >= now);
+        var activeTerm = await context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
         if (activeTerm == null) return;
 
         if (await context.TimeSlots.AnyAsync(ts => ts.TermId == activeTerm.Id)) return;

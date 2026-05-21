@@ -261,8 +261,10 @@ export function useUpdateDraftEvent() {
       const { data } = await apiClient.put<CalendarDraftDto>(`${API}/drafts/${draftId}/events/${encodeURIComponent(eventId)}`, dto);
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (draft, variables) => {
+      qc.setQueryData(['calendar-generator', 'draft', variables.draftId], draft);
       qc.invalidateQueries({ queryKey: ['calendar-generator', 'draft', variables.draftId] });
+      qc.invalidateQueries({ queryKey: ['calendar-generator', 'drafts'] });
     },
   });
 }

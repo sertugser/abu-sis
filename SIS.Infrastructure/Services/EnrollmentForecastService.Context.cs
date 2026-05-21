@@ -38,7 +38,7 @@ public partial class EnrollmentForecastService
         var activeTerm = await _context.AcademicTerms
             .AsNoTracking()
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now);
+            .FirstOrDefaultAsync(term => !term.IsCancelled && term.IsActivated && term.TermStart <= now && term.TermEnd >= now);
 
         var allTerms = await _context.AcademicTerms
             .AsNoTracking()

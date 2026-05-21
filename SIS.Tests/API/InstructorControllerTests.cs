@@ -129,6 +129,27 @@ public class InstructorControllerTests
 
     private static void SeedInstructor(AppDbContext context, int instructorId, int userId)
     {
+        if (!context.Faculties.Any(f => f.Id == 1))
+        {
+            context.Faculties.Add(new Faculty
+            {
+                Id = 1,
+                Name = "Engineering",
+                Code = "ENG"
+            });
+        }
+
+        if (!context.Departments.Any(d => d.Id == 1))
+        {
+            context.Departments.Add(new Department
+            {
+                Id = 1,
+                Name = "Computer Engineering",
+                Code = "CENG",
+                FacultyId = 1
+            });
+        }
+
         context.Instructors.Add(new Instructor
         {
             Id = instructorId,
@@ -143,6 +164,20 @@ public class InstructorControllerTests
 
     private static void SeedSection(AppDbContext context, int sectionId, int instructorId)
     {
+        if (!context.Courses.Any(c => c.Id == 1))
+        {
+            context.Courses.Add(new Course
+            {
+                Id = 1,
+                Code = "TEST101",
+                Name = "Test Course",
+                DepartmentId = null,
+                Ects = 5,
+                TheoryHours = 3,
+                LabHours = 0
+            });
+        }
+
         context.CourseSections.Add(new CourseSection
         {
             Id = sectionId,

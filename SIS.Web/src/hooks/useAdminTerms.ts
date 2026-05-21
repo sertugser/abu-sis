@@ -32,6 +32,7 @@ export interface AdminTermDto {
 
   status: TermStatusValue;
   statusLabel: string;
+  isActivated: boolean;
   isCancelled: boolean;
 
   yoksisStatus: YoksisStatusValue;
@@ -134,6 +135,28 @@ export function useUncancelTerm() {
   return useMutation({
     mutationFn: async (termId: number) => {
       const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/uncancel`);
+      return data;
+    },
+    onSuccess: () => invalidateTerms(qc),
+  });
+}
+
+export function useActivateTerm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/activate`);
+      return data;
+    },
+    onSuccess: () => invalidateTerms(qc),
+  });
+}
+
+export function useDeactivateTerm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (termId: number) => {
+      const { data } = await apiClient.post<AdminTermDto>(`${API}/${termId}/deactivate`);
       return data;
     },
     onSuccess: () => invalidateTerms(qc),

@@ -123,6 +123,7 @@ public class AttendanceController : ControllerBase
             .ToDictionaryAsync(r => r.StudentId);
 
         var now = DateTime.UtcNow;
+        var totalSlotCount = await GetSectionSlotCountAsync(session.CourseSectionId);
         foreach (var update in request.Records.GroupBy(r => r.StudentId).Select(g => g.Last()))
         {
             if (!registrations.TryGetValue(update.StudentId, out var registration))
@@ -130,10 +131,17 @@ public class AttendanceController : ControllerBase
                 continue;
             }
 
+            var presentSlotNumbers = NormalizePresentSlotNumbers(
+                update.PresentSlotNumbers,
+                totalSlotCount,
+                update.Status);
+
             if (existingRecords.TryGetValue(update.StudentId, out var record))
             {
                 record.Status = update.Status;
                 record.Source = AttendanceEntrySource.Manual;
+                record.TotalSlotCount = totalSlotCount;
+                record.PresentSlotNumbersCsv = FormatPresentSlotNumbers(presentSlotNumbers);
                 record.UpdatedAt = now;
             }
             else
@@ -145,6 +153,8 @@ public class AttendanceController : ControllerBase
                     StudentId = update.StudentId,
                     Status = update.Status,
                     Source = AttendanceEntrySource.Manual,
+                    TotalSlotCount = totalSlotCount,
+                    PresentSlotNumbersCsv = FormatPresentSlotNumbers(presentSlotNumbers),
                     CreatedAt = now,
                 });
             }
@@ -280,6 +290,8 @@ public class AttendanceController : ControllerBase
         var expectedLastName = user?.LastName ?? string.Empty;
 
         var now = DateTime.UtcNow;
+        var totalSlotCount = await GetSectionSlotCountAsync(session.CourseSectionId);
+        var presentSlotNumbersCsv = FormatPresentSlotNumbers(AllSlotNumbers(totalSlotCount));
         var record = await _context.AttendanceRecords
             .FirstOrDefaultAsync(r => r.AttendanceSessionId == session.Id && r.StudentId == registration.StudentId);
 
@@ -292,6 +304,8 @@ public class AttendanceController : ControllerBase
                 StudentId = registration.StudentId,
                 Status = AttendanceStatus.Present,
                 Source = AttendanceEntrySource.Qr,
+                TotalSlotCount = totalSlotCount,
+                PresentSlotNumbersCsv = presentSlotNumbersCsv,
                 CreatedAt = now,
                 QrSubmittedAt = now
             });
@@ -300,6 +314,8 @@ public class AttendanceController : ControllerBase
         {
             record.Status = AttendanceStatus.Present;
             record.Source = AttendanceEntrySource.Qr;
+            record.TotalSlotCount = totalSlotCount;
+            record.PresentSlotNumbersCsv = presentSlotNumbersCsv;
             record.UpdatedAt = now;
             record.QrSubmittedAt = now;
         }
@@ -371,12 +387,15 @@ public class AttendanceController : ControllerBase
             .Where(r => r.AttendanceSessionId == session.Id)
             .ToListAsync();
         var recordMap = records.ToDictionary(r => r.StudentId);
+        var slots = await GetSectionAttendanceSlotsAsync(session.CourseSectionId);
+        var totalSlotCount = slots.Count;
 
         var students = registrations
             .Select(registration =>
             {
                 var user = userMap.GetValueOrDefault(registration.Student.UserId);
                 recordMap.TryGetValue(registration.StudentId, out var record);
+                var recordSlotCount = ResolveRecordSlotCount(record, totalSlotCount);
 
                 return new AttendanceStudentDto
                 {
@@ -388,6 +407,10 @@ public class AttendanceController : ControllerBase
                     Email = user?.Email ?? string.Empty,
                     Status = record?.Status,
                     Source = record?.Source,
+                    TotalSlotCount = recordSlotCount,
+                    PresentSlotNumbers = record == null
+                        ? []
+                        : ParsePresentSlotNumbers(record.PresentSlotNumbersCsv, recordSlotCount, record.Status),
                     SubmittedAt = record?.QrSubmittedAt ?? record?.UpdatedAt ?? record?.CreatedAt
                 };
             })
@@ -409,6 +432,8 @@ public class AttendanceController : ControllerBase
             IsQrCurrentlyActive = IsQrActive(session),
             QrExpiresAt = session.QrExpiresAt,
             Token = session.Token,
+            TotalSlotCount = totalSlotCount,
+            Slots = slots,
             TotalStudents = students.Count,
             PresentCount = records.Count(r => r.Status == AttendanceStatus.Present),
             AbsentCount = records.Count(r => r.Status == AttendanceStatus.Absent),
@@ -483,6 +508,11 @@ public class AttendanceController : ControllerBase
         var scheduledSlots = scheduledSlotRows
             .Select(slot => new SectionScheduleSlot(slot.DayOfWeek, slot.StartTime, slot.SlotOrder))
             .ToList();
+        var totalSlotCount = ResolveSectionSlotCount(
+            scheduledSlots.Count,
+            section.Course.TheoryHours,
+            section.Course.LabHours,
+            section.Course.ApplicationHours);
 
         return new AttendanceMatrixDto
         {
@@ -525,11 +555,20 @@ public class AttendanceController : ControllerBase
                         .Where(item => item.record != null)
                         .ToDictionary(
                             item => item.weekNumber,
-                            item => new AttendanceStudentWeekStatusDto
+                            item =>
                             {
-                                Status = item.record!.Status,
-                                Source = item.record.Source,
-                                SubmittedAt = item.record.QrSubmittedAt ?? item.record.UpdatedAt ?? item.record.CreatedAt
+                                var recordSlotCount = ResolveRecordSlotCount(item.record!, totalSlotCount);
+                                return new AttendanceStudentWeekStatusDto
+                                {
+                                    Status = item.record!.Status,
+                                    Source = item.record.Source,
+                                    TotalSlotCount = recordSlotCount,
+                                    PresentSlotNumbers = ParsePresentSlotNumbers(
+                                        item.record.PresentSlotNumbersCsv,
+                                        recordSlotCount,
+                                        item.record.Status),
+                                    SubmittedAt = item.record.QrSubmittedAt ?? item.record.UpdatedAt ?? item.record.CreatedAt
+                                };
                             });
 
                     return new AttendanceMatrixStudentDto
@@ -547,6 +586,171 @@ public class AttendanceController : ControllerBase
                 .ThenBy(student => student.FirstName)
                 .ToList()
         };
+    }
+
+    private async Task<int> GetSectionSlotCountAsync(int sectionId)
+    {
+        var scheduledSlotCount = await _context.SectionSchedules
+            .AsNoTracking()
+            .CountAsync(schedule => schedule.CourseSectionId == sectionId);
+
+        if (scheduledSlotCount > 0)
+            return scheduledSlotCount;
+
+        var courseHours = await _context.CourseSections
+            .AsNoTracking()
+            .Where(section => section.Id == sectionId)
+            .Select(section => new
+            {
+                section.Course.TheoryHours,
+                section.Course.LabHours,
+                section.Course.ApplicationHours
+            })
+            .FirstOrDefaultAsync();
+
+        return ResolveSectionSlotCount(
+            scheduledSlotCount,
+            courseHours?.TheoryHours ?? 0,
+            courseHours?.LabHours ?? 0,
+            courseHours?.ApplicationHours);
+    }
+
+    private async Task<List<AttendanceSlotDto>> GetSectionAttendanceSlotsAsync(int sectionId)
+    {
+        var scheduledSlots = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.CourseSectionId == sectionId)
+            .Select(schedule => new
+            {
+                schedule.TimeSlot.DayOfWeek,
+                schedule.TimeSlot.StartTime,
+                schedule.TimeSlot.EndTime,
+                schedule.TimeSlot.SlotOrder
+            })
+            .ToListAsync();
+
+        if (scheduledSlots.Count > 0)
+        {
+            return scheduledSlots
+                .OrderBy(slot => DaysFromMonday(slot.DayOfWeek))
+                .ThenBy(slot => slot.StartTime)
+                .ThenBy(slot => slot.SlotOrder)
+                .Select((slot, index) => new AttendanceSlotDto
+                {
+                    SlotNumber = index + 1,
+                    Label = $"{index + 1}. Saat",
+                    TimeRange = FormatTimeRange(slot.StartTime, slot.EndTime)
+                })
+                .ToList();
+        }
+
+        var courseHours = await _context.CourseSections
+            .AsNoTracking()
+            .Where(section => section.Id == sectionId)
+            .Select(section => new
+            {
+                section.Course.TheoryHours,
+                section.Course.LabHours,
+                section.Course.ApplicationHours
+            })
+            .FirstOrDefaultAsync();
+
+        var totalSlotCount = ResolveSectionSlotCount(
+            0,
+            courseHours?.TheoryHours ?? 0,
+            courseHours?.LabHours ?? 0,
+            courseHours?.ApplicationHours);
+
+        return Enumerable.Range(1, totalSlotCount)
+            .Select(slotNumber => new AttendanceSlotDto
+            {
+                SlotNumber = slotNumber,
+                Label = $"{slotNumber}. Saat",
+                TimeRange = null
+            })
+            .ToList();
+    }
+
+    private static int ResolveSectionSlotCount(
+        int scheduledSlotCount,
+        int theoryHours,
+        int labHours,
+        int? applicationHours)
+    {
+        if (scheduledSlotCount > 0)
+            return Math.Max(1, scheduledSlotCount);
+
+        return Math.Max(1, Math.Max(0, theoryHours) + Math.Max(0, labHours) + Math.Max(0, applicationHours ?? 0));
+    }
+
+    private static int ResolveRecordSlotCount(AttendanceRecord? record, int sectionSlotCount)
+    {
+        if (record == null)
+            return Math.Max(1, sectionSlotCount);
+
+        return Math.Max(1, Math.Max(record.TotalSlotCount, sectionSlotCount));
+    }
+
+    private static int DaysFromMonday(DayOfWeek day) => ((int)day + 6) % 7;
+
+    private static string FormatTimeRange(TimeOnly start, TimeOnly end) =>
+        $"{start.ToString("HH:mm", CultureInfo.InvariantCulture)}-{end.ToString("HH:mm", CultureInfo.InvariantCulture)}";
+
+    private static List<int> NormalizePresentSlotNumbers(
+        IEnumerable<int>? presentSlotNumbers,
+        int totalSlotCount,
+        AttendanceStatus status)
+    {
+        if (status != AttendanceStatus.Present)
+            return [];
+
+        var normalized = NormalizeSlotNumbers(presentSlotNumbers, totalSlotCount);
+        return normalized.Count == 0
+            ? AllSlotNumbers(totalSlotCount)
+            : normalized;
+    }
+
+    private static List<int> ParsePresentSlotNumbers(
+        string? presentSlotNumbersCsv,
+        int totalSlotCount,
+        AttendanceStatus status)
+    {
+        if (status != AttendanceStatus.Present)
+            return [];
+
+        var parsed = NormalizeSlotNumbers(ParseSlotNumbersCsv(presentSlotNumbersCsv), totalSlotCount);
+        return parsed.Count == 0
+            ? AllSlotNumbers(totalSlotCount)
+            : parsed;
+    }
+
+    private static List<int> NormalizeSlotNumbers(IEnumerable<int>? values, int totalSlotCount)
+    {
+        var maxSlot = Math.Max(1, totalSlotCount);
+        return (values ?? [])
+            .Where(value => value >= 1 && value <= maxSlot)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToList();
+    }
+
+    private static IEnumerable<int> ParseSlotNumbersCsv(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return [];
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => int.TryParse(part, out var slotNumber) ? slotNumber : 0);
+    }
+
+    private static List<int> AllSlotNumbers(int totalSlotCount) =>
+        Enumerable.Range(1, Math.Max(1, totalSlotCount)).ToList();
+
+    private static string? FormatPresentSlotNumbers(IEnumerable<int> presentSlotNumbers)
+    {
+        var normalized = presentSlotNumbers.Distinct().OrderBy(value => value).ToList();
+        return normalized.Count == 0 ? null : string.Join(',', normalized);
     }
 
     private static DateTime NormalizeSessionDate(DateTime? sessionDate)

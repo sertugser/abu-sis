@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, Shield, UserCheck, UserX, KeyRound, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,9 @@ import {
   useSetUserStatus,
   type AdminUserListItem,
 } from '../hooks/useAdminUsers';
+import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { UserScopeAssignmentField } from '../components/admin/UserScopeAssignmentField';
+import { useClearUserScope, useSetUserScope, useUserScope } from '../hooks/useUserScope';
 
 const ALL_ROLES = [
   'SystemAdministrator',
@@ -66,6 +69,7 @@ export default function UserManagementPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [selectedFacultyScopeId, setSelectedFacultyScopeId] = useState<number | null>(null);
 
   const { data, isLoading } = useAdminUsers({
     search: search || undefined,
@@ -78,10 +82,19 @@ export default function UserManagementPage() {
   const updateRoles = useUpdateUserRoles();
   const resetPassword = useResetPassword();
   const setStatus = useSetUserStatus();
+  const { data: faculties = [] } = useAdminFaculties();
+  const { data: currentScope, isLoading: scopeLoading } = useUserScope(selectedUser?.id ?? null);
+  const setUserScope = useSetUserScope(selectedUser?.id ?? null);
+  const clearUserScope = useClearUserScope(selectedUser?.id ?? null);
+
+  useEffect(() => {
+    setSelectedFacultyScopeId(currentScope?.facultyId ?? null);
+  }, [currentScope?.facultyId, selectedUser?.id]);
 
   function openRolesModal(user: AdminUserListItem) {
     setSelectedUser(user);
     setSelectedRoles([...user.roles]);
+    setSelectedFacultyScopeId(null);
     setRolesModalOpen(true);
   }
 
@@ -101,9 +114,22 @@ export default function UserManagementPage() {
 
   async function handleSaveRoles() {
     if (!selectedUser) return;
+
+    const hasDeanRole = selectedRoles.includes('Dean');
+
     await updateRoles.mutateAsync({ id: selectedUser.id, roles: selectedRoles });
+    if (hasDeanRole) {
+      if (selectedFacultyScopeId === null) {
+        await clearUserScope.mutateAsync();
+      } else {
+        await setUserScope.mutateAsync({ kind: 'Faculty', facultyId: selectedFacultyScopeId });
+      }
+    } else {
+      await clearUserScope.mutateAsync();
+    }
+
     setRolesModalOpen(false);
-    showSuccess('Roller güncellendi.');
+    showSuccess(hasDeanRole ? 'Roller ve kapsam güncellendi.' : 'Roller güncellendi.');
   }
 
   async function handleResetPassword() {
@@ -316,11 +342,29 @@ export default function UserManagementPage() {
                 <span className="text-xs text-muted-foreground ml-auto">{role}</span>
               </label>
             ))}
+
+            <UserScopeAssignmentField
+              isVisible={selectedRoles.includes('Dean')}
+              faculties={faculties}
+              facultyId={selectedFacultyScopeId}
+              onFacultyIdChange={setSelectedFacultyScopeId}
+              isLoading={scopeLoading}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRolesModalOpen(false)}>İptal</Button>
-            <Button onClick={handleSaveRoles} disabled={updateRoles.isPending}>
-              {updateRoles.isPending ? 'Kaydediliyor...' : 'Kaydet'}
+            <Button
+              onClick={handleSaveRoles}
+              disabled={
+                updateRoles.isPending
+                || setUserScope.isPending
+                || clearUserScope.isPending
+                || (selectedRoles.includes('Dean') && scopeLoading)
+              }
+            >
+              {updateRoles.isPending || setUserScope.isPending || clearUserScope.isPending
+                ? 'Kaydediliyor...'
+                : 'Kaydet'}
             </Button>
           </DialogFooter>
         </DialogContent>
