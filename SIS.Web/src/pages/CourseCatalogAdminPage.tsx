@@ -928,6 +928,26 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                   )}
                 </div>
 
+                {/* Dependent Courses (read-only — ters yön, ilgili dersin Önkoşullar bölümünden yönetilir) */}
+                {detail.dependentCourses && detail.dependentCourses.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Bu Dersi Önkoşul Alanlar ({detail.dependentCourses.length})
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      Aşağıdaki dersler bu dersi önkoşul olarak istiyor. Düzenleme ilgili dersin "Önkoşullar" bölümünden yapılır.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {detail.dependentCourses.map(d => (
+                        <div key={d.courseId} className="flex items-center gap-1 bg-muted/60 rounded-full px-2.5 py-0.5 text-xs">
+                          <span className="font-mono font-medium text-foreground">{d.code}</span>
+                          <span className="text-muted-foreground">{d.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Equivalencies */}
                 <div>
                   <h3 className="text-sm font-semibold text-foreground mb-2">

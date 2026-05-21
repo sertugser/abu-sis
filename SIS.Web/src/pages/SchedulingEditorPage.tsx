@@ -29,7 +29,7 @@ import { CalendarGrid } from '../components/faculty-planning/CalendarGrid';
 import { UnassignedSectionsPanel, UNASSIGNED_POOL_DROP_ID } from '../components/faculty-planning/UnassignedSectionsPanel';
 import type {
   AssignSectionRequest,
-  FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType, TeachingMethod, TimeSlotAllowedMode,
+  FacultyPlanningSection, FacultyPlanningTimeSlot, ScheduleBlockType,
 } from '../types/facultyPlanning';
 import type { ScheduleSlot, SchedulingConflict } from '../types/scheduling';
 
@@ -46,130 +46,11 @@ interface DragData {
   currentEndTime?: string;
 }
 
-/** Backend TeachingMethodPolicy.IsSlotModeCompatible ile aynı — yüz-yüze online slot'a giremez vs. */
-function isSlotCompatibleWithMethod(slotMode: TimeSlotAllowedMode, method: TeachingMethod): boolean {
-  switch (slotMode) {
-    case 'Both': return true;
-    case 'OnlineOnly': return method !== 'FaceToFace';
-    case 'FaceToFaceOnly': return method !== 'Online';
-  }
-}
-
-/**
- * Drag başladığında her boş hücre için "uyumsuz/uyumlu" ön-kontrol — frontend hızlı.
- * Backend final say verir; bu sadece kullanıcıya yanlış slot'a düşürmeden önce uyarı.
- *
- * Geri dönen Set: dropId ("cell-{day}-{slotOrder}") formatında uyumsuz hücreler.
- * Kontroller:
- *  - Hedef slot'tan başlayıp section süresine yetecek ardışık slot var mı (öğle arası, gün sonu)
- *  - Tüm o slot'lar TeachingMethod ile uyumlu mu (FaceToFace+OnlineOnly çakışması vb.)
- *  - Hoca aynı zaman aralığında başka section'da mı
- *  - Derslik aynı zaman aralığında başka section'da mı
- *  - Section'ın kendi diğer blokları (theory/lab) hedef aralığa çakışıyor mu
+/* Frontend pre-check (computeInvalidDropIds) kaldırıldı — Option A.
+ * Tüm doğrulama backend RuleEngine'e bırakıldı (28 kural).
+ * Frontend sadece backend bulk-validate sonuçlarını renklendirme için kullanır.
+ * Drop her zaman backend'e gider; conflict varsa override dialog gösterilir.
  */
-function computeInvalidDropIds(
-  draggedData: DragData,
-  draggedSection: FacultyPlanningSection,
-  allSections: FacultyPlanningSection[],
-  timeSlots: FacultyPlanningTimeSlot[],
-): Set<string> {
-  const invalid = new Set<string>();
-  const durationMin = draggedData.durationMinutes;
-
-  // Sürüklenen block dışındaki kendi blokları — kendi içinde çakışma kontrolü için
-  // Pool kaynağı için section.schedules zaten boş; bu liste de boş kalır.
-  const otherSelfBlocks = draggedData.kind === 'block'
-    ? draggedSection.schedules.filter(b => !(
-        b.day === draggedData.currentDay
-        && b.startTime.slice(0, 5) === draggedData.currentStartTime?.slice(0, 5)
-        && b.blockType === draggedData.blockType
-      ))
-    : [];
-
-  // Diğer section'lar — hoca/derslik çakışması için
-  const otherSections = allSections.filter(s => s.sectionId !== draggedSection.sectionId);
-
-  // Gün başına slot'ları grupla, slotOrder'a göre sırala
-  const slotsByDay = new Map<number, FacultyPlanningTimeSlot[]>();
-  for (const ts of timeSlots) {
-    const list = slotsByDay.get(ts.day) ?? [];
-    list.push(ts);
-    slotsByDay.set(ts.day, list);
-  }
-  for (const list of slotsByDay.values()) {
-    list.sort((a, b) => a.slotOrder - b.slotOrder);
-  }
-
-  for (const [day, daySlots] of slotsByDay) {
-    for (let i = 0; i < daySlots.length; i += 1) {
-      const startSlot = daySlots[i];
-      const dropId = `cell-${day}-${startSlot.slotOrder}`;
-      const startHm = startSlot.startTime.slice(0, 5);
-      const startMin = timeToMinutes(startHm);
-      const slotSizeMin = timeToMinutes(startSlot.endTime.slice(0, 5)) - startMin;
-      const needed = slotSizeMin > 0 ? Math.max(1, Math.round(durationMin / slotSizeMin)) : 1;
-
-      // 1) Gün sonu kontrolü
-      if (i + needed > daySlots.length) { invalid.add(dropId); continue; }
-
-      // 2) Ardışıklık (öğle arası nedeniyle slot atlaması var mı)
-      let consecutive = true;
-      for (let k = 1; k < needed; k += 1) {
-        if (daySlots[i + k].slotOrder !== daySlots[i + k - 1].slotOrder + 1) {
-          consecutive = false; break;
-        }
-      }
-      if (!consecutive) { invalid.add(dropId); continue; }
-
-      const endMin = timeToMinutes(daySlots[i + needed - 1].endTime.slice(0, 5));
-
-      // 3) Slot mode uyumu — tüm kapsanan slot'lar
-      let modeOk = true;
-      for (let k = 0; k < needed; k += 1) {
-        if (!isSlotCompatibleWithMethod(daySlots[i + k].allowedMode, draggedSection.teachingMethod)) {
-          modeOk = false; break;
-        }
-      }
-      if (!modeOk) { invalid.add(dropId); continue; }
-
-      // 4) Hoca çakışması
-      if (draggedSection.instructorId != null) {
-        const clash = otherSections.some(s => s.instructorId === draggedSection.instructorId
-          && s.schedules.some(b => {
-            if (b.day !== day) return false;
-            const bs = timeToMinutes(b.startTime.slice(0, 5));
-            const be = timeToMinutes(b.endTime.slice(0, 5));
-            return bs < endMin && be > startMin;
-          }));
-        if (clash) { invalid.add(dropId); continue; }
-      }
-
-      // 5) Derslik çakışması
-      const targetClassroomId = draggedData.classroomId;
-      if (targetClassroomId != null) {
-        const clash = otherSections.some(s => s.schedules.some(b => {
-          if (b.day !== day) return false;
-          const bClassroom = b.classroomId ?? s.classroomId;
-          if (bClassroom !== targetClassroomId) return false;
-          const bs = timeToMinutes(b.startTime.slice(0, 5));
-          const be = timeToMinutes(b.endTime.slice(0, 5));
-          return bs < endMin && be > startMin;
-        }));
-        if (clash) { invalid.add(dropId); continue; }
-      }
-
-      // 6) Section'ın kendi diğer blokları
-      const selfClash = otherSelfBlocks.some(b => {
-        if (b.day !== day) return false;
-        const bs = timeToMinutes(b.startTime.slice(0, 5));
-        const be = timeToMinutes(b.endTime.slice(0, 5));
-        return bs < endMin && be > startMin;
-      });
-      if (selfClash) { invalid.add(dropId); continue; }
-    }
-  }
-  return invalid;
-}
 
 /**
  * Smart suggestion — invalidDropIds dışındaki valid hücrelerden "en uygun 3"ünü öner.
@@ -280,30 +161,19 @@ function buildBulkCandidates(
     classroomId: b.classroomId ?? targetClassroomId,
   }));
 
-  // Hücre yoğunluk lookup — başka section'lar veya KENDİ korunan bloklar bir hücreye düşüyorsa
-  // bu hücre aday olamaz (dolu hücreye drop bloklanır + section kendi diğer bloğunun zamanına gidemez).
-  const cellLoadMap = new Set<string>();
-  for (const s of allSections) {
-    for (const b of s.schedules) {
-      // Section'ın sürüklenen kendi bloğu hesaba katılmasın (taşımada kendi yerini boşaltıyor sayılır)
-      if (
-        draggedData.kind === 'block'
-        && s.sectionId === draggedSection.sectionId
-        && b.day === draggedData.currentDay
-        && b.startTime.slice(0, 5) === draggedData.currentStartTime?.slice(0, 5)
-        && b.blockType === draggedData.blockType
-      ) {
-        continue;
-      }
-      const blockStart = timeToMinutes(b.startTime.slice(0, 5));
-      const blockEnd = timeToMinutes(b.endTime.slice(0, 5));
-      for (const ts of timeSlots) {
-        if (ts.day !== b.day) continue;
-        const slotStart = timeToMinutes(ts.startTime.slice(0, 5));
-        const slotEnd = timeToMinutes(ts.endTime.slice(0, 5));
-        if (slotStart < blockEnd && slotEnd > blockStart) {
-          cellLoadMap.add(`cell-${ts.day}-${ts.slotOrder}`);
-        }
+  // Section'ın KENDİ korunan blokları — kendi diğer bloğunun zamanına gidemez.
+  // Başka section'ların dolu hücreleri artık ATLANMAZ: backend H1 (derslik) ve H2 (hoca)
+  // kurallarıyla kontrol eder. Farklı derslik/hoca ile aynı saatte ders olabilir.
+  const selfBlockCells = new Set<string>();
+  for (const b of otherBlocks) {
+    const blockStart = timeToMinutes(b.startTime.slice(0, 5));
+    const blockEnd = timeToMinutes(b.endTime.slice(0, 5));
+    for (const ts of timeSlots) {
+      if (ts.day !== b.day) continue;
+      const slotStart = timeToMinutes(ts.startTime.slice(0, 5));
+      const slotEnd = timeToMinutes(ts.endTime.slice(0, 5));
+      if (slotStart < blockEnd && slotEnd > blockStart) {
+        selfBlockCells.add(`cell-${ts.day}-${ts.slotOrder}`);
       }
     }
   }
@@ -324,8 +194,8 @@ function buildBulkCandidates(
       const startSlot = daySlots[i];
       const cellKey = `cell-${day}-${startSlot.slotOrder}`;
 
-      // Dolu hücre — drop bloklanır, backend'e sormaya gerek yok
-      if (cellLoadMap.has(cellKey)) continue;
+      // Section'ın kendi diğer bloğu bu hücredeyse atla (kendi kendine çakışma)
+      if (selfBlockCells.has(cellKey)) continue;
 
       const startHm = startSlot.startTime.slice(0, 5);
       const startMin = timeToMinutes(startHm);
@@ -593,7 +463,7 @@ export default function SchedulingEditorPage() {
   // Feedback otomatik kapan
   useEffect(() => {
     if (!feedback) return;
-    const t = setTimeout(() => setFeedback(null), 4000);
+    const t = setTimeout(() => setFeedback(null), 3000);
     return () => clearTimeout(t);
   }, [feedback]);
 
@@ -685,13 +555,22 @@ export default function SchedulingEditorPage() {
     setCellReasons(new Map());
     activeDragSectionRef.current = section.sectionId;
 
-    // 1) Anlık (sync) frontend pre-check — kullanıcı için gecikme yok, ilk renkler hemen çıkar
-    const invalid = computeInvalidDropIds(data, section, sections, timeSlots);
-    setInvalidDropIds(invalid);
-    setSuggestedDropIds(computeSmartSuggestions(section, invalid, timeSlots, sections));
-
-    // 2) Backend bulk-validate — kesin RuleEngine doğrulaması, ~200-500ms sonra renkler güncellenir
+    // Backend bulk-validate için aday hücreleri hesapla
     const candidates = buildBulkCandidates(data, section, sections, timeSlots);
+    const candidateKeys = new Set(candidates.map(c => c.cellKey));
+
+    // Aday olmayan hücreler anında kırmızı — fiziksel imkansızlık (dolu, gün sonu, ardışık değil).
+    // Aday hücreler nötr başlar, backend cevabıyla yeşil veya kırmızı olur.
+    const nonCandidateInvalid = new Set<string>();
+    for (const ts of timeSlots) {
+      const cellId = `cell-${ts.day}-${ts.slotOrder}`;
+      if (!candidateKeys.has(cellId)) {
+        nonCandidateInvalid.add(cellId);
+      }
+    }
+    setInvalidDropIds(nonCandidateInvalid);
+    setSuggestedDropIds(new Set());
+
     if (candidates.length === 0) return;
 
     const requestedSectionId = section.sectionId;
@@ -701,19 +580,16 @@ export default function SchedulingEditorPage() {
       classroomId: data.classroomId ?? section.classroomId ?? undefined,
       candidates,
     }).then(result => {
-      // Race-condition guard: drag iptal edildi veya başka section'a geçildiyse cevabı yok say
       if (activeDragSectionRef.current !== requestedSectionId) return;
 
-      const newInvalid = new Set<string>(invalid);
+      // Non-candidate hücreler kırmızı kalır + backend'in reddettiği adaylar da eklenir
+      const newInvalid = new Set<string>(nonCandidateInvalid);
       const newReasons = new Map<string, string>();
 
       for (const r of result.results) {
         if (!r.isValid) {
           newInvalid.add(r.cellKey);
           if (r.reason) newReasons.set(r.cellKey, r.reason);
-        } else {
-          // Backend yeşil diyorsa frontend pre-check'in over-restrictive kararını gevşet
-          newInvalid.delete(r.cellKey);
         }
       }
 
@@ -721,7 +597,7 @@ export default function SchedulingEditorPage() {
       setCellReasons(newReasons);
       setSuggestedDropIds(computeSmartSuggestions(section, newInvalid, timeSlots, sections));
     }).catch(() => {
-      // Backend hata verirse hızlı pre-check sonucu kalır — sessiz fallback
+      // Backend hata verirse non-candidate kırmızı kalır, adaylar nötr — drop backend assign sonucuyla belirlenir
     });
   }, [sections, timeSlots]);
 
@@ -735,14 +611,11 @@ export default function SchedulingEditorPage() {
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setDragPreview(null);
-    const stashedInvalid = invalidDropIds;
-    const stashedReasons = cellReasons;
     setInvalidDropIds(new Set());
     setCellReasons(new Map());
     setSuggestedDropIds(new Set());
     activeDragSectionRef.current = null;
     const { active, over } = event;
-    // Geçici debug — drop hedefi bulunamıyorsa kullanıcıya banner ile bildir, sessiz kalmasın.
     if (!over) {
       console.warn('[ScheduleEditor] drag end: over=null', { activeId: active.id, data: active.data.current });
       setFeedback({
@@ -781,23 +654,9 @@ export default function SchedulingEditorPage() {
     const targetDay = Number(dayStr);
     const targetSlotOrder = Number(slotOrderStr);
 
-    // NOT: Paralel section'lar aynı hücrede koexistirler (örn CENG223 -1 ile CENG101 -3
-    // aynı saatte farklı dersliklerde). Frontend dolu hücreye drop'u önceden bloklamaz —
-    // backend H1 (derslik çakışması), H2 (hoca çakışması), H8 (aynı dersin section'ları)
-    // ile karar verir. Bulk-validate sonucu zaten invalidDropIds'te yansır.
-
-    // Frontend pre-check: invalid hücreye bırakıldıysa banner uyarısı, backend'e gitme.
-    // Backend bulk-validate cevabı geldiyse spesifik RuleEngine mesajını kullan; yoksa generic.
-    if (stashedInvalid.has(dropId)) {
-      const backendReason = stashedReasons.get(dropId);
-      setFeedback({
-        kind: 'error',
-        message: backendReason
-          ? backendReason
-          : 'Bu hücre uygun değil (hoca/derslik çakışması, slot tipi uyumsuz veya gün sonu).',
-      });
-      return;
-    }
+    // Option A: frontend pre-check kaldırıldı. Drop her zaman backend'e gider.
+    // Backend Force=false ile çağrıldığında conflict varsa requiresConfirmation döner,
+    // override dialog spesifik mesajlarla açılır — tutarlı UX.
 
     if (!data) return;
     const section = sections.find(s => s.sectionId === data.sectionId);
@@ -960,7 +819,7 @@ export default function SchedulingEditorPage() {
         setFeedback({ kind: 'error', message: extractError(error, 'Taşıma başarısız.') });
       },
     });
-  }, [sections, timeSlots, assignMutation, unassignMutation, invalidDropIds, cellReasons, termId]);
+  }, [sections, timeSlots, assignMutation, unassignMutation, termId]);
 
   /**
    * Override onay handler — kullanıcı dialog'da "Yine de devam et" derse aynı request'i
@@ -1260,26 +1119,32 @@ export default function SchedulingEditorPage() {
           </div>
         )}
 
-        {/* ── Feedback banner ── */}
+        {/* ── Feedback overlay — ekran ortasında belirgin uyarı, 3 sn sonra veya X ile kapanır ── */}
         {feedback && (
-          <div
-            className={`shrink-0 flex items-center gap-2 border-b px-4 py-1.5 ${
-              feedback.kind === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-red-50 border-red-200 text-red-800'
-            }`}
-          >
-            {feedback.kind === 'success'
-              ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-              : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
-            <span className="text-xs font-medium flex-1">{feedback.message}</span>
-            <button
-              className="p-0.5 rounded hover:bg-black/10"
-              onClick={() => setFeedback(null)}
-              aria-label="Kapat"
+          <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+            <div
+              className={`pointer-events-auto flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl border backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200 max-w-lg ${
+                feedback.kind === 'success'
+                  ? 'bg-emerald-50/95 border-emerald-300 text-emerald-900'
+                  : 'bg-red-50/95 border-red-300 text-red-900'
+              }`}
             >
-              <X className="h-3 w-3" />
-            </button>
+              {feedback.kind === 'success'
+                ? <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-600" />
+                : <AlertCircle className="h-6 w-6 shrink-0 text-red-600" />}
+              <span className="text-sm font-semibold flex-1">{feedback.message}</span>
+              <button
+                className={`p-1 rounded-lg transition-colors ${
+                  feedback.kind === 'success'
+                    ? 'hover:bg-emerald-200/60'
+                    : 'hover:bg-red-200/60'
+                }`}
+                onClick={() => setFeedback(null)}
+                aria-label="Kapat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
 

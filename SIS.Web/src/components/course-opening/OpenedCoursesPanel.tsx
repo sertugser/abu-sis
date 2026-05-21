@@ -298,7 +298,7 @@ export function OpenedCoursesPanel({
       </div>
 
       {/* Tablo başlığı — sol panelle uyumlu (Z/S, Krd, AKTS sütunları) */}
-      <div className="shrink-0 grid grid-cols-[28px_100px_1fr_32px_48px_52px_72px_60px] items-center gap-2 px-2 py-1.5 bg-muted/50 border-b border-gray-200 text-xs font-semibold text-gray-700">
+      <div className="shrink-0 grid grid-cols-[28px_100px_1fr_32px_48px_52px_72px] items-center gap-2 px-2 py-1.5 bg-muted/50 border-b border-gray-200 text-xs font-semibold text-gray-700">
         <span className="text-center" /> {/* checkbox sütunu */}
         <span className="text-left">Kod</span>
         <span className="text-left">Ders Adı</span>
@@ -306,7 +306,6 @@ export function OpenedCoursesPanel({
         <span className="text-center" title="Kredi">Krd</span>
         <span className="text-center">AKTS</span>
         <span className="text-center">Kontenjan</span>
-        <span className="text-center" title="Önerilen şube oranı">Öneri</span>
       </div>
 
       {/* Scrollable content */}
@@ -349,7 +348,6 @@ export function OpenedCoursesPanel({
                 courseName={group.courseName}
                 courseId={group.courseId}
                 sections={group.sections}
-                forecast={forecastMap.get(group.courseId)}
                 selected={selectedCourseIds.has(group.courseId)}
                 onSelect={toggleCourseSelection}
                 onOpenManagement={(cid) => {

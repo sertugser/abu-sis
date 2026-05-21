@@ -33,6 +33,7 @@ export interface CourseListItemDto {
 
 export interface PrerequisiteDto { courseId: number; code: string; name: string; }
 export interface EquivalencyDto { courseId: number; code: string; name: string; }
+export interface DependentCourseDto { courseId: number; code: string; name: string; }
 export interface CurriculumAssignmentDto {
   curriculumId: number;
   programName: string;
@@ -142,6 +143,8 @@ export interface CourseDetailDto {
   labClassroomType: ClassroomTypeValue | null;
   stats: CourseStatsDto | null;
   prerequisiteChain: PrerequisiteChainNodeDto[] | null;
+  // Bu dersi önkoşul olarak isteyen dersler (Önkoşullar'ın simetrik karşılığı).
+  dependentCourses: DependentCourseDto[] | null;
 }
 
 export interface CourseFilterParams {

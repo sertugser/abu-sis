@@ -833,7 +833,10 @@ export function CalendarGrid({
                           onClick={isClickableEmpty ? () => onEmptyCellClick(wd.day, row.slotOrder, row.startTime, row.endTime, slot!.allowedMode) : undefined}
                         >
                           {(() => {
-                            const isOverflow = maxBlocksPerCell != null && cellBlocks.length > maxBlocksPerCell;
+                            // Editable modda overflow kapatılır: tüm bloklar draggable SectionBlock
+                            // olarak render edilmeli. OverflowPill popover içinde useDraggable çalışmaz
+                            // (portal DOM'da → dnd-kit collision detection rect dışında kalır).
+                            const isOverflow = !editable && maxBlocksPerCell != null && cellBlocks.length > maxBlocksPerCell;
                             const visibleBlocks = isOverflow ? cellBlocks.slice(0, maxBlocksPerCell - 1) : cellBlocks;
                             const hiddenBlocks = isOverflow ? cellBlocks.slice(maxBlocksPerCell - 1) : [];
                             return (

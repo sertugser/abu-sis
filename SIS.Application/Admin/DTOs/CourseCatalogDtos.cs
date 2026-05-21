@@ -45,11 +45,15 @@ public record CourseDetailDto(
     ClassroomType? TheoryClassroomType = null,
     ClassroomType? LabClassroomType = null,
     CourseStatsDto? Stats = null,
-    List<PrerequisiteChainNodeDto>? PrerequisiteChain = null
+    List<PrerequisiteChainNodeDto>? PrerequisiteChain = null,
+    // Bu dersi önkoşul olarak isteyen dersler (CoursePrerequisites WHERE RequiredCourseId = bu).
+    // İlişkiler sekmesinde "Önkoşullar"ın simetrik karşılığı olarak gösterilir.
+    List<DependentCourseDto>? DependentCourses = null
 );
 
 public record PrerequisiteDto(int CourseId, string Code, string Name);
 public record EquivalencyDto(int CourseId, string Code, string Name);
+public record DependentCourseDto(int CourseId, string Code, string Name);
 
 public record CurriculumAssignmentDto(
     int CurriculumId, string ProgramName, string CurriculumVersion,
