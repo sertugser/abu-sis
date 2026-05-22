@@ -1,16 +1,21 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Edit2 } from 'lucide-react';
+import { Plus, Edit2, MoreHorizontal, Power, PowerOff, RotateCcw, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import ResizableDialogContent from '@/components/ui/resizable-dialog';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
 import {
   useAdminTerms,
@@ -24,7 +29,6 @@ import {
   type CreateTermDto,
   type UpdateTermDto,
 } from '../hooks/useAdminTerms';
-import { ROUTES } from '@/lib/constants';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -140,6 +144,8 @@ export default function TermManagementPage() {
   const [successMessage, setSuccessMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [confirmCancelTarget, setConfirmCancelTarget] = useState<AdminTermDto | null>(null);
+  // Hafif (geri-dönüşlü) durum aksiyonları için onay: kullanıma aç/kapat, iptali geri al.
+  const [confirmAction, setConfirmAction] = useState<{ term: AdminTermDto; kind: 'activate' | 'deactivate' | 'uncancel' } | null>(null);
 
   const { data: terms = [], isLoading } = useAdminTerms();
   const createTerm = useCreateTerm();
@@ -150,6 +156,13 @@ export default function TermManagementPage() {
   const deactivateTerm = useDeactivateTerm();
 
   const sortedTerms = [...terms].sort((a, b) => b.year - a.year || a.termType.localeCompare(b.termType));
+
+  // Sayfalama — varsayılan 15 dönem/sayfa.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+  const totalPages = Math.max(1, Math.ceil(sortedTerms.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pagedTerms = sortedTerms.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   function openCreate() { setForm(emptyForm()); setFormError(''); setCreateModalOpen(true); }
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
@@ -168,26 +181,6 @@ export default function TermManagementPage() {
     const end = new Date(form.termEnd);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Geçersiz tarih.';
     if (start >= end) return 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.';
-
-    // Override validation
-    if (form.overrideStart) {
-      const ovStart = new Date(form.overrideStart);
-      if (Number.isNaN(ovStart.getTime())) return 'Erken aktivasyon tarihi geçersiz.';
-      if (ovStart >= start)
-        return 'Erken aktivasyon tarihi dönem başlangıcından ÖNCE olmalı. Dönemi geciktirmek için TermStart\'ı değiştirin.';
-    }
-    if (form.overrideEnd) {
-      const ovEnd = new Date(form.overrideEnd);
-      if (Number.isNaN(ovEnd.getTime())) return 'Uzatma tarihi geçersiz.';
-      if (ovEnd <= end)
-        return 'Uzatma tarihi dönem bitişinden SONRA olmalı. Kısaltma için TermEnd\'i değiştirin.';
-    }
-    if (form.overrideStart && form.overrideEnd) {
-      const ovStart = new Date(form.overrideStart);
-      const ovEnd = new Date(form.overrideEnd);
-      if (ovEnd <= ovStart)
-        return 'Uzatma tarihi, erken aktivasyon tarihinden sonra olmalı.';
-    }
 
     return null;
   }
@@ -309,14 +302,11 @@ export default function TermManagementPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-1 flex-col min-h-0 space-y-5">
       {/* Table */}
-      <div className="bg-background border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border border-border rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
-          <p className="text-sm text-muted-foreground">
-            {isLoading ? '' : `${sortedTerms.length} dönem`}
-          </p>
+        <div className="flex items-center justify-end px-4 py-3 border-b border-border bg-card">
           <div className="flex items-center gap-3">
             {successMessage && (
               <span className="text-sm font-medium text-success">{successMessage}</span>
@@ -336,15 +326,16 @@ export default function TermManagementPage() {
           </div>
         )}
 
-        <table className="w-full text-sm">
-          <thead className="bg-muted/20 border-b border-border">
+        <div className="flex-1 min-h-0 overflow-auto">
+        <table className="w-full min-w-[820px] text-sm">
+          <thead className="bg-card border-b border-border">
             <tr>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Durum</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">YÖKSİS</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Dönem Tarihi</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Akademik Takvim</th>
-              <th className="px-4 py-3" />
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[28%]">Dönem</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[13%]">Durum</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[12%]">YÖKSİS</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[16%]">Dönem Tarihi</th>
+              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[17%]">Akademik Takvim</th>
+              <th className="px-4 py-3 text-right font-semibold text-muted-foreground">İşlemler</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -356,40 +347,34 @@ export default function TermManagementPage() {
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
               </tr>
-            ) : sortedTerms.map(term => (
+            ) : pagedTerms.map(term => (
               <tr
                 key={term.id}
                 onDoubleClick={() => setViewingTerm(term)}
                 title="Detayları görmek için çift tıklayın"
-                className={`transition-colors hover:bg-muted/20 cursor-pointer select-none ${term.isActive ? 'border-l-4 border-l-[var(--color-success)]' : 'border-l-4 border-l-transparent'}`}
+                className={`transition-colors duration-150 cursor-pointer select-none border-l-4 ${
+                  term.isActive
+                    ? 'bg-emerald-50/60 border-l-emerald-500 hover:bg-emerald-100/70'
+                    : 'border-l-transparent hover:bg-slate-50'
+                }`}
               >
                   {/* Ad */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <p className="font-semibold text-foreground">{term.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {term.year} · {term.termTypeLabel}
-                        </p>
-                      </div>
-                      {term.isActive && (
-                        <Badge variant="success" className="text-xs shrink-0">Aktif</Badge>
-                      )}
-                    </div>
+                    <p className="font-semibold text-foreground">{term.name}</p>
                   </td>
 
                   {/* Durum */}
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                    <Badge className={`text-sm ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
                       {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
-                    </span>
+                    </Badge>
                   </td>
 
                   {/* YÖKSİS */}
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                    <Badge className={`text-sm ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                       {term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'}
-                    </span>
+                    </Badge>
                   </td>
 
                   {/* Dönem Tarihi */}
@@ -403,71 +388,70 @@ export default function TermManagementPage() {
                   {/* Akademik Takvim */}
                   <td className="px-4 py-3">
                     {term.hasAcademicCalendar
-                      ? <Badge className="bg-emerald-100 text-emerald-700">Takvim Tanımlı</Badge>
-                      : <Badge className="bg-amber-100 text-amber-700">Takvim Eksik</Badge>}
+                      ? <Badge className="text-sm bg-emerald-100 text-emerald-700 border-emerald-300">Takvim Tanımlı</Badge>
+                      : <Badge className="text-sm bg-amber-100 text-amber-700 border-amber-300">Takvim Eksik</Badge>}
                   </td>
 
                   {/* İşlemler */}
                   <td className="px-4 py-3" onDoubleClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(term)}>
-                        <Edit2 className="h-3.5 w-3.5" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Düzenle" onClick={() => openEdit(term)}>
+                        <Edit2 className="h-4 w-4" />
                       </Button>
-                      {!term.isCancelled && (
-                        term.isActivated ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={deactivateTerm.isPending}
-                            onClick={() => handleDeactivate(term.id)}
-                          >
-                            Kullanıma Kapat
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="İşlemler">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={activateTerm.isPending}
-                            onClick={() => handleActivate(term.id)}
-                          >
-                            Kullanıma Aç
-                          </Button>
-                        )
-                      )}
-                      {term.status === 'Cancelled' ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={uncancelTerm.isPending}
-                          onClick={() => handleUncancel(term.id)}
-                        >
-                          İptali Geri Al
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={cancelTerm.isPending}
-                          onClick={() => setConfirmCancelTarget(term)}
-                        >
-                          İptal Et
-                        </Button>
-                      )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          {!term.isCancelled && (
+                            term.isActivated ? (
+                              <DropdownMenuItem disabled={deactivateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'deactivate' })}>
+                                <PowerOff className="h-4 w-4 mr-2" /> Kullanıma Kapat
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem disabled={activateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'activate' })}>
+                                <Power className="h-4 w-4 mr-2" /> Kullanıma Aç
+                              </DropdownMenuItem>
+                            )
+                          )}
+                          {term.status === 'Cancelled' ? (
+                            <DropdownMenuItem disabled={uncancelTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'uncancel' })}>
+                              <RotateCcw className="h-4 w-4 mr-2" /> İptali Geri Al
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              disabled={cancelTerm.isPending}
+                              onClick={() => setConfirmCancelTarget(term)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" /> İptal Et
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        <div className="px-4 py-3 border-t border-border bg-muted/10">
-          <p className="text-sm text-muted-foreground italic">
-            Akademik takvim üretimi için →{' '}
-            <Link to={ROUTES.ACADEMIC_CALENDAR_GENERATOR} className="underline text-blue-600">
-              Takvim Oluşturucu
-            </Link>
-          </p>
         </div>
+
+        {!isLoading && sortedTerms.length > 0 && (
+          <TablePagination
+            totalCount={sortedTerms.length}
+            page={safePage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            itemLabel="dönem"
+            pageSizeOptions={[15, 30, 50]}
+            size="md"
+          />
+        )}
+
       </div>
 
       {/* Cancel Confirmation Dialog — yıkıcı (cascade: section'lar Cancelled olur), 5sn delay. */}
@@ -483,32 +467,89 @@ export default function TermManagementPage() {
         onConfirm={handleConfirmCancel}
       />
 
+      {/* Hafif durum aksiyonları onayı — kullanıma aç/kapat, iptali geri al (geri sayımsız). */}
+      {(() => {
+        const cfg = confirmAction && {
+          deactivate: {
+            title: 'Dönemi kullanıma kapat',
+            description: (
+              <><b>{confirmAction.term.name}</b> geçici olarak kullanıma kapatılacak (pasif olacak). Bu döneme ait <b>section/derslere dokunulmaz</b>; istediğin zaman tekrar açabilirsin.</>
+            ),
+            confirmLabel: 'Evet, kullanıma kapat',
+            run: () => handleDeactivate(confirmAction.term.id),
+          },
+          activate: {
+            title: 'Dönemi kullanıma aç',
+            description: (
+              <><b>{confirmAction.term.name}</b> yeniden kullanıma açılacak; aktif/kullanılabilir hale gelecek.</>
+            ),
+            confirmLabel: 'Evet, kullanıma aç',
+            run: () => handleActivate(confirmAction.term.id),
+          },
+          uncancel: {
+            title: 'İptali geri al',
+            description: (
+              <><b>{confirmAction.term.name}</b> döneminin iptali kaldırılacak; dönem yeniden kullanılabilir hale gelecek.</>
+            ),
+            confirmLabel: 'Evet, iptali geri al',
+            run: () => handleUncancel(confirmAction.term.id),
+          },
+        }[confirmAction.kind];
+        return (
+          <DelayedConfirmDialog
+            open={!!confirmAction}
+            onOpenChange={(open) => !open && setConfirmAction(null)}
+            title={cfg?.title ?? ''}
+            description={cfg?.description}
+            footnote="Bu işlem geri alınabilir."
+            confirmLabel={cfg?.confirmLabel ?? 'Onayla'}
+            delaySeconds={0}
+            severity="warning"
+            onConfirm={() => { cfg?.run(); setConfirmAction(null); }}
+          />
+        );
+      })()}
+
       {/* Create Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Yeni Dönem Oluştur</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearTermType formError={formError} />
-          <DialogFooter>
+        <ResizableDialogContent defaultWidth={560} minWidth={460} minHeight={420} className="flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+            <DialogTitle>Yeni Dönem Oluştur</DialogTitle>
+            <DialogDescription className="text-xs">
+              Dönemin kimlik bilgilerini ve genel başlangıç/bitiş tarihlerini girin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-2">
+            <TermForm form={form} setForm={setForm} showYearTermType formError={formError} />
+          </div>
+          <DialogFooter className="shrink-0 px-6 py-4 border-t gap-2">
             <Button variant="outline" onClick={() => setCreateModalOpen(false)}>İptal</Button>
             <Button onClick={handleCreate} disabled={createTerm.isPending}>
               {createTerm.isPending ? 'Oluşturuluyor...' : 'Oluştur'}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Edit Modal */}
       <Dialog open={!!editingTerm} onOpenChange={open => !open && setEditingTerm(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Düzenle — {editingTerm?.name}</DialogTitle></DialogHeader>
-          <TermForm form={form} setForm={setForm} showYearTermType={false} formError={formError} />
-          <DialogFooter>
+        <ResizableDialogContent defaultWidth={560} minWidth={460} minHeight={420} className="flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
+            <DialogTitle>Düzenle — {editingTerm?.name}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Dönemin kimlik bilgilerini ve genel başlangıç/bitiş tarihlerini düzenleyin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-2">
+            <TermForm form={form} setForm={setForm} showYearTermType={false} formError={formError} />
+          </div>
+          <DialogFooter className="shrink-0 px-6 py-4 border-t gap-2">
             <Button variant="outline" onClick={() => setEditingTerm(null)}>İptal</Button>
             <Button onClick={handleUpdate} disabled={updateTerm.isPending}>
               {updateTerm.isPending ? 'Kaydediliyor...' : 'Kaydet'}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResizableDialogContent>
       </Dialog>
 
       {/* Detay Modal (çift tık ile açılır) */}
@@ -666,7 +707,7 @@ function TermForm({
   formError: string;
 }) {
   return (
-    <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
+    <div className="space-y-4">
       <div className="space-y-1">
         <label className="text-sm font-medium">Dönem Adı *</label>
         <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="örn. 2024-2025 Güz Dönemi" />
@@ -694,26 +735,21 @@ function TermForm({
         </div>
       </div>
 
-      {showYearTermType ? (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Yıl *</label>
-            <Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: Number(e.target.value) }))} min={2000} max={2100} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Tür *</label>
-            <select
-              value={form.termType}
-              onChange={e => setForm(f => ({ ...f, termType: e.target.value }))}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-            >
-              {TERM_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-        </div>
-      ) : (
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
-          <label className="text-sm font-medium">Tür</label>
+          <label className="text-sm font-medium">Yıl *</label>
+          <Input
+            type="number"
+            value={form.year}
+            disabled={!showYearTermType}
+            title={!showYearTermType ? 'Yıl dönem oluşturulduktan sonra değiştirilemez' : undefined}
+            onChange={e => setForm(f => ({ ...f, year: Number(e.target.value) }))}
+            min={2000}
+            max={2100}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Tür *</label>
           <select
             value={form.termType}
             onChange={e => setForm(f => ({ ...f, termType: e.target.value }))}
@@ -722,17 +758,16 @@ function TermForm({
             {TERM_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-      )}
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium">YÖKSİS Durumu</label>
-        <select
-          value={form.yoksisStatus}
-          onChange={e => setForm(f => ({ ...f, yoksisStatus: e.target.value as 'Inactive' | 'Active' }))}
-          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-        >
-          {YOKSIS_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">YÖKSİS Durumu</label>
+          <select
+            value={form.yoksisStatus}
+            onChange={e => setForm(f => ({ ...f, yoksisStatus: e.target.value as 'Inactive' | 'Active' }))}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+          >
+            {YOKSIS_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="border-t border-border pt-3 space-y-2">
@@ -745,33 +780,6 @@ function TermForm({
           <div className="space-y-1">
             <label className="text-sm font-medium">Bitiş *</label>
             <Input type="date" value={form.termEnd} onChange={e => setForm(f => ({ ...f, termEnd: e.target.value }))} />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-border pt-3 space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Override Tarihleri
-          <span className="ml-2 font-normal text-muted-foreground normal-case">
-            (Opsiyonel — admin dönem tarihi dışında manuel kontrol için)
-          </span>
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Erken Aktivasyon</label>
-            <Input type="date" value={form.overrideStart}
-              onChange={e => setForm(f => ({ ...f, overrideStart: e.target.value }))} />
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Dönem başlangıcından önce aktif et. TermStart'tan <strong>önce</strong> bir tarih girilmeli.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Uzatma</label>
-            <Input type="date" value={form.overrideEnd}
-              onChange={e => setForm(f => ({ ...f, overrideEnd: e.target.value }))} />
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Dönem bitişinden sonra aktif tut. TermEnd'den <strong>sonra</strong> bir tarih girilmeli.
-            </p>
           </div>
         </div>
       </div>

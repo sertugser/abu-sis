@@ -281,8 +281,8 @@ export function useWhatIfCalendar() {
 export function useApplyDraft() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ draftId, forceOverwrite }: { draftId: number; forceOverwrite: boolean }) => {
-      const { data } = await apiClient.post<ApplyCalendarDraftResultDto>(`${API}/drafts/${draftId}/apply`, { forceOverwrite });
+    mutationFn: async ({ draftId, forceOverwrite, semesters }: { draftId: number; forceOverwrite: boolean; semesters?: SemesterType[] }) => {
+      const { data } = await apiClient.post<ApplyCalendarDraftResultDto>(`${API}/drafts/${draftId}/apply`, { forceOverwrite, semesters });
       return data;
     },
     onSuccess: async (_, variables) => {

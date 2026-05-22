@@ -13,6 +13,17 @@ public partial class CalendarGeneratorService
         EnsureEditable(draft);
 
         var events = Deserialize<List<GeneratedCalendarEventDto>>(draft.EventsJson);
+
+        // Yarıyıl seçimi: istek belirli yarıyıllar verdiyse yalnızca onları uygula.
+        // Seçilmeyen yarıyıllar için ne dönem oluşturulur ne event yazılır.
+        if (request.Semesters is { Count: > 0 })
+        {
+            var selected = request.Semesters.ToHashSet();
+            events = events.Where(e => selected.Contains(e.Semester)).ToList();
+            if (events.Count == 0)
+                throw new InvalidOperationException("Seçilen yarıyıl(lar) için uygulanacak etkinlik bulunamadı.");
+        }
+
         if (events.Any(e => e.IsFailed))
             throw new InvalidOperationException("Yerlesemeyen etkinlikler varken taslak uygulanamaz.");
 

@@ -975,6 +975,8 @@ export default function AcademicCalendarGeneratorPage() {
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
   const [includeSummer, setIncludeSummer] = useState(true);
   const [forceOverwrite, setForceOverwrite] = useState(false);
+  // Uygula adımında hangi yarıyılların uygulanacağı (boş → henüz hesaplanmadı; effect varsayılanı doldurur).
+  const [applySemesters, setApplySemesters] = useState<SemesterType[]>([]);
   const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
   const [durationEventKey, setDurationEventKey] = useState('');
   const [durationDays, setDurationDays] = useState('');
@@ -1075,6 +1077,10 @@ export default function AcademicCalendarGeneratorPage() {
         : null,
     };
   }, [adminTerms.data, calendar]);
+  useEffect(() => {
+    // Yeni taslak/yarıyıl seti geldiğinde varsayılan olarak tüm yarıyılları seç.
+    setApplySemesters(termAlignment.expectedSemesters);
+  }, [termAlignment.expectedSemesters]);
   const durationOptions = useMemo(() => {
     const options: CalendarProcessOption[] = [];
 
@@ -1858,10 +1864,17 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Dönem uyumu kontrol ediliyor. Lütfen birkaç saniye sonra tekrar deneyin.');
       return;
     }
+    if (applySemesters.length === 0) {
+      setNotice('En az bir yarıyıl seçmelisiniz.');
+      return;
+    }
+    const willCreate = applySemesters.filter(s => !termAlignment.existingSemesters.includes(s));
     const shouldApply = await askConfirm({
       title: 'Akademik takvime kaydedilsin mi?',
       message:
         `Taslak #${activeDraftId} gerçek akademik takvime uygulanacak.\n\n` +
+        `Uygulanacak yarıyıllar: ${semesterListText(applySemesters)}. İşaretlenmeyen yarıyıllara dokunulmaz.\n` +
+        (willCreate.length > 0 ? `Yeni açılacak dönem(ler): ${semesterListText(willCreate)}.\n` : '') +
         'Sonuç: ilgili dönemlerin mevcut takvim işaretleri temizlenir ve bu taslaktaki etkinlikler yazılır.\n' +
         `${forceOverwrite ? 'Yayınlanmış dönemlerin üzerine yazma açık; sistem sadece kapalı/arşivlenmiş dönemleri engeller.' : 'Yayınlanmış veya daha ileri durumda bir dönem varsa işlem reddedilir; önce üzerine yazma izni açılmalıdır.'}\n\n` +
         'Devam etmek istiyor musunuz?',
@@ -1873,7 +1886,7 @@ export default function AcademicCalendarGeneratorPage() {
       setNotice('Onayla ve kaydet işlemi iptal edildi.');
       return;
     }
-    applyDraft.mutate({ draftId: activeDraftId, forceOverwrite }, {
+    applyDraft.mutate({ draftId: activeDraftId, forceOverwrite, semesters: applySemesters }, {
       onSuccess: result => {
         const terms = result.termIds.length > 0 ? result.termIds.join(', ') : 'yok';
         showSuccessNotice(`${result.message} Akademik takvim sayfası yenilendi. Güncellenen dönemler: ${terms}.`);
@@ -2345,6 +2358,41 @@ export default function AcademicCalendarGeneratorPage() {
             </div>
             <Switch checked={forceOverwrite} onCheckedChange={setForceOverwrite} />
           </div>
+          {termAlignment.expectedSemesters.length > 0 && (
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <p className="text-xs font-medium text-slate-700">Uygulanacak yarıyıllar</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                İşaretlemediğin yarıyıla dokunulmaz; eşleşen dönem yoksa yeni dönem açılır.
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {termAlignment.expectedSemesters.map(s => {
+                  const exists = termAlignment.existingSemesters.includes(s);
+                  const checked = applySemesters.includes(s);
+                  return (
+                    <label
+                      key={s}
+                      className="flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={e =>
+                          setApplySemesters(prev =>
+                            e.target.checked ? [...prev, s] : prev.filter(x => x !== s),
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-slate-900"
+                      />
+                      <span className="font-medium text-slate-800">{semesterLabel(s)}</span>
+                      <span className={exists ? 'text-emerald-600' : 'text-amber-600'}>
+                        {exists ? '(mevcut)' : '(yeni dönem açılacak)'}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button type="button" onClick={handleApply} disabled={!activeDraftId || applyDraft.isPending || adminTerms.isLoading}>
               {applyDraft.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
