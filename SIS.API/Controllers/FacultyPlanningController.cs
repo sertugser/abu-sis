@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.FacultyPlanning.Services;
+using SIS.Application.Scheduling.DTOs;
+using SIS.Application.Scheduling.Services;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -15,15 +17,18 @@ namespace SIS.API.Controllers;
 public class FacultyPlanningController : ControllerBase
 {
     private readonly IFacultyPlanningService _service;
+    private readonly ISchedulingService _schedulingService;
     private readonly AppDbContext _context;
     private readonly ILogger<FacultyPlanningController> _logger;
 
     public FacultyPlanningController(
         IFacultyPlanningService service,
+        ISchedulingService schedulingService,
         AppDbContext context,
         ILogger<FacultyPlanningController> logger)
     {
         _service = service;
+        _schedulingService = schedulingService;
         _context = context;
         _logger = logger;
     }
@@ -76,6 +81,27 @@ public class FacultyPlanningController : ControllerBase
         if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
 
         var result = await _service.AssignSectionAsync(request, userId.ToString(), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Düzenleyici drag-start akışında çağrılır. Bir section için N aday hücreyi
+    /// tek HTTP çağrısında RuleEngine ile değerlendirir; per-cell {isValid, reason}
+    /// döndürür. Sadece okuma — herhangi bir değişiklik yapmaz, dolayısıyla
+    /// .view permission'ı yeterli.
+    /// </summary>
+    [HttpPost("validate-cells")]
+    [RequirePermission("menu.ders-programi-olusturma.view")]
+    public async Task<IActionResult> ValidateCellsBulk(
+        [FromBody] BulkValidateCellsRequestDto request, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var facultyId = await _service.ResolveFacultyIdForSectionAsync(request.SectionId, ct);
+        if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+        if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+
+        var result = await _schedulingService.ValidateCellsBulkAsync(request, ct);
         return Ok(result);
     }
 

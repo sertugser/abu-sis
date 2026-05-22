@@ -103,6 +103,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<IConstraintEncoder, StudentGapEncoder>();
         services.AddScoped<IConstraintEncoder, WeekdayBalanceEncoder>();
         services.AddScoped<IConstraintEncoder, AdjacentYearEncoder>();
+        services.AddScoped<IConstraintEncoder, OnlineSlotPreferenceEncoder>();    // S21
 
         // Plan 10 Phase 3 — Soft variants for Hard→Soft toggleable rules.
         // Default Category="Hard" → these stay no-op; admin "Tercihli" toggle activates penalty mode.
@@ -173,6 +174,7 @@ public static class SchedulingServiceCollectionExtensions
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S8_InstructorDaySpreadRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S12_WeekdayBalanceRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S20_AdjacentYearConflictRule>();
+        services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Soft.S21_OnlineSlotPreferenceRule>();
         services.AddScoped<SIS.Application.Scheduling.Rules.IRulePredicate, Rules.Hybrid.DIST_DistributionRule>();
 
         return services;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Solver;
@@ -120,6 +121,21 @@ public sealed class SolverRequestBuilder
             })
             .ToDictionaryAsync(x => x.CourseId, x => (x.MinSemester - 1) / 2, cancellationToken);
 
+        // 2026-05-17 — Course → IsCompulsory mapping. Komşu yıl hard pair'leri için
+        // CohortBuilder bu bilgiyi kullanıyor (seçmeli dersler hariç tutulur).
+        // Heuristic: bir ders birden çok müfredatta yer alıyorsa "en az birinde zorunlu"
+        // ise zorunlu sayılır (Any). Müfredat yokluğunda default false (seçmeli muamelesi).
+        var courseCompulsoryMap = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId))
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new
+            {
+                CourseId = g.Key,
+                IsCompulsory = g.Any(cc => cc.IsCompulsory)
+            })
+            .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, cancellationToken);
+
         var sections = sectionEntities
             .Select(cs => MapSection(cs, labClassroomCapacities, instructorMaxHours, courseYearMap))
             .ToList();
@@ -133,13 +149,28 @@ public sealed class SolverRequestBuilder
             .ToListAsync(cancellationToken);
         var timeSlots = timeSlotEntities.Select(MapTimeSlot).ToList();
 
-        // 5) Constraint flags — Code → IsEnabled, ayrıca Category (Plan 10 — Hard/Soft toggle)
+        // 5) Constraint flags — Code → IsEnabled, ayrıca Category (Plan 10 — Hard/Soft toggle).
+        // Parameters JSON (H4 alt-toggle'ları için, 2026-05-19) da yüklenir.
         var constraintRows = await _context.ConstraintDefinitions
             .AsNoTracking()
-            .Select(cd => new { cd.Code, cd.IsEnabled, cd.Category })
+            .Select(cd => new { cd.Code, cd.IsEnabled, cd.Category, cd.Parameters })
             .ToListAsync(cancellationToken);
         var constraintFlags = constraintRows.ToDictionary(r => r.Code, r => r.IsEnabled);
         var constraintCategories = constraintRows.ToDictionary(r => r.Code, r => r.Category);
+
+        // H4 alt-toggle'ları (AmphiThresholdEnabled, ClassroomTypeRequirementEnabled) —
+        // H4 row'unun Parameters JSON'undan parse edilir. AmphiThreshold (sayı) eski path'ten
+        // (CpSatSolverEngine SystemConfigs okuma) gelir, drift kalmaması için tek kaynak.
+        var (amphiThresholdEnabledFromH4, classroomTypeRequirementEnabledFromH4) =
+            ParseH4Toggles(constraintRows.FirstOrDefault(r => r.Code == "H4")?.Parameters);
+
+        // H5 — CurriculumConflictMode H5.Parameters JSON'undan (2026-05-19 dual-channel temizliği)
+        var curriculumConflictModeFromH5 =
+            ParseH5CurriculumMode(constraintRows.FirstOrDefault(r => r.Code == "H5")?.Parameters);
+
+        // H6 — MaxLabBlockHours H6.Parameters JSON'undan (2026-05-19 SystemConfigs → H6)
+        var maxLabBlockHoursFromH6 =
+            ParseH6MaxLabBlockHours(constraintRows.FirstOrDefault(r => r.Code == "H6")?.Parameters);
 
         // 6) Corequisites — Plan 6 Task 8.
         //    Filter: IsCorequisite=true AND (CourseId or RequiredCourseId in current sections' courses).
@@ -172,13 +203,10 @@ public sealed class SolverRequestBuilder
         var defaultInstructorMaxWeeklyHours = await _systemConfigProvider.GetIntAsync(
             "Schedule.DefaultInstructorMaxWeeklyHours", 30, cancellationToken);
 
-        // 8) Plan 6 Task 3 — Read curriculum conflict mode from SystemConfigs (2026-05-09 dual-table merge).
-        //    Defaults to "curriculum" if no row exists (legacy behavior).
-        var curriculumConflictMode = await _context.SystemConfigs
-            .AsNoTracking()
-            .Where(c => c.Key == "Schedule.CurriculumConflictMode")
-            .Select(c => c.Value)
-            .FirstOrDefaultAsync(cancellationToken) ?? "curriculum";
+        // 8) Plan 6 Task 3 — Curriculum conflict mode (2026-05-19): H5.Parameters JSON
+        //    tek otorite (Kısıtlar sayfası → H5 dropdown). Eski SystemConfigs yolu kaldırıldı.
+        //    Default "curriculum" if H5 row yok veya key tanımlı değil.
+        var curriculumConflictMode = curriculumConflictModeFromH5 ?? "curriculum";
 
         // 9) Plan 6 Task 6 — In cohort mode, materialize CohortConflictPairs via v1 CohortBuilder.
         //    Plan 8 Task 2 — assignment outer-scope'a alındı; AdjacentYearSoftPairs S20 için kullanılır.
@@ -190,9 +218,13 @@ public sealed class SolverRequestBuilder
             var (courseSemestersByDept, courseAccessibleDepts) =
                 await LoadCohortMetadataAsync(cohortCourseIds, cancellationToken);
 
-            // Project SectionInput → CohortSectionRef (CohortBuilder needs only SectionId, SectionNumber, CourseId).
+            // Project SectionInput → CohortSectionRef. CohortBuilder komşu yıl hard pair
+            // filtresi için IsCompulsory bilgisini de okur (yalnızca her iki tarafı da
+            // zorunlu olan ders çiftleri komşu yıl hard pair'ine girer — seçmeli hariç).
             var cohortRefs = sections
-                .Select(s => new CohortSectionRef(s.Id, s.SectionNumber, s.CourseId))
+                .Select(s => new CohortSectionRef(
+                    s.Id, s.SectionNumber, s.CourseId,
+                    courseCompulsoryMap.GetValueOrDefault(s.CourseId, false)))
                 .ToList();
 
             var cohortBuilder = new CohortBuilder();
@@ -239,8 +271,81 @@ public sealed class SolverRequestBuilder
             DistributionConstraints = distributionConstraints,
             SoftThresholds = softThresholds,
             CoEnrollmentPairs = coEnrollmentPairs,
-            AdjacentYearSoftPairs = adjacentYearSoftPairs
+            AdjacentYearSoftPairs = adjacentYearSoftPairs,
+            // 2026-05-19 — H4 alt-toggle'ları H4.Parameters JSON'undan (Kısıtlar sayfası).
+            // CpSatSolverEngine bu değerleri SystemConfigs okumayı kestiği için request'ten alır.
+            AmphiThresholdEnabled = amphiThresholdEnabledFromH4,
+            ClassroomTypeRequirementEnabled = classroomTypeRequirementEnabledFromH4,
+            // 2026-05-19 — MaxLabBlockHours H6.Parameters JSON'undan (Kısıtlar sayfası).
+            MaxLabBlockHours = maxLabBlockHoursFromH6 ?? 2,
         };
+    }
+
+    /// <summary>
+    /// H5 ConstraintDefinition.Parameters JSON'undan CurriculumConflictMode değerini parse eder.
+    /// Eksik key veya bozuk JSON → null (caller default "curriculum" uygular).
+    /// </summary>
+    private static string? ParseH5CurriculumMode(string? parameters)
+    {
+        if (string.IsNullOrWhiteSpace(parameters)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(parameters);
+            if (doc.RootElement.TryGetProperty("CurriculumConflictMode", out var mode)
+                && mode.ValueKind == JsonValueKind.String)
+            {
+                var val = mode.GetString();
+                return string.IsNullOrWhiteSpace(val) ? null : val;
+            }
+        }
+        catch (JsonException) { /* silent */ }
+        return null;
+    }
+
+    /// <summary>
+    /// H6 ConstraintDefinition.Parameters JSON'undan MaxLabBlockHours değerini parse eder.
+    /// Eksik key, bozuk JSON veya ≤0 → null (caller default 2 uygular).
+    /// </summary>
+    private static int? ParseH6MaxLabBlockHours(string? parameters)
+    {
+        if (string.IsNullOrWhiteSpace(parameters)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(parameters);
+            if (doc.RootElement.TryGetProperty("MaxLabBlockHours", out var max)
+                && max.ValueKind == JsonValueKind.Number
+                && max.TryGetInt32(out var maxInt)
+                && maxInt > 0)
+            {
+                return maxInt;
+            }
+        }
+        catch (JsonException) { /* silent */ }
+        return null;
+    }
+
+    /// <summary>
+    /// H4 ConstraintDefinition.Parameters JSON'undan AmphiThresholdEnabled ve
+    /// ClassroomTypeRequirementEnabled değerlerini parse eder. Eksik key veya bozuk JSON → false.
+    /// </summary>
+    private static (bool AmphiEnabled, bool TypeEnabled) ParseH4Toggles(string? parameters)
+    {
+        if (string.IsNullOrWhiteSpace(parameters)) return (false, false);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(parameters);
+            var root = doc.RootElement;
+            var amphiEnabled = root.TryGetProperty("AmphiThresholdEnabled", out var a)
+                && a.ValueKind == JsonValueKind.True;
+            var typeEnabled = root.TryGetProperty("ClassroomTypeRequirementEnabled", out var t)
+                && t.ValueKind == JsonValueKind.True;
+            return (amphiEnabled, typeEnabled);
+        }
+        catch (JsonException)
+        {
+            return (false, false);
+        }
     }
 
     /// <summary>
@@ -289,6 +394,9 @@ public sealed class SolverRequestBuilder
         var s20Penalty = await _systemConfigProvider.GetIntAsync("SoftConstraint.S20.PenaltyPerPair", 5, ct);
         var s20Weight = await _systemConfigProvider.GetIntAsync("Schedule.S20Weight", 1, ct);
 
+        // S21 OnlineSlotPreference (2026-05-20)
+        var s21Weight = await _systemConfigProvider.GetIntAsync("Schedule.S21Weight", 5, ct);
+
         // DIST tier weights
         var distDiscWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistDiscouragedWeight", 50, ct);
         var distStrongWeight = await _systemConfigProvider.GetIntAsync("Schedule.DistStronglyDiscouragedWeight", 200, ct);
@@ -326,6 +434,7 @@ public sealed class SolverRequestBuilder
             S12Weight = s12Weight,
             S20PenaltyPerPair = s20Penalty,
             S20Weight = s20Weight,
+            S21Weight = s21Weight,
             DistDiscouragedWeight = distDiscWeight,
             DistStronglyDiscouragedWeight = distStrongWeight,
             H4Weight = h4Weight,

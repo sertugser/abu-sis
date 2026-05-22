@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlotAssignDialog } from './SlotAssignDialog';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  AlertTriangle, CheckCircle2, XCircle,
+  CheckCircle2, XCircle,
   RotateCcw, Trash2,
 } from 'lucide-react';
 import {
@@ -19,7 +19,6 @@ import type { AutoSchedulePreview, FacultyPlanningTimeSlot } from '../../types/f
 import { CalendarGrid } from './CalendarGrid';
 import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
-import { toApiError } from '@/lib/apiError';
 
 interface AutoScheduleTabProps {
   facultyId: number;
@@ -60,9 +59,10 @@ export function AutoScheduleTab({
   const timeSlots: FacultyPlanningTimeSlot[] = timeSlotsQuery.data ?? [];
 
   const [userSelectedRunId, setUserSelectedRunId] = useState<number | null>(null);
+  /** "Tümünü Sıfırla" onay dialog'u açık mı — TÜM atamaları siler, en kritik yıkıcı işlem. */
+  const [isResetAllOpen, setIsResetAllOpen] = useState(false);
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
   const [assignSlot, setAssignSlot] = useState<{
     day: number;
     slotOrder: number;
@@ -101,14 +101,9 @@ export function AutoScheduleTab({
       onTriggerConsumed?.(triggerRun);
       setUserSelectedRunId(null);
       setLastAppliedIds([]);
-      setRunError(null);
       applyMutation.reset();
       previewMutation.mutate({ facultyId, termId }, {
         onSuccess: () => setShowResultModal(true),
-        onError: (error) => {
-          const apiError = toApiError(error, 'Otomatik programlama başlatılamadı.');
-          setRunError(apiError.message);
-        },
       });
     }
   }, [triggerRun, consumedTriggerRun, onTriggerConsumed, termId, facultyId, previewMutation, applyMutation]);
@@ -136,7 +131,6 @@ export function AutoScheduleTab({
     previewMutation.reset();
     setUserSelectedRunId(null);
     setLastAppliedIds([]);
-    setRunError(null);
     applyMutation.reset();
     setShowResultModal(false);
   }, [previewMutation, applyMutation]);
@@ -225,23 +219,18 @@ export function AutoScheduleTab({
 
           <div className="flex-1" />
 
-          {/* Tümünü Sıfırla */}
+          {/* Tümünü Sıfırla — TÜM atamaları silen yıkıcı işlem; 5sn delayed onay zorunlu. */}
           {termId && (ov?.scheduledSections ?? 0) > 0 && (
-            <InlineConfirmButton
-              label={resetAll.isPending ? 'Sıfırlanıyor...' : 'Tümünü Sıfırla'}
-              confirmLabel="TÜM atamaları sıfırla? Onayla"
+            <Button
               variant="ghost"
-              confirmVariant="destructive"
-              icon={<Trash2 className="h-3 w-3 mr-1" />}
+              size="sm"
               disabled={resetAll.isPending}
-              onConfirm={() => resetAll.mutate({ facultyId, termId }, {
-                onSuccess: (data) => {
-                  clearPreview();
-                  alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
-                },
-              })}
+              onClick={() => setIsResetAllOpen(true)}
               className="h-7 text-[11px] text-red-600 hover:text-red-700"
-            />
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              {resetAll.isPending ? 'Sıfırlanıyor...' : 'Tümünü Sıfırla'}
+            </Button>
           )}
         </div>
   ) : null;
@@ -251,13 +240,6 @@ export function AutoScheduleTab({
 
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
-
-      {runError && (
-        <Alert variant="destructive" className="mb-3">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{runError}</AlertDescription>
-        </Alert>
-      )}
 
       {/* ── Takvim — tam alan ──
           overflow-auto: CalendarGrid içerik-bazlı boyutlanıyor; uzun gridlerde dikey scroll
@@ -307,6 +289,38 @@ export function AutoScheduleTab({
           allowedMode={assignSlot.allowedMode}
           termId={termId}
           sections={sections}
+        />
+      )}
+
+      {/* Tümünü Sıfırla onay dialog'u — TÜM section atamalarını silen en yıkıcı işlem.
+          5sn delay zorunlu; preview olarak etkilenecek section sayısı + scheduled olanların ders kodu listesi. */}
+      {termId && (
+        <DelayedConfirmDialog
+          open={isResetAllOpen}
+          onOpenChange={setIsResetAllOpen}
+          title={`Tüm program atamaları sıfırlanacak (${ov?.scheduledSections ?? 0} şube)`}
+          description="Bu fakültenin aktif dönemdeki TÜM section'larının hoca/derslik/zaman atamaları silinecek. Pinli olanlar dahildir."
+          items={sections.filter(s => s.status !== 'Unscheduled').slice(0, 50).map(s => ({
+            key: s.sectionId,
+            label: `${s.courseCode} -${s.sectionIndex} · ${s.courseName} · ${s.scheduleSummary || '(zamansız)'}`,
+          }))}
+          footnote={
+            (ov?.scheduledSections ?? 0) > 50
+              ? `Bu işlem geri alınamaz. (Yukarıda ilk 50 şube gösteriliyor — toplam ${ov?.scheduledSections} şube etkilenecek.)`
+              : 'Bu işlem geri alınamaz. Sıfırlama sonrası tüm şubeleri yeniden atamanız gerekecek.'
+          }
+          confirmLabel="Tüm atamaları sıfırla"
+          delaySeconds={5}
+          severity="danger"
+          onConfirm={() => {
+            setIsResetAllOpen(false);
+            resetAll.mutate({ facultyId, termId }, {
+              onSuccess: (data) => {
+                clearPreview();
+                alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
+              },
+            });
+          }}
         />
       )}
     </div>

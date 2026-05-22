@@ -32,10 +32,4 @@ public sealed class EncoderContext
     /// devre dışı (admin UI yok — Plan 10). True iken Plan 7b davranışı (Theory tip zorunluluğu + Lab override).
     /// </summary>
     public bool ClassroomTypeRequirementEnabled { get; init; } = false;
-
-    /// <summary>
-    /// SystemConfig "Schedule.AllowSameCourseSectionOverlap" (default false). True iken H8 (aynı dersin
-    /// farklı şubeleri çakışmaz) kuralı tamamen devre dışı. Mirrors <see cref="SolverRequest.AllowSameCourseSectionOverlap"/>.
-    /// </summary>
-    public bool AllowSameCourseSectionOverlap { get; init; } = false;
 }

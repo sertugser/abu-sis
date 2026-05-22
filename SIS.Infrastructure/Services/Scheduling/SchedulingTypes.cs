@@ -9,6 +9,9 @@ internal sealed class CourseSchedulingMetadata
     public Dictionary<int, int> MinSuggestedSemesters { get; init; } = new();
     public Dictionary<int, Dictionary<int, int>> SuggestedSemestersByDepartment { get; init; } = new();
     public Dictionary<int, HashSet<int>> AccessibleDepartments { get; init; } = new();
+    /// <summary>2026-05-20: H5 curriculum mode için kursun zorunlu mu seçmeli mi olduğu.
+    /// CourseId → en az bir aktif müfredatta IsCompulsory=true ise true. Eksik key → seçmeli.</summary>
+    public Dictionary<int, bool> CompulsoryFlags { get; init; } = new();
 }
 
 /// <summary>

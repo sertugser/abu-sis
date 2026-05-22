@@ -47,6 +47,7 @@ internal static class TestRuleHelpers
         new S8_InstructorDaySpreadRule(),
         new S12_WeekdayBalanceRule(),
         new S20_AdjacentYearConflictRule(),
+        new S21_OnlineSlotPreferenceRule(),
         new DIST_DistributionRule(),
     };
 
@@ -62,7 +63,6 @@ internal static class TestRuleHelpers
     {
         var cfg = new SchedulingConstraintConfig
         {
-            LunchBreakIsHard = false,
             LunchBreakStart = new TimeOnly(11, 40),
             LunchBreakEnd = new TimeOnly(12, 20),
             MaxConsecutiveHours = 4,

@@ -250,9 +250,12 @@ public sealed class RuleEnginePipelineSmokeTests : SchedulingTestBase
         };
 
         // 4 gün × 5 saat = 20 (day, hour) dilimi. Cuma boş — her hoca için min 1 gün off.
+        // Saatler öğle arası 11:40-12:20 ile çakışmayacak şekilde: 11:00-13:00 bloğu lunch'a
+        // denk gelmesin diye saat 11 yerine saat 7 (07:00-09:00) kullanılır.
+        var hourSlots = new[] { 7, 9, 13, 15, 17 };
         var dayHourPairs = new List<(DayOfWeek Day, int Hour)>();
         foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday })
-            foreach (var hour in new[] { 9, 11, 13, 15, 17 })
+            foreach (var hour in hourSlots)
                 dayHourPairs.Add((day, hour));
 
         // Hoca başına seçilmiş 3 (day, hour) — birbirinden farklı günlerde olacak şekilde.
@@ -266,9 +269,9 @@ public sealed class RuleEnginePipelineSmokeTests : SchedulingTestBase
             for (var s = 0; s < 3; s++)
             {
                 var dayIdx = (i + s) % 4;
-                var hourIdx = (i * 3 + s) % 5;
+                var hourIdx = (i * 3 + s) % hourSlots.Length;
                 var day = (DayOfWeek)(1 + dayIdx); // Monday=1..Thursday=4
-                schedule.Add((day, 9 + 2 * hourIdx));
+                schedule.Add((day, hourSlots[hourIdx]));
             }
             instructorSchedule[i] = schedule;
         }

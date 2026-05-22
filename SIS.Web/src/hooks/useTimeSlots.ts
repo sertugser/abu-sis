@@ -6,11 +6,11 @@ const BASE = '/admin/time-slots';
 export type TimeSlotAllowedMode = 'Both' | 'OnlineOnly' | 'FaceToFaceOnly';
 
 /**
- * Backend JsonStringEnumConverter enum'ları string olarak gönderir.
- * .NET DayOfWeek: Sunday=0, Monday=1, ..., Saturday=6 — ama JSON'da ad gelir.
+ * Wire format: .NET System.DayOfWeek as int (Sunday=0, Monday=1, ..., Saturday=6).
+ * Backend `TimeSlotDto.DayOfWeek` is declared as `int` and serialized as a number.
+ * Name kept for ergonomics, but the underlying type is numeric.
  */
-export type DayOfWeekName =
-  | 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+export type DayOfWeekName = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface TimeSlotDto {
   id: number;
@@ -144,22 +144,22 @@ export const ALLOWED_MODE_OPTIONS: { value: TimeSlotAllowedMode; label: string }
 ];
 
 export const DAY_OF_WEEK_OPTIONS: { value: DayOfWeekName; label: string }[] = [
-  { value: 'Monday',    label: 'Pazartesi' },
-  { value: 'Tuesday',   label: 'Salı' },
-  { value: 'Wednesday', label: 'Çarşamba' },
-  { value: 'Thursday',  label: 'Perşembe' },
-  { value: 'Friday',    label: 'Cuma' },
-  { value: 'Saturday',  label: 'Cumartesi' },
-  { value: 'Sunday',    label: 'Pazar' },
+  { value: 1, label: 'Pazartesi' },
+  { value: 2, label: 'Salı' },
+  { value: 3, label: 'Çarşamba' },
+  { value: 4, label: 'Perşembe' },
+  { value: 5, label: 'Cuma' },
+  { value: 6, label: 'Cumartesi' },
+  { value: 0, label: 'Pazar' },
 ];
 
 export function dayName(day: DayOfWeekName): string {
-  return DAY_OF_WEEK_OPTIONS.find(d => d.value === day)?.label ?? day;
+  return DAY_OF_WEEK_OPTIONS.find(d => d.value === day)?.label ?? String(day);
 }
 
-/** Hafta sonu kontrolü (Cts/Paz) */
+/** Hafta sonu kontrolü (Cts/Paz) — System.DayOfWeek: Sun=0, Sat=6 */
 export function isWeekend(day: DayOfWeekName): boolean {
-  return day === 'Saturday' || day === 'Sunday';
+  return day === 0 || day === 6;
 }
 
 export function allowedModeLabel(mode: TimeSlotAllowedMode): string {

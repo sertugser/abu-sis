@@ -463,7 +463,6 @@ public abstract class SchedulingTestBase : IDisposable
         AddConfig("Classroom.OccupancyTarget.Max", "85");
         AddConfig("SoftConstraint.S2.MaxDailyHours", "6");
         AddConfig("SoftConstraint.S4.MinCoPairThreshold", "2");
-        AddConfig("Schedule.LunchBreak.IsHard", "false");
         AddConfig("Schedule.MaxConsecutiveHours", "12");
         AddConfig("Schedule.BreakDurationMinutes", "5");
         AddConfig("Classroom.AmphiThreshold", "100");
@@ -472,6 +471,18 @@ public abstract class SchedulingTestBase : IDisposable
         // test'ler SetSystemConfig ile override edebilir.
         AddConfig("Schedule.AmphiThresholdEnabled", "true");
         AddConfig("Schedule.TheoryLabSplitThreshold", "4");
+
+        // H13 Öğle Arası Koruması test base'inde devre dışı — test verisi sık sık 11:40-12:20
+        // aralığına denk gelen bloklar içeriyor; testlerin niyeti H13 değil başka kuralları
+        // doğrulamak (eski Schedule.LunchBreak.IsHard=false semantiğinin yerini alır).
+        Context.ConstraintDefinitions.Add(new ConstraintDefinition
+        {
+            Code = "H13",
+            Name = "Öğle Arası Koruması",
+            Category = "Hard",
+            Scope = "Scheduling",
+            IsEnabled = false,
+        });
         Context.SaveChanges();
     }
 
@@ -486,13 +497,11 @@ public abstract class SchedulingTestBase : IDisposable
         "SoftConstraint.S3.MaxSectionsPerSlot",
         "SoftConstraint.S4.MinCoPairThreshold",
         "SoftConstraint.S7.MaxGapSlots",
-        "Schedule.LunchBreak.IsHard",
         "Schedule.LunchBreakStart",
         "Schedule.LunchBreakEnd",
         "Schedule.MaxConsecutiveHours",
         "Scheduling.MaxBacktrackingDepth",
         "Schedule.TheoryLabSplitThreshold",
-        "Schedule.SplittableBlockTypes",
         "Schedule.SA.MaxIterations",
         "Schedule.SA.InitialTemperature",
         "Schedule.SA.TimeoutSeconds",

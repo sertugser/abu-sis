@@ -62,53 +62,9 @@ public partial class FacultyPlanningService
                 if (classroom.Type != expectedType)
                     result.Warnings.Add($"Derslik tipi uyumsuz: beklenen {expectedType}, atanan {classroom.Type}.");
 
-                // H17 koruması: ders öğretim yöntemi ile slot AllowedMode uyumlu olmalı.
-                // TeachingMethodPolicy + SlotAllowedModePolicy üzerinden tek otorite kontrol.
-                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
-                if (!request.SkipHardValidation
-                    && !Scheduling.TeachingMethodPolicy.CanUseOnlineOnlySlots(section.Course.TeachingMethod)
-                    && request.ScheduleSlots is { Count: > 0 })
-                {
-                    var requestedSlotKeys = request.ScheduleSlots
-                        .Select(s => new { Day = (DayOfWeek)s.Day, s.StartTime })
-                        .ToList();
-
-                    var onlineOnlySlots = await _context.TimeSlots
-                        .AsNoTracking()
-                        .Where(ts => ts.TermId == section.TermId && ts.AllowedMode == TimeSlotAllowedMode.OnlineOnly)
-                        .Select(ts => new { ts.DayOfWeek, ts.StartTime })
-                        .ToListAsync(ct);
-
-                    var onlineOnlyLookup = onlineOnlySlots
-                        .Select(s => (s.DayOfWeek, s.StartTime))
-                        .ToHashSet();
-
-                    var violatingSlots = requestedSlotKeys
-                        .Where(k => onlineOnlyLookup.Contains((k.Day, k.StartTime)))
-                        .ToList();
-
-                    if (violatingSlots.Count > 0)
-                    {
-                        var ruleConfig = await _context.SystemConfigs
-                            .AsNoTracking()
-                            .Where(c => c.Key == "Schedule.FaceToFaceCutoffTime" || c.Key == "Schedule.WeekendOnlineOnly")
-                            .ToDictionaryAsync(c => c.Key, c => c.Value, ct);
-
-                        var cutoff = ruleConfig.TryGetValue("Schedule.FaceToFaceCutoffTime", out var cv) ? cv : "(config yok)";
-                        var weekendOnlyRaw = ruleConfig.TryGetValue("Schedule.WeekendOnlineOnly", out var wv) ? wv : "true";
-                        var weekendNote = bool.TryParse(weekendOnlyRaw, out var wob) && wob
-                            ? " ve hafta sonu slotlari"
-                            : string.Empty;
-
-                        var slotSummary = string.Join(", ", violatingSlots
-                            .Select(v => $"{v.Day} {v.StartTime:HH\\:mm}"));
-                        throw new InvalidOperationException(
-                            $"Yuz-yuze ders ({section.Course.Code}) OnlineOnly damgali slot'a yerlestirilemez: {slotSummary}. " +
-                            $"Kural (config'ten): {cutoff} sonrasi{weekendNote} yalnizca online/hybrid dersler icindir. " +
-                            $"Admin slot AllowedMode'unu Both veya FaceToFaceOnly yaparsa kural gevşer.");
-                    }
-                }
-
+                // H17 inline check kaldırıldı (Override flow için uniform akış): V2 RuleEngine
+                // (SchedulingService.Validate) H17_FaceToFaceSlotRule ile aynı kontrolü yapıyor;
+                // o conflict listesine düşer, Force=false → dialog, Force=true → warning.
                 section.ClassroomId = request.ClassroomId.Value;
             }
             else if (request.ScheduleSlots is { Count: > 0 })
@@ -129,42 +85,19 @@ public partial class FacultyPlanningService
                     throw new KeyNotFoundException("Ogretim uyesi bulunamadi.");
                 section.InstructorId = request.InstructorId.Value;
 
-                // K1: Hoca günlük yük limiti kontrolü.
-                // Plan 11 Faz 1.1 — hardcoded 9 yerine SystemConfig'ten okur (V2 DailyLoadEncoder ile parite).
-                // Plan 11 Faz 1.3 — SkipHardValidation true ise V2 zaten enforce etti, manuel duplicate skip.
-                if (!request.SkipHardValidation && request.ScheduleSlots is { Count: > 0 })
-                {
-                    var maxDailyHours = await _systemConfig.GetIntAsync(
-                        "Schedule.MaxDailyHoursPerInstructor", 9, ct);
-
-                    var instrId = request.InstructorId.Value;
-                    var requestDays = request.ScheduleSlots.Select(s => s.Day).Distinct();
-                    var existingInstructorSchedules = await _context.SectionSchedules
-                        .AsNoTracking()
-                        .Include(ss => ss.TimeSlot)
-                        .Where(ss => ss.CourseSection.InstructorId == instrId
-                            && ss.CourseSection.TermId == section.TermId
-                            && ss.CourseSectionId != section.Id)
-                        .ToListAsync(ct);
-
-                    foreach (var day in requestDays)
-                    {
-                        var existingHours = existingInstructorSchedules
-                            .Where(ss => (int)ss.TimeSlot.DayOfWeek == day)
-                            .Sum(ss => (ss.TimeSlot.EndTime - ss.TimeSlot.StartTime).TotalHours);
-                        var newHours = request.ScheduleSlots
-                            .Where(s => s.Day == day)
-                            .Sum(s => (s.EndTime - s.StartTime).TotalHours);
-                        if (existingHours + newHours > maxDailyHours)
-                            throw new InvalidOperationException(
-                                $"Ogretim uyesinin {day} gunundeki toplam yuku {existingHours + newHours:F1} saate ulasacak (limit: {maxDailyHours} saat). Atama reddedildi.");
-                    }
-                }
+                // K1 (Daily Load) inline check kaldırıldı (Override flow için uniform akış):
+                // V2 RuleEngine HDL_DailyLoadRule ile aynı limiti kontrol eder. Conflict listesine
+                // düşer, Force=false → dialog, Force=true → warning olarak yazılır.
             }
 
             // Plan 10 — V2 apply path SkipHardValidation=true geçerse evaluator bypass.
             // V2 zaten encoder'larla enforce etti; paralel-lab section'larında V1 evaluator
             // section-level ClassroomId üzerinden bakıp false-positive "çakışma" üretiyor.
+            //
+            // Faz: Force=false (varsayılan) ile conflict varsa atama yazılmaz, response'ta
+            // RequiresConfirmation=true ve conflict listesi döndürülür → frontend dialog gösterir,
+            // kullanıcı override ederse aynı request Force=true ile tekrar yollanır. Force=true
+            // ile çağrılırsa conflict'ler warnings olarak yansır ve atama yine yazılır.
             if (!request.SkipHardValidation
                 && (request.ClassroomId.HasValue || request.InstructorId.HasValue || request.ScheduleSlots is { Count: > 0 }))
             {
@@ -176,11 +109,30 @@ public partial class FacultyPlanningService
                     ScheduleSlots = request.ScheduleSlots
                 }, ct);
 
-                if (validation.Conflicts.Count > 0)
+                if (validation.Conflicts.Count > 0 && !request.Force)
                 {
-                    var firstConflict = validation.Conflicts[0].Message;
-                    throw new InvalidOperationException(
-                        $"Atama sert kisit ihlali nedeniyle reddedildi: {firstConflict}");
+                    // Override akışı — transaction'ı geri al, conflict'leri döndür.
+                    if (transaction != null)
+                        await transaction.RollbackAsync(ct);
+
+                    return new AssignmentResultDto
+                    {
+                        Success = false,
+                        RequiresConfirmation = true,
+                        Conflicts = validation.Conflicts,
+                        Warnings = new List<string>(),
+                    };
+                }
+
+                // Force=true (kullanıcı override etti) — conflict mesajlarını warning olarak ekle,
+                // ama atamaya devam et. Section.Status doğal olarak "Conflicted" olur (status hesabı
+                // FacultyPlanningService'te conflict tablosundan bakar).
+                if (validation.Conflicts.Count > 0 && request.Force)
+                {
+                    foreach (var conflict in validation.Conflicts)
+                    {
+                        result.Warnings.Add($"[Override] {conflict.Message}");
+                    }
                 }
             }
 

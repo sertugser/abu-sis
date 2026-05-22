@@ -25,13 +25,6 @@ public static class ConstraintParameterMapping
         // ── H4: Derslik Tipi
         [("H4", "AmphiThreshold")] = new("Schedule.AmphiThreshold", "int"),
 
-        // ── H5: Müfredat Çakışması
-        [("H5", "CurriculumConflictMode")] = new("Schedule.CurriculumConflictMode", "string"),
-        [("H5", "EnrollmentConflictHardThreshold")] = new("Schedule.EnrollmentHardThreshold", "int"),
-
-        // ── H8: Aynı Ders Şube
-        [("H8", "AllowSameCourseSectionOverlap")] = new("Schedule.AllowSameCourseSectionOverlap", "bool"),
-
         // ── H13: Öğle Arası
         [("H13", "LunchBreakStart")] = new("Schedule.LunchBreakStart", "string"),
         [("H13", "LunchBreakEnd")] = new("Schedule.LunchBreakEnd", "string"),
@@ -112,7 +105,12 @@ public static class ConstraintParameterMapping
         ["S7"] = CategoryCapability.SoftOnly,
         ["S8"] = CategoryCapability.SoftOnly,
         ["S12"] = CategoryCapability.SoftOnly,
-        ["S20"] = CategoryCapability.SoftOnly,
+        // S20 (2026-05-17): SoftOnly → HardOnly. Komşu yıl çakışma kuralı artık
+        // CohortBuilder içinde aynı-yıl section-aware mantığıyla aynı şekilde hard pair
+        // olarak üretiliyor. AdjacentYearEncoder eski soft pair listesi boş → atıl.
+        // Kullanıcı isteği: alttan/üstten ders alan öğrencinin alabileceği bir yol kalmalı,
+        // soft penalty yetersiz.
+        ["S20"] = CategoryCapability.HardOnly,
     };
 
     public static CategoryCapability GetCategoryCapability(string code)

@@ -17,6 +17,7 @@ import {
 import {
   useDistributionConstraints,
   useCreateDistributionConstraint,
+  useUpdateDistributionConstraint,
   useDeleteDistributionConstraint,
 } from '../../hooks/useDistributionConstraints';
 import DistributionConstraintForm from './DistributionConstraintForm';
@@ -46,16 +47,24 @@ interface DistributionConstraintPanelProps {
 export default function DistributionConstraintPanel({ termId }: DistributionConstraintPanelProps) {
   const { data: constraints, isLoading } = useDistributionConstraints(termId);
   const createMutation = useCreateDistributionConstraint();
+  const updateMutation = useUpdateDistributionConstraint();
   const deleteMutation = useDeleteDistributionConstraint();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DistributionConstraintDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DistributionConstraintDto | null>(null);
 
-  function handleCreate(request: CreateDistributionConstraintRequest) {
-    createMutation.mutate(request, {
-      onSuccess: () => setFormOpen(false),
-    });
+  function handleSubmit(request: CreateDistributionConstraintRequest) {
+    if (editingItem) {
+      updateMutation.mutate(
+        { id: editingItem.id, request },
+        { onSuccess: () => { setFormOpen(false); setEditingItem(null); } },
+      );
+    } else {
+      createMutation.mutate(request, {
+        onSuccess: () => setFormOpen(false),
+      });
+    }
   }
 
   function handleDelete() {
@@ -115,10 +124,13 @@ export default function DistributionConstraintPanel({ termId }: DistributionCons
       {formOpen && (
         <DistributionConstraintForm
           open={formOpen}
-          onOpenChange={setFormOpen}
+          onOpenChange={(open) => {
+            setFormOpen(open);
+            if (!open) setEditingItem(null);
+          }}
           termId={termId}
-          onSubmit={handleCreate}
-          isPending={createMutation.isPending}
+          onSubmit={handleSubmit}
+          isPending={createMutation.isPending || updateMutation.isPending}
           editing={editingItem}
         />
       )}

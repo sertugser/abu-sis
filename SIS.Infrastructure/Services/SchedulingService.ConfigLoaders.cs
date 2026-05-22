@@ -108,11 +108,11 @@ public partial class SchedulingService
         var config = await LoadSystemConfigAsync(ct);
         var c = SchedulingConstraintConfig.FromSystemConfig(config);
         return new HardConstraintConfig(
-            c.LunchBreakIsHard, c.LunchBreakStart, c.LunchBreakEnd,
+            c.LunchBreakStart, c.LunchBreakEnd,
             c.MaxConsecutiveHours, c.BreakDurationMinutes, c.AmphiThreshold,
-            c.TheoryLabSplitThreshold, c.AllowSameCourseSectionOverlap, c.CurriculumConflictMode,
+            c.TheoryLabSplitThreshold, c.CurriculumConflictMode,
             // Plan 11 — V2 encoder paritesi
-            c.MaxDailyHours, c.AmphiThresholdEnabled);
+            c.MaxDailyHours, c.AmphiThresholdEnabled, c.ClassroomTypeRequirementEnabled);
     }
 
     private static bool GetBool(Dictionary<string, string> config, string key, bool defaultValue)
@@ -144,14 +144,14 @@ public partial class SchedulingService
         bool S12Enabled, int S12MaxImbalancePercent);
 
     internal record HardConstraintConfig(
-        bool LunchBreakIsHard, TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
+        TimeOnly LunchBreakStart, TimeOnly LunchBreakEnd,
         int MaxConsecutiveHours, int BreakDurationMinutes, int AmphiThreshold,
         int TheoryLabSplitThreshold = 4,
-        bool AllowSameCourseSectionOverlap = false,
         string CurriculumConflictMode = "curriculum",
         // Plan 11 — V2 encoder paritesi (Faz 1.2 + 1.4)
         int MaxDailyHours = 9,
-        bool AmphiThresholdEnabled = false);
+        bool AmphiThresholdEnabled = false,
+        bool ClassroomTypeRequirementEnabled = false);
 
 
     private static class ConflictTypes

@@ -694,18 +694,25 @@ public class SolverRequestBuilderTests
     // ========================================================================
 
     [Fact]
-    public async Task BuildAsync_ReadsCurriculumConflictModeFromSystemConfigs()
+    public async Task BuildAsync_ReadsCurriculumConflictModeFromH5Parameters()
     {
-        // Arrange — seed minimal context + add SystemConfig row.
+        // 2026-05-19: SystemConfigs yerine H5 ConstraintDefinition.Parameters JSON tek otorite.
         await using var ctx = await SeedMinimalAsync();
-        ctx.SystemConfigs.Add(new SystemConfig
+        var h5 = ctx.ConstraintDefinitions.SingleOrDefault(c => c.Code == "H5");
+        if (h5 == null)
         {
-            Key = "Schedule.CurriculumConflictMode",
-            Value = "cohort",
-            Category = "Other",
-            DataType = "string",
-            Description = "test"
-        });
+            h5 = new SIS.Domain.Entities.ConstraintDefinition
+            {
+                Code = "H5", Name = "Müfredat Çakışması", Category = "Hard",
+                Scope = "Scheduling", IsEnabled = true,
+                Parameters = """{"CurriculumConflictMode": "cohort"}"""
+            };
+            ctx.ConstraintDefinitions.Add(h5);
+        }
+        else
+        {
+            h5.Parameters = """{"CurriculumConflictMode": "cohort"}""";
+        }
         await ctx.SaveChangesAsync();
         var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 
@@ -795,8 +802,10 @@ public class SolverRequestBuilderTests
             IsActive = true
         });
         ctx.CurriculumCourses.AddRange(
-            new CurriculumCourse { CurriculumId = 100, CourseId = 100, SuggestedSemester = 3 },
-            new CurriculumCourse { CurriculumId = 100, CourseId = 200, SuggestedSemester = 3 });
+            // 2026-05-20: IsCompulsory=true — CohortBuilder aynı yıl pair filtresi seçmelileri atlar,
+            // bu test cohort conflict pair üretildiğini doğruluyor → ikisi de zorunlu olmalı.
+            new CurriculumCourse { CurriculumId = 100, CourseId = 100, SuggestedSemester = 3, IsCompulsory = true },
+            new CurriculumCourse { CurriculumId = 100, CourseId = 200, SuggestedSemester = 3, IsCompulsory = true });
         ctx.CourseSections.AddRange(
             new CourseSection
             {
@@ -833,16 +842,23 @@ public class SolverRequestBuilderTests
     [Fact]
     public async Task BuildAsync_CohortMode_TwoCohortCourses_ComputesCohortConflictPairs()
     {
-        // Two sections same dept+year, different courses → cohort builder produces 1 pair.
+        // 2026-05-19: CurriculumConflictMode artık H5.Parameters JSON'undan okunuyor.
         await using var ctx = await SeedScenarioWithTwoCohortCoursesAsync();
-        ctx.SystemConfigs.Add(new SystemConfig
+        var h5 = ctx.ConstraintDefinitions.SingleOrDefault(c => c.Code == "H5");
+        if (h5 == null)
         {
-            Key = "Schedule.CurriculumConflictMode",
-            Value = "cohort",
-            Category = "Other",
-            DataType = "string",
-            Description = "test"
-        });
+            h5 = new SIS.Domain.Entities.ConstraintDefinition
+            {
+                Code = "H5", Name = "Müfredat Çakışması", Category = "Hard",
+                Scope = "Scheduling", IsEnabled = true,
+                Parameters = """{"CurriculumConflictMode": "cohort"}"""
+            };
+            ctx.ConstraintDefinitions.Add(h5);
+        }
+        else
+        {
+            h5.Parameters = """{"CurriculumConflictMode": "cohort"}""";
+        }
         await ctx.SaveChangesAsync();
         var builder = new SolverRequestBuilder(ctx, BuildConfigProviderMock());
 

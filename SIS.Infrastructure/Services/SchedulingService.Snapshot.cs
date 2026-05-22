@@ -236,6 +236,7 @@ public partial class SchedulingService
                 courseMetadata.MinSuggestedSemesters,
                 courseMetadata.SuggestedSemestersByDepartment,
                 courseMetadata.AccessibleDepartments,
+                courseMetadata.CompulsoryFlags,
                 classroomLookup))
             .ToList();
     }
@@ -252,8 +253,22 @@ public partial class SchedulingService
         int termId,
         CancellationToken ct)
     {
+        // 2026-05-17 — CohortBuilder komşu yıl hard pair filtresi için Course → IsCompulsory.
+        // Heuristic: bir ders birden çok müfredatta yer alıyorsa "en az birinde zorunlu" ise true.
+        var courseIds = candidates.Select(c => c.CourseId).Distinct().ToList();
+        var courseCompulsoryMap = courseIds.Count == 0
+            ? new Dictionary<int, bool>()
+            : await _context.CurriculumCourses
+                .AsNoTracking()
+                .Where(cc => courseIds.Contains(cc.CourseId))
+                .GroupBy(cc => cc.CourseId)
+                .Select(g => new { CourseId = g.Key, IsCompulsory = g.Any(cc => cc.IsCompulsory) })
+                .ToDictionaryAsync(x => x.CourseId, x => x.IsCompulsory, ct);
+
         var cohortRefs = candidates
-            .Select(c => new CohortSectionRef(c.SectionId, c.SectionNumber, c.CourseId))
+            .Select(c => new CohortSectionRef(
+                c.SectionId, c.SectionNumber, c.CourseId,
+                courseCompulsoryMap.GetValueOrDefault(c.CourseId, false)))
             .ToList();
 
         return await ConflictPairsBuilder.BuildAsync(
@@ -271,14 +286,16 @@ public partial class SchedulingService
         IReadOnlyDictionary<int, int> semesterMap,
         IReadOnlyDictionary<int, Dictionary<int, int>> suggestedSemestersByDepartment,
         IReadOnlyDictionary<int, HashSet<int>> accessibleDepartments,
+        IReadOnlyDictionary<int, bool> compulsoryFlags,
         IReadOnlyDictionary<int, Classroom>? classroomLookup)
     {
         var timeBlocks = ScheduleHelper.ToTimeBlocks(section.SectionSchedules);
         var instructorName = section.InstructorId.HasValue
             && instructorNameMap.TryGetValue(section.InstructorId.Value, out var n) ? n : string.Empty;
         var suggestedSemester = semesterMap.TryGetValue(section.CourseId, out var sem) ? sem : (int?)null;
+        var isCompulsory = compulsoryFlags.TryGetValue(section.CourseId, out var comp) && comp;
 
-        return ProjectRuntimeCandidate(
+        var candidate = ProjectRuntimeCandidate(
             section,
             section.Classroom,
             section.Instructor,
@@ -288,6 +305,7 @@ public partial class SchedulingService
             GetSuggestedSemestersByDepartment(section.CourseId, suggestedSemestersByDepartment),
             GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, accessibleDepartments),
             classroomLookup);
+        return candidate with { IsCompulsory = isCompulsory };
     }
 
     private async Task<(RuntimeCandidate Candidate, IReadOnlyList<string> Notes)> BuildCandidateRuntimeAsync(
@@ -387,6 +405,10 @@ public partial class SchedulingService
             GetSuggestedSemestersByDepartment(section.CourseId, courseMetadata.SuggestedSemestersByDepartment),
             GetAccessibleDepartments(section.CourseId, section.Course.DepartmentId, courseMetadata.AccessibleDepartments));
 
+        // 2026-05-20: H5 curriculum mode için kursun zorunlu/seçmeli durumunu set et.
+        var isCompulsory = courseMetadata.CompulsoryFlags.TryGetValue(section.CourseId, out var comp) && comp;
+        candidate = candidate with { IsCompulsory = isCompulsory };
+
         return (candidate, notes);
     }
 
@@ -427,7 +449,17 @@ public partial class SchedulingService
         var (primaryId, primaryName, primaryCapacity, primaryType)
             = ResolvePrimaryClassroomMetadata(classroom, timeBlocks, classroomLookup);
 
-        var blocks = timeBlocks.Select(b => BuildRuntimeBlock(b, classroomLookup, primaryName, primaryType, primaryCapacity)).ToList();
+        // BlockType atama — timeBlocks listesi sırasıyla (ScheduleWriter ile aynı politika):
+        // ilk TheoryHours kadar slot Theory, gerisi Lab. Frontend slot listesini Theory önce, Lab
+        // sonra gönderir; ScheduleWriter da bu sıraya güvenir. Bu sırayı koruyarak BlockType
+        // atamak, HSO kuralının "Theory ve Lab aynı zaman aralığına yazıldığında çakışıyor"
+        // durumunu doğru yakalamasını sağlar (aynı pencere farklı BlockType → fail).
+        var theoryHours = section.Course.TheoryHours;
+        var blocks = timeBlocks
+            .Select((b, idx) => BuildRuntimeBlock(
+                b, classroomLookup, primaryName, primaryType, primaryCapacity,
+                idx < theoryHours ? ScheduleBlockType.Theory : ScheduleBlockType.Lab))
+            .ToList();
 
         return new RuntimeCandidate
         {
@@ -463,18 +495,19 @@ public partial class SchedulingService
         IReadOnlyDictionary<int, Classroom>? classroomLookup,
         string primaryName,
         ClassroomType primaryType,
-        int primaryCapacity)
+        int primaryCapacity,
+        ScheduleBlockType? blockType = null)
     {
         // Block kendi classroom'unu çözer (paralel-split: her block farklı oda olabilir).
         string blockName = primaryName;
-        ClassroomType blockType = primaryType;
+        ClassroomType classroomType = primaryType;
         int blockCapacity = primaryCapacity;
 
         if (b.ClassroomId.HasValue && classroomLookup != null
             && classroomLookup.TryGetValue(b.ClassroomId.Value, out var cr))
         {
             blockName = cr.Name;
-            blockType = cr.Type;
+            classroomType = cr.Type;
             blockCapacity = cr.Capacity;
         }
 
@@ -484,8 +517,9 @@ public partial class SchedulingService
             EndTime: b.EndTime,
             ClassroomId: b.ClassroomId,
             ClassroomName: blockName,
-            ClassroomType: blockType,
-            ClassroomCapacity: blockCapacity);
+            ClassroomType: classroomType,
+            ClassroomCapacity: blockCapacity,
+            BlockType: blockType);
     }
 
     /// <summary>

@@ -28,7 +28,9 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"AmphiThreshold": 100}""",
+                // 2026-05-19: AmphiThresholdEnabled + ClassroomTypeRequirementEnabled alt-toggle'lar
+                // SystemConfigs'ten H4.Parameters JSON'a taşındı (tek otorite = Kısıtlar sayfası).
+                Parameters = """{"AmphiThreshold": 100, "AmphiThresholdEnabled": false, "ClassroomTypeRequirementEnabled": false}""",
                 SortOrder = 2
             },
             new()
@@ -69,6 +71,8 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                // 2026-05-19: CurriculumConflictMode SystemConfigs'ten H5.Parameters JSON'a taşındı.
+                Parameters = """{"CurriculumConflictMode": "cohort", "EnrollmentConflictHardThreshold": 1}""",
                 SortOrder = 6
             },
             new()
@@ -79,6 +83,8 @@ public static partial class SeedData
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
+                // 2026-05-19: MaxLabBlockHours SystemConfigs'ten H6.Parameters JSON'a taşındı.
+                Parameters = """{"MaxLabBlockHours": 2}""",
                 SortOrder = 7
             },
             new()
@@ -146,7 +152,7 @@ public static partial class SeedData
             {
                 Code = "H13",
                 Name = "Öğle Arası Koruması",
-                Description = "Öğle arası saatlerine ders atanmasını engeller (hard mod aktifken).",
+                Description = "Öğle arası saatlerine ders atanmasını engeller.",
                 Category = "Hard",
                 Scope = "Scheduling",
                 IsEnabled = true,
@@ -264,13 +270,24 @@ public static partial class SeedData
             new()
             {
                 Code = "S20",
-                Name = "Komşu Yıl Çakışma",
-                Description = "Aynı bölüm içinde komşu yıl (1-2, 2-3, 3-4) ders çiftleri arasında çakışma penalty'si. Kalan/önden ders alan öğrenciler için section alternatifi kalmasını teşvik eder.",
+                Name = "Komşu Yıl Çakışma Garantisi",
+                Description = "Komşu sınıfların (1-2, 2-3, 3-4) zorunlu dersleri arasında öğrencinin alabileceği en az bir alternatif şube kombinasyonu kalmalı. Bir öğrenci alttan kalan veya üstten almak istediği zorunlu bir dersin en az bir şubesi, kendi sınıfının zorunlu dersleriyle çakışmamalı. Seçmeli dersler bu kuralın dışında.",
+                Category = "Hard",
+                Scope = "Scheduling",
+                IsEnabled = true,
+                Parameters = null,
+                SortOrder = 110
+            },
+            new()
+            {
+                Code = "S21",
+                Name = "Online Ders Slot Tercihi",
+                Description = "Online derslerin OnlineOnly damgalı slotlara (akşam saatleri, hafta sonu vb.) yerleştirilmesini TEŞVİK eder. Online ders Both (her ikisine açık) slot'a yerleşirse her blok için ceza alır; OnlineOnly slot'a yerleşirse ceza yok. Yetersiz OnlineOnly slot durumunda otomatik olarak Both slot'a kayar (esnek, hard değil).",
                 Category = "Soft",
                 Scope = "Scheduling",
                 IsEnabled = true,
-                Parameters = """{"Weight": 1, "PenaltyPerPair": 5.0}""",
-                SortOrder = 110
+                Parameters = """{"Weight": 5}""",
+                SortOrder = 111
             },
             new()
             {

@@ -50,6 +50,11 @@ public sealed record RuntimeCandidate
     /// <summary>H5 cohort accessibility; bu CourseId hangi departman müfredatında.</summary>
     public IReadOnlyCollection<int> AccessibleDepartmentIds { get; init; } = Array.Empty<int>();
 
+    /// <summary>H5 zorunlu/seçmeli ayrımı — kursun en az bir müfredatta zorunlu olup
+    /// olmadığını gösterir. Curriculum mode'da iki seçmeli ders çakışma uyarısı vermez
+    /// (öğrenci ikisini de almak zorunda değil). Default false (seçmeli gibi davran).</summary>
+    public bool IsCompulsory { get; init; } = false;
+
     /// <summary>
     /// Atanmış zaman blokları. Paralel-lab section'larında aynı (Day, Start, End) penceresinde
     /// birden fazla blok (her grup için ayrı ClassroomId) bulunur. H1 paralel-lab self-skip için
@@ -60,6 +65,9 @@ public sealed record RuntimeCandidate
 
 /// <summary>
 /// Plan 11 — Runtime block. (Day, Start, End, ClassroomId) tuple'ı. V1 TimeBlock'un yeni isim ile karşılığı.
+/// BlockType opsiyoneldir (geri uyumluluk için): RuleEngine'in HSO kuralı bu bilgiyi kullanarak
+/// aynı section'ın Theory + Lab bloğunun aynı zaman aralığında çakışmasını yakalar. Eski çağrılar
+/// null geçer (kural devreye girmez).
 /// </summary>
 public sealed record RuntimeBlock(
     int Day,
@@ -68,4 +76,5 @@ public sealed record RuntimeBlock(
     int? ClassroomId,
     string? ClassroomName,
     ClassroomType ClassroomType,
-    int ClassroomCapacity);
+    int ClassroomCapacity,
+    ScheduleBlockType? BlockType = null);

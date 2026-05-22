@@ -53,20 +53,10 @@ public sealed class CpSatSolverEngine : ISolverEngine
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Plan 7b — Read MaxLabBlockHours from SystemConfig (default 2) BEFORE preflight,
-        // because preflight uses it to validate per-block (split) lab feasibility.
-        // LabHours > value splits lab into multiple intervals on different days (v1 parity).
-        // Defensive clamp: tests/configs may inadvertently return 0 for the int; treat any
-        // non-positive value as "use default 2" to keep LabBlockSplitter's contract honored.
-        var maxLabBlockHours = await _config.GetIntAsync(
-            "Schedule.MaxLabBlockHours", 2, cancellationToken);
-        if (maxLabBlockHours <= 0)
-        {
-            _logger?.LogWarning(
-                "Schedule.MaxLabBlockHours resolved to {Value} (non-positive); using default 2.",
-                maxLabBlockHours);
-            maxLabBlockHours = 2;
-        }
+        // 2026-05-19: MaxLabBlockHours artık H6.Parameters JSON'undan SolverRequestBuilder
+        // tarafından request'e set ediliyor (Kısıtlar sayfası → H6 dialog tek otorite).
+        // Defensive clamp: tests/eski request'ler 0 gönderirse default 2 uygula.
+        var maxLabBlockHours = request.MaxLabBlockHours > 0 ? request.MaxLabBlockHours : 2;
 
         // Solver config fail-fast: veri fizibilitesi ne olursa olsun geçersiz solver ayarları
         // kullanıcıya hemen döndürülmeli. Bu yüzden strateji/worker/time limit okumaları
@@ -144,30 +134,12 @@ public sealed class CpSatSolverEngine : ISolverEngine
             amphiThreshold = 100;
         }
 
-        // Plan 9 Issue 1 — Schedule.AmphiThresholdEnabled (default false) gates the rule.
-        // Production has 0 Amphitheater rooms today → flag false avoids UNSAT (Term 5 blocker).
-        // Admin sets to true after seeding amphi inventory.
-        var amphiThresholdEnabled = await _config.GetBoolAsync(
-            "Schedule.AmphiThresholdEnabled", false, cancellationToken);
-
-        // Plan 9 Issue 6 — Schedule.ClassroomTypeRequirementEnabled (default false) gates
-        // Course.RequiredTheoryClassroomType + Course.RequiredLabClassroomType rules.
-        // Production seeds these fields (e.g. AutoScheduleTestData → Amphitheater) but no
-        // admin UI exists (Plan 10 will add it) — flag false avoids UNSAT cascades.
-        var classroomTypeRequirementEnabled = await _config.GetBoolAsync(
-            "Schedule.ClassroomTypeRequirementEnabled", false, cancellationToken);
-
-        // Schedule.AllowSameCourseSectionOverlap (default false). True iken H8 kuralı kapalı —
-        // admin "aynı dersin şubeleri aynı slotta paralel açılsın" diyebilir.
-        var allowSameCourseSectionOverlap = await _config.GetBoolAsync(
-            "Schedule.AllowSameCourseSectionOverlap", false, cancellationToken);
-
+        // 2026-05-19 — AmphiThresholdEnabled ve ClassroomTypeRequirementEnabled artık
+        // H4.Parameters JSON'undan SolverRequestBuilder tarafından request'e set ediliyor
+        // (Kısıtlar sayfası → H4 dialog). Burada SystemConfigs okuma yok, drift fix.
         reducedRequest = reducedRequest with
         {
             AmphiThreshold = amphiThreshold,
-            AmphiThresholdEnabled = amphiThresholdEnabled,
-            ClassroomTypeRequirementEnabled = classroomTypeRequirementEnabled,
-            AllowSameCourseSectionOverlap = allowSameCourseSectionOverlap
         };
 
         // SolverRequest.Seed (if provided) overrides the configured seed for caller-driven determinism.

@@ -223,8 +223,17 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
 
         var curriculumAssignments = direct.Concat(viaPool).ToList();
 
-        // Önceki dönem istatistikleri
-        var stats = await BuildCourseStatsAsync(id);
+        // Bu dersi önkoşul olarak isteyen dersler (aşağı yön — istatistikteki
+        // "Bağımlı Ders" sayısının kaynağı, İlişkiler sekmesinde liste olarak gösterilir).
+        var dependentCourses = await db.CoursePrerequisites
+            .Where(cp => cp.RequiredCourseId == id)
+            .Include(cp => cp.Course)
+            .OrderBy(cp => cp.Course.Code)
+            .Select(cp => new DependentCourseDto(cp.Course.Id, cp.Course.Code, cp.Course.Name))
+            .ToListAsync();
+
+        // Önceki dönem istatistikleri (Bağımlı Ders count'u yukarıdaki listeden gelir)
+        var stats = await BuildCourseStatsAsync(id, dependentCourses.Count);
 
         // Önkoşul zinciri (3 seviye derinlik)
         var chain = await BuildPrerequisiteChainAsync(id, maxDepth: 3);
@@ -254,11 +263,12 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
             course.TheoryClassroomType,
             course.LabClassroomType,
             stats,
-            chain
+            chain,
+            dependentCourses
         );
     }
 
-    private async Task<CourseStatsDto?> BuildCourseStatsAsync(int courseId)
+    private async Task<CourseStatsDto?> BuildCourseStatsAsync(int courseId, int prerequisiteForCount)
     {
         // Toplam kaç dönem açılmış
         var totalTimesOpened = await db.CourseSections
@@ -272,11 +282,6 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         // Tüm dönemlerde toplam öğrenci
         var totalStudentsAllTime = await db.CourseRegistrations
             .Where(cr => cr.CourseSection.CourseId == courseId)
-            .CountAsync();
-
-        // Bu ders kaç dersin önkoşulu
-        var prerequisiteForCount = await db.CoursePrerequisites
-            .Where(cp => cp.RequiredCourseId == courseId)
             .CountAsync();
 
         // En son dönem

@@ -3,12 +3,10 @@ using SIS.Application.Scheduling.Rules;
 namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 
 /// <summary>
-/// Plan 11 Faz 3.13 — H13 Öğle Arası Koruması.
-/// V1 <c>LunchBreakEvaluator</c> ile V2 <c>LunchBreakEncoder</c> aynı semantik: blok
-/// (start, end) [LunchBreakStart, LunchBreakEnd) ile çakışıyorsa ihlal. Plan 10 toggle:
-/// <c>LunchBreakIsHard=false</c> ise V1 evaluator soft path'e düşer (predicate de skip eder —
-/// effectiveCategory Soft ise RuleEngine zaten çağırmaz; ek olarak config flag de kapanırsa
-/// bu predicate kendi başına da skip eder).
+/// H13 Öğle Arası Koruması (Hard). Blok (start, end) [LunchBreakStart, LunchBreakEnd)
+/// ile çakışıyorsa ihlal. Hard/Soft moda geçişi RuleEngine ResolveCategory yönetir:
+/// <c>ConstraintDefinitions["H13"].Category</c> Hard ise bu predicate çağrılır; Soft ise
+/// <see cref="Soft.S5_LunchBreakSoftRule"/> çağrılır.
 /// </summary>
 public sealed class H13_LunchBreakRule : IRulePredicate
 {
@@ -18,9 +16,6 @@ public sealed class H13_LunchBreakRule : IRulePredicate
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {
         var config = ctx.Config;
-        if (!config.LunchBreakIsHard)
-            return Array.Empty<RuleViolation>();
-
         var c = ctx.Candidate;
         var violations = new List<RuleViolation>();
         foreach (var block in c.Blocks)

@@ -23,11 +23,18 @@ public sealed class CohortAssignment
 
 /// <summary>
 /// Cohort (DeptId, Year) gruplama + bottleneck-aware modulo pair üretici.
-/// Build SADECE (SectionId, SectionNumber, CourseId) tuple'ına bağımlıdır — bu nedenle
+/// Build SADECE (SectionId, SectionNumber, CourseId, IsCompulsory) tuple'ına bağımlıdır — bu nedenle
 /// hafif <see cref="CohortSectionRef"/> projeksiyonu kabul eder. Hem RuntimeCandidate
 /// hem de CP-SAT SectionInput'tan üretilebilir.
+///
+/// <para>
+/// <b>IsCompulsory</b> (2026-05-17): komşu yıl çakışma kuralının kapsamını belirler.
+/// Yalnızca her iki tarafı da zorunlu olan ders çiftleri komşu yıl hard pair'ine girer
+/// (seçmeli/önerilen dersler bu kuralın dışında). CurriculumCourse.IsCompulsory'den gelir
+/// — bir ders birden çok müfredatta yer alıyorsa "en az birinde zorunlu" yeterli (heuristic).
+/// </para>
 /// </summary>
-public sealed record CohortSectionRef(int SectionId, int SectionNumber, int CourseId);
+public sealed record CohortSectionRef(int SectionId, int SectionNumber, int CourseId, bool IsCompulsory);
 
 public sealed class CohortBuilder
 {
@@ -89,18 +96,29 @@ public sealed class CohortBuilder
                 {
                     var sectionsA = byCourse[courseIds[ai]];
                     var sectionsB = byCourse[courseIds[bi]];
+                    // 2026-05-20: Yalnızca her iki tarafı da zorunlu olan ders çiftleri pair'lenir.
+                    // Bir ders seçmeli ise öğrenci ya almaz ya da çakışmayan saatte alternatif
+                    // arar; sistem hard ihlal raporlamaz (komşu yıl pair'i ile simetrik mantık).
+                    if (!sectionsA[0].IsCompulsory) continue;
+                    if (!sectionsB[0].IsCompulsory) continue;
                     AddCoursePairConflicts(conflictPairs, sectionsA, sectionsB);
                 }
             }
         }
 
-        // 3. KOMŞU YIL: SOFT pair üretimi (modulo-only).
-        // Aynı bölüm içinde |year_a - year_b| == 1 olan ders çiftleri için sadece
-        // modulo eşleşme (sec_i ↔ sec_i). Bottleneck (TÜM pair) UYGULANMIYOR çünkü:
-        //   - Bu öğrencilerin sadece bir kısmı iki dersi birden alır (kalan/önden)
-        //   - Section seçim esnekliği var → öğrenci alternatif sec'i seçebilir
-        //   - TÜM pair çakışmasız zorunluluğu over-constrain (kanıtlandı: EEE202 fail)
-        // HARD değil SOFT penalty — solver tercih eder, bloklamaz.
+        // 3. KOMŞU YIL: HARD pair üretimi (2026-05-17 güncelleme).
+        // Aynı bölüm içinde |year_a - year_b| == 1 olan ZORUNLU ders çiftleri için aynı
+        // section-aware bottleneck mantığı (AddCoursePairConflicts) uygulanır:
+        //   - Bir öğrenci alttan/üstten ders alıyorsa, alacağı dersin EN AZ BİR section'ı
+        //     diğer sınıfın zorunlu dersleriyle uyumlu olmalı (öğrencinin alabileceği bir
+        //     yol kalmalı).
+        //   - Pair-wise hard kural section'ların solver tarafından farklı slotlara
+        //     dağıtılmasını zorlar; uyumsuz konfigürasyonlar zaten kural ihlali olur,
+        //     joint encoding gerektirmez.
+        //   - Seçmeli dersler dışarıda kalır — yalnızca her iki tarafı da
+        //     <see cref="CohortSectionRef.IsCompulsory"/> = true olan çiftler kapsanır.
+        // Eski davranış (sadece modulo SOFT penalty) terkedildi; kuralın "her zaman
+        // ihlal edilebilir" yapısı pratikte yetersizdi (kullanıcı alttan dersi alamıyordu).
         var deptYearKeys = deptYearGroups.Keys.ToList();
         for (var ki = 0; ki < deptYearKeys.Count; ki++)
         {
@@ -120,11 +138,16 @@ public sealed class CohortBuilder
 
                 foreach (var (courseIdA, sectionsA) in byCourseA)
                 {
+                    // Bu ders zorunlu mu? CourseId aynı grupta birden fazla section taşır,
+                    // hepsi aynı CourseId → IsCompulsory bayrağı aynıdır; ilkini al.
+                    if (!sectionsA[0].IsCompulsory) continue;
+
                     foreach (var (courseIdB, sectionsB) in byCourseB)
                     {
-                        // Aynı kurs iki cohort'a düşmüş olabilir — atla
-                        if (courseIdA == courseIdB) continue;
-                        AddModuloPairs(adjacentYearSoftPairs, sectionsA, sectionsB);
+                        if (courseIdA == courseIdB) continue; // aynı kurs iki cohort'a düşmüş
+                        if (!sectionsB[0].IsCompulsory) continue; // seçmeli dersler hariç
+
+                        AddCoursePairConflicts(conflictPairs, sectionsA, sectionsB);
                     }
                 }
             }

@@ -15,7 +15,7 @@ public sealed class S5_LunchBreakSoftRuleTests
         var rule = new S5_LunchBreakSoftRule();
         var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 11, durationHours: 2));
         var ctx = new RuleContext { Candidate = c, Snapshot = Snapshot(c),
-            Config = DefaultConfig(cfg => { cfg.S5Enabled = true; cfg.LunchBreakIsHard = false; }) };
+            Config = DefaultConfig(cfg => cfg.S5Enabled = true) };
 
         rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(8, 0.01);
     }
@@ -26,19 +26,7 @@ public sealed class S5_LunchBreakSoftRuleTests
         var rule = new S5_LunchBreakSoftRule();
         var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 9, durationHours: 2));
         var ctx = new RuleContext { Candidate = c, Snapshot = Snapshot(c),
-            Config = DefaultConfig(cfg => { cfg.S5Enabled = true; cfg.LunchBreakIsHard = false; }) };
-
-        rule.CalculatePenalty(ctx).RawPenalty.Should().Be(0);
-    }
-
-    [Fact]
-    public void LunchHard_Skips()
-    {
-        // H13 hard mod aktif → S5 skip (V1 davranışı)
-        var rule = new S5_LunchBreakSoftRule();
-        var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 11, durationHours: 2));
-        var ctx = new RuleContext { Candidate = c, Snapshot = Snapshot(c),
-            Config = DefaultConfig(cfg => { cfg.S5Enabled = true; cfg.LunchBreakIsHard = true; }) };
+            Config = DefaultConfig(cfg => cfg.S5Enabled = true) };
 
         rule.CalculatePenalty(ctx).RawPenalty.Should().Be(0);
     }

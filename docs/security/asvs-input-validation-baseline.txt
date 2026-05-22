@@ -27,6 +27,7 @@ BulkAssignInstructorRequest
 BulkClassroomTermAssignmentDto
 BulkCurriculumAssignmentRequestDto
 BulkOpenCoursesRequest
+BulkValidateCellsRequestDto
 ComponentDto
 CopyCurriculumRequest
 CreateAccessRuleRequest

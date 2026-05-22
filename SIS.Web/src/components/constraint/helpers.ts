@@ -45,7 +45,11 @@ export const CATEGORY_CAPABILITY: Record<string, CategoryCapability> = {
   'S7':   'soft-only',
   'S8':   'soft-only',
   'S12':  'soft-only',
-  'S20':  'soft-only',
+  // S20 (2026-05-17): soft → hard. Komşu yıl çakışma kuralı section-aware hard
+  // pair üretiyor; ağırlık/ceza puanı yerine alttan/üstten alma yolu hard garanti.
+  'S20':  'hard-only',
+  // S21 (2026-05-20): Online ders Both slot'a yerleşirse penalty. Doğası soft (esnek tercih).
+  'S21':  'soft-only',
 };
 
 export function getCategoryCapability(code: string): CategoryCapability {
@@ -86,13 +90,16 @@ export const CONSTRAINT_GROUPS: ConstraintGroup[] = [
     key: 'curriculum',
     label: 'Müfredat & Ders Kısıtlamaları',
     icon: 'BookOpen',
-    codes: ['H5', 'H6', 'H8', 'H11', 'H12', 'H16', 'S4'],
+    // S20 (2026-05-17): Komşu yıl çakışma garantisi — alttan/üstten ders alan öğrencinin
+    // alabileceği bir şube kombinasyonu kalmasını garanti eder. Müfredattaki zorunlu dersler
+    // arasındaki ilişkiyi yönettiği için bu grup altında listelenir.
+    codes: ['H5', 'H6', 'H8', 'H11', 'H12', 'H16', 'S4', 'S20'],
   },
   {
     key: 'time',
     label: 'Zaman & Dağılım Kısıtlamaları',
     icon: 'Clock',
-    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'DIST'],
+    codes: ['H13', 'H17', 'S3', 'S7', 'S12', 'S21', 'DIST'],
   },
 ];
 
@@ -119,18 +126,21 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'H3': [],
   'H4': [
     { key: 'AmphiThreshold', label: 'Amfi Eşik Kontenjanı', type: 'number', min: 50, max: 500 },
+    { key: 'AmphiThresholdEnabled', label: 'Kalabalık derslerde amfi zorunluluğu', type: 'boolean' },
+    { key: 'ClassroomTypeRequirementEnabled', label: 'Ders kataloğundaki derslik tipi zorunluluğu', type: 'boolean' },
   ],
   'H5': [
     { key: 'CurriculumConflictMode', label: 'Çakışma Modu', type: 'select', options: [
+      { value: 'cohort', label: 'Cohort (önerilen)' },
       { value: 'curriculum', label: 'Müfredat Bazlı' },
       { value: 'enrollment', label: 'Kayıt Bazlı' },
     ]},
     { key: 'EnrollmentConflictHardThreshold', label: 'Kayıt Çakışma Eşiği', type: 'number', min: 1, max: 100 },
   ],
-  'H6': [],
-  'H8': [
-    { key: 'AllowSameCourseSectionOverlap', label: 'Aynı Ders Şube Çakışmasına İzin Ver', type: 'boolean' },
+  'H6': [
+    { key: 'MaxLabBlockHours', label: 'Tek Lab Bloğu Maks. Saat', type: 'number', suffix: 'saat', min: 2, max: 6 },
   ],
+  'H8': [],
   'H10': [],
   'H11': [],
   'H12': [],
@@ -174,6 +184,7 @@ export const PARAMETER_SCHEMAS: Record<string, ParameterField[]> = {
   'S12': [
     { key: 'S12MaxImbalancePercent', label: 'Maks. Dengesizlik Oranı', type: 'number', suffix: '%', min: 0, max: 100 }, // gitleaks:allow
   ],
+  'S21': [],
   'DIST': [],
 };
 

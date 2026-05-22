@@ -21,6 +21,17 @@ export interface SchedulingAlgorithmConfigGroupDto {
   sortOrder: number;
 }
 
+export interface EnumOptionDto {
+  value: string;
+  label: string;
+  disabled: boolean;
+  helpText: string | null;
+}
+
+export interface SchedulingAlgorithmConfigEnumOptions {
+  [configKey: string]: EnumOptionDto[];
+}
+
 const BASE = '/admin/scheduling-algorithm-config';
 
 export async function getSchedulingAlgorithmConfigs(): Promise<SchedulingAlgorithmConfigDto[]> {
@@ -35,6 +46,11 @@ export async function getSchedulingAlgorithmConfigGroups(): Promise<SchedulingAl
 
 export async function getSchedulingAlgorithmConfigLimits(): Promise<SchedulingAlgorithmConfigLimits> {
   const { data } = await apiClient.get<SchedulingAlgorithmConfigLimits>(`${BASE}/limits`);
+  return data;
+}
+
+export async function getSchedulingAlgorithmConfigEnumOptions(): Promise<SchedulingAlgorithmConfigEnumOptions> {
+  const { data } = await apiClient.get<SchedulingAlgorithmConfigEnumOptions>(`${BASE}/enum-options`);
   return data;
 }
 

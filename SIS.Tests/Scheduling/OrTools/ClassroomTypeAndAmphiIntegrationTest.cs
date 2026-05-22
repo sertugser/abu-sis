@@ -35,7 +35,8 @@ public class ClassroomTypeAndAmphiIntegrationTest
             TermId = 1, FacultyId = 1,
             Sections = new[] { section }, Classrooms = classrooms, TimeSlots = slots,
             ConstraintFlags = new Dictionary<string, bool> { ["H1"] = true, ["H4"] = true },
-            AmphiThreshold = 100
+            AmphiThreshold = 100,
+            AmphiThresholdEnabled = true,  // 2026-05-19: H4.Parameters yerine doğrudan request'te
         };
 
         var engine = BuildEngine(amphiThreshold: 100);
@@ -70,7 +71,8 @@ public class ClassroomTypeAndAmphiIntegrationTest
             Sections = new[] { section }, Classrooms = classrooms,
             TimeSlots = BuildMonOnly4Slots(),
             ConstraintFlags = new Dictionary<string, bool> { ["H1"] = true, ["H4"] = true },
-            AmphiThreshold = 100
+            AmphiThreshold = 100,
+            ClassroomTypeRequirementEnabled = true,  // 2026-05-19: H4.Parameters yerine doğrudan request'te
         };
 
         var engine = BuildEngine(amphiThreshold: 100);

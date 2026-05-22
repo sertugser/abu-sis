@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -19,11 +20,16 @@ public class ConstraintController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ISchedulingService _schedulingService;
+    private readonly ISystemConfigProvider _configProvider;
 
-    public ConstraintController(AppDbContext context, ISchedulingService schedulingService)
+    public ConstraintController(
+        AppDbContext context,
+        ISchedulingService schedulingService,
+        ISystemConfigProvider configProvider)
     {
         _context = context;
         _schedulingService = schedulingService;
+        _configProvider = configProvider;
     }
 
     // ── GET /api/constraints ─────────────────────────────────────────────
@@ -203,7 +209,10 @@ public class ConstraintController : ControllerBase
     }
 
     /// <summary>
-    /// SystemConfig key UPSERT (var ise UPDATE, yok ise INSERT).
+    /// SystemConfig key UPSERT (var ise UPDATE, yok ise INSERT) + SystemConfigProvider
+    /// cache invalidate. Cache TTL 5 dk olduğundan invalidate çağrılmazsa solver yeni
+    /// değeri max 5 dk sonra okur — admin değişikliği anında etkili olsun diye burada
+    /// temizliyoruz (SchedulingAlgorithmConfigController.Update ile aynı semantik).
     /// </summary>
     private async Task UpsertSystemConfigAsync(string key, string value, string dataType, CancellationToken ct)
     {
@@ -224,6 +233,7 @@ public class ConstraintController : ControllerBase
                 Description = $"Constraint UI parametresi (ConstraintParameterMapping üzerinden)."
             });
         }
+        _configProvider.InvalidateCache(key);
     }
 
     // ── POST /api/constraints/{id}/exceptions ────────────────────────────

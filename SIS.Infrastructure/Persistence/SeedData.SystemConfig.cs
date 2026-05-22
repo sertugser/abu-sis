@@ -172,21 +172,25 @@ public static partial class SeedData
             // migration ile mevcut DB'lerden de düşürüldü.
 
             // ── Algoritma Parametreleri (eski SchedulingAlgorithmConfigs'tan merge — 2026-05-09) ─
-            // Hard threshold flag'leri — admin panel'inden toggle edilir, solver SystemConfigs'i okur.
-            new() { Key = "Schedule.LunchBreak.IsHard", Value = "true", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: öğle arasına ders koyulamaz (zorunlu). KAPALI: koyulabilir ama ceza alır (tercihli)." },
-            new() { Key = "Schedule.AmphiThresholdEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: kontenjan ≥ amfi eşiği olan derslere amfi zorunlu (H4). KAPALI: kural devre dışı (varsayılan — amfi envanteri olmayan ortamda UNSAT'i önler)." },
-            new() { Key = "Schedule.ClassroomTypeRequirementEnabled", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: dersin RequiredTheoryClassroomType / RequiredLabClassroomType alanları zorunlu (H4). KAPALI: kural devre dışı." },
-            new() { Key = "Schedule.AllowSameCourseSectionOverlap", Value = "false", Category = "HardThreshold", DataType = "bool", Description = "AÇIK: aynı dersin farklı şubeleri aynı slotta paralel açılabilir (H8 kapalı). KAPALI (varsayılan): şubeler farklı slotta olmalı." },
+            // 2026-05-19: 4 hard threshold flag'i (LunchBreak.IsHard, AllowSameCourseSectionOverlap,
+            // AmphiThresholdEnabled, ClassroomTypeRequirementEnabled) kaldırıldı. Bu kuralların
+            // açma/kapama + Hard/Soft toggle + alt-parametreleri tek otorite olarak
+            // ConstraintDefinitions["H13"|"H8"|"H4"].Category + Parameters JSON'a (Kısıtlar sayfası)
+            // taşındı. Algoritma Parametreleri sayfasında HardThreshold kategorisi artık boştur.
 
             // V1 silindiğinde 19 atıl key migration `RemoveAtilV1AlgorithmKeys` ile DB'den kaldırıldı
             // (2026-05-10). Bonus: aynı gün BatchAuto.cs ölü kod silinmesi sonrası
             // Scheduling.MaxBacktrackingDepth de migration `RemoveBatchAutoConfigKey` ile düştü.
-            // Geriye kalan key'ler V2 scheduler tarafindan h�l� okunan canli ayarlar.
-            new() { Key = "Schedule.SplittableBlockTypes", Value = "Lab", Category = "Other", DataType = "string", Description = "Bir derslik yetmediğinde hangi tip dersler aynı saatte iki ayrı dersliğe bölünebilir." },
-            new() { Key = "Schedule.Lab.MaxBlockHours", Value = "2", Category = "Other", DataType = "int", Description = "Lab dersi kaç saatlik bloklara bölünsün." },
-            new() { Key = "Schedule.CurriculumConflictMode", Value = "cohort", Category = "Other", DataType = "string", Description = "H5 müfredat çakışma kontrolü modu. 'cohort' önerilen — section'ların alternatif olduğunu bilir." },
+            // Geriye kalan key'ler V2 scheduler tarafından hâlâ okunan canlı ayarlar.
+            // Schedule.SplittableBlockTypes ve Schedule.Lab.MaxBlockHours kaldırıldı (2026-05-17):
+            // hiçbir encoder/builder okumuyordu (atıl). DB temizliği migration ile yapıldı.
+            // 2026-05-19: Schedule.MaxLabBlockHours kaldırıldı → H6.Parameters JSON tek otorite
+            // (Kısıtlar sayfası → H6 "Ders Bileşen Çakışması" dialog).
+            // 2026-05-19: Schedule.CurriculumConflictMode kaldırıldı → H5.Parameters JSON tek otorite.
 
-            new() { Key = "SoftConstraint.S20.PenaltyPerPair", Value = "5.0", Category = "Soft", DataType = "decimal", Description = "S20: Komşu yıl ders çiftinde modulo eşi çakışırsa pair başına eklenen ceza puanı." },
+            // SoftConstraint.S20.PenaltyPerPair kaldırıldı (2026-05-17): S20 Soft → Hard
+            // dönüşümüyle ceza puanı anlamsızlaştı (encoder soft path'i çalışmıyor, hard
+            // path zaten section-aware NoOverlap). DB temizliği migration ile yapıldı.
 
             // ── Akıllı Derslik Atama Önerisi (ClassroomSuggestionService) ─────
             new() { Key = "Classroom.AmphiThreshold", Value = "100", Category = "Suggestion", DataType = "int", Description = "Bir dersi amfi gerektiren öğrenci eşiği. Tahmini talep bu değerin üzerindeyse ders amfide verilmeli sayılır." },

@@ -94,8 +94,11 @@ public class FacultyPlanningServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_RejectsDailyLoadConflict()
+    public async Task AssignSectionAsync_WhenDailyHoursExceedLimit_ReturnsRequiresConfirmation()
     {
+        // Yeni davranış: Force=false (varsayılan) ile çağrıldığında hard rule conflict varsa
+        // exception fırlatılmaz — response'ta RequiresConfirmation=true ve conflict listesi döner.
+        // Frontend bunu dialog ile gösterir, kullanıcı override edebilir.
         var classroom = AddClassroom(1, "C101", 50);
         var instructor = AddInstructor(1, 101);
 
@@ -114,7 +117,7 @@ public class FacultyPlanningServiceTests : IDisposable
         AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 55), new TimeOnly(17, 45), 10);
         var candidateSection = AddSection(2, candidateCourse.Id, instructor.Id, capacity: 35);
 
-        var act = async () => await _service.AssignSectionAsync(new AssignSectionRequest
+        var result = await _service.AssignSectionAsync(new AssignSectionRequest
         {
             SectionId = candidateSection.Id,
             ClassroomId = classroom.Id,
@@ -129,15 +132,64 @@ public class FacultyPlanningServiceTests : IDisposable
             ]
         }, "999");
 
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*sert kisit ihlali*");
+        result.RequiresConfirmation.Should().BeTrue();
+        result.Success.Should().BeFalse();
+        result.Conflicts.Should().NotBeEmpty();
 
         var writtenSchedules = await _context.SectionSchedules
             .Where(ss => ss.CourseSectionId == candidateSection.Id)
             .ToListAsync();
 
         writtenSchedules.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignSectionAsync_WhenForceTrue_WritesDespiteDailyLoadConflict()
+    {
+        // Force=true ile override edildiğinde aynı conflict warning olarak yansır,
+        // ama atama YAZILIR (kullanıcının açık onayı var).
+        var classroom = AddClassroom(1, "C101", 50);
+        var instructor = AddInstructor(1, 101);
+
+        var existingCourse = AddCourse(1, "CENG301", theoryHours: 8);
+        var candidateCourse = AddCourse(2, "CENG302", theoryHours: 2);
+
+        AddSection(
+            1,
+            existingCourse.Id,
+            instructor.Id,
+            capacity: 40,
+            classroomId: classroom.Id,
+            (DayOfWeek.Monday, 8, 0, 16, 0));
+
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 0), new TimeOnly(16, 50), 9);
+        AddTimeSlot(TermId, DayOfWeek.Monday, new TimeOnly(16, 55), new TimeOnly(17, 45), 10);
+        var candidateSection = AddSection(2, candidateCourse.Id, instructor.Id, capacity: 35);
+
+        var result = await _service.AssignSectionAsync(new AssignSectionRequest
+        {
+            SectionId = candidateSection.Id,
+            ClassroomId = classroom.Id,
+            Force = true,
+            ScheduleSlots =
+            [
+                new ScheduleSlotDto
+                {
+                    Day = (int)DayOfWeek.Monday,
+                    StartTime = new TimeOnly(16, 0),
+                    EndTime = new TimeOnly(17, 45)
+                }
+            ]
+        }, "999");
+
+        result.RequiresConfirmation.Should().BeFalse();
+        result.Warnings.Should().NotBeEmpty();
+
+        var writtenSchedules = await _context.SectionSchedules
+            .Where(ss => ss.CourseSectionId == candidateSection.Id)
+            .ToListAsync();
+
+        writtenSchedules.Should().HaveCount(2);
     }
 
     [Fact]

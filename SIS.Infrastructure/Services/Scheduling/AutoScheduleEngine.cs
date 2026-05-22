@@ -242,7 +242,12 @@ public sealed class AutoScheduleEngine
             if (!sectionLookup.TryGetValue(asn.SectionId, out var section))
                 continue;
 
-            var primaryClassroomId = asn.Slots.Count > 0 ? asn.Slots[0].ClassroomId : (int?)null;
+            // 2026-05-20: SolutionMapper Online section'lar için ClassroomId=0 (NoRoomSentinel)
+            // emit ediyor. Preview DTO + Apply pipeline'ına null akmalı (FK violation engellenir
+            // ve ScheduleWriter `?? defaultClassroomId` doğru çalışır). Sentinel'i burada,
+            // pipeline'a girmeden önce null'a normalize ediyoruz.
+            var rawPrimaryId = asn.Slots.Count > 0 ? asn.Slots[0].ClassroomId : (int?)null;
+            int? primaryClassroomId = (rawPrimaryId is null or 0) ? null : rawPrimaryId;
             ClassroomInput? primaryClassroom = null;
             if (primaryClassroomId.HasValue
                 && classroomLookup.TryGetValue(primaryClassroomId.Value, out var cr))
@@ -254,22 +259,23 @@ public sealed class AutoScheduleEngine
                 .Select(s =>
                 {
                     var ts = timeSlotLookup.TryGetValue(s.TimeSlotId, out var slot) ? slot : null;
-                    var crName = s.ClassroomId == 0
-                        ? "Cevrim ici"
-                        : classroomLookup.TryGetValue(s.ClassroomId, out var c) ? c.Name : "?";
+                    int? slotClassroomId = s.ClassroomId == 0 ? null : s.ClassroomId;
+                    var crName = slotClassroomId.HasValue
+                        && classroomLookup.TryGetValue(slotClassroomId.Value, out var c) ? c.Name : null;
                     return new ScheduleSlotDto
                     {
                         Day = (int)(ts?.DayOfWeek ?? DayOfWeek.Monday),
                         StartTime = ts?.StartTime ?? TimeOnly.MinValue,
                         EndTime = ts?.EndTime ?? TimeOnly.MinValue,
-                        ClassroomId = s.ClassroomId,
+                        ClassroomId = slotClassroomId,
                         ClassroomName = crName
                     };
                 })
                 .ToList();
 
+            // Online section'larda ClassroomName null → özet metninde "Online" göster.
             var summary = string.Join(", ", scheduleSlots.Select(ss =>
-                $"{ss.Day} {ss.StartTime:HH\\:mm}-{ss.EndTime:HH\\:mm} ({ss.ClassroomName})"));
+                $"{ss.Day} {ss.StartTime:HH\\:mm}-{ss.EndTime:HH\\:mm} ({ss.ClassroomName ?? "Online"})"));
 
             assignmentDtos.Add(new AutoSchedulePreviewItemDto
             {
