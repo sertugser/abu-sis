@@ -134,7 +134,6 @@ interface BulkCandidate {
 function buildBulkCandidates(
   draggedData: DragData,
   draggedSection: FacultyPlanningSection,
-  allSections: FacultyPlanningSection[],
   timeSlots: FacultyPlanningTimeSlot[],
 ): BulkCandidate[] {
   const candidates: BulkCandidate[] = [];
@@ -556,7 +555,7 @@ export default function SchedulingEditorPage() {
     activeDragSectionRef.current = section.sectionId;
 
     // Backend bulk-validate için aday hücreleri hesapla
-    const candidates = buildBulkCandidates(data, section, sections, timeSlots);
+    const candidates = buildBulkCandidates(data, section, timeSlots);
     const candidateKeys = new Set(candidates.map(c => c.cellKey));
 
     // Aday olmayan hücreler anında kırmızı — fiziksel imkansızlık (dolu, gün sonu, ardışık değil).
