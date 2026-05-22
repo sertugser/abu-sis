@@ -78,6 +78,26 @@ public class AdvisorConstraintRegistrationTests : IDisposable
         result.Registrations.Should().ContainSingle(r => r.Status == RegistrationStatus.PendingAdvisorApproval.ToString());
     }
 
+    [Fact]
+    public async Task SubmitRegistration_WithDraftPlanItem_DoesNotReportSelfDuplicate()
+    {
+        var course = AddCourse(102, "CENG203", "Databases");
+        var section = AddSection(1002, course.Id);
+
+        var addResult = await _service.AddToPlanAsync(StudentId, section.Id);
+        addResult.Success.Should().BeTrue();
+
+        var result = await _service.SubmitRegistrationAsync(StudentId, new RegistrationSubmitDto
+        {
+            CourseSectionIds = [section.Id]
+        });
+
+        result.Success.Should().BeTrue();
+        result.ValidationResult!.Errors.Should().NotContain(error => error.Rule == "DuplicateRegistration");
+        _context.CourseRegistrations.Single(registration => registration.CourseSectionId == section.Id)
+            .Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
+    }
+
     private void SeedBaseData()
     {
         _context.Faculties.Add(new Faculty { Id = FacultyId, Name = "Engineering", Code = "ENG" });

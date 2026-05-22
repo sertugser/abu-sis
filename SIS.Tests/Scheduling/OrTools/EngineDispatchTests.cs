@@ -6,6 +6,7 @@ using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.Constraints;
 using SIS.Application.Scheduling.Solver;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services.Scheduling;
@@ -113,6 +114,52 @@ public class EngineDispatchTests
     }
 
     [Fact]
+    public async Task RunAsync_PhysicalSectionWithoutTimeSlots_ThrowsFriendlyValidationError()
+    {
+        var (engine, solverEngineMock, context) = BuildAutoScheduleEngine(
+            engineFlag: "v2-ortools",
+            solverResult: BuildEmptySuccessResult());
+        SeedSchedulableSection(context, addTimeSlot: false, addClassroom: true);
+
+        var act = async () => await engine.RunAsync(
+            new AutoScheduleRequest { TermId = 1, FacultyId = 1 },
+            userId: null,
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*zaman dilimi*");
+        solverEngineMock.Verify(
+            x => x.SolveAsync(
+                It.IsAny<SolverRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Action<SolverProgressInfo>?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RunAsync_PhysicalSectionWithoutAssignedClassrooms_ThrowsFriendlyValidationError()
+    {
+        var (engine, solverEngineMock, context) = BuildAutoScheduleEngine(
+            engineFlag: "v2-ortools",
+            solverResult: BuildEmptySuccessResult());
+        SeedSchedulableSection(context, addTimeSlot: true, addClassroom: false);
+
+        var act = async () => await engine.RunAsync(
+            new AutoScheduleRequest { TermId = 1, FacultyId = 1 },
+            userId: null,
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*derslik*");
+        solverEngineMock.Verify(
+            x => x.SolveAsync(
+                It.IsAny<SolverRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Action<SolverProgressInfo>?>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task RunAsync_V2_InfeasibleResult_ReturnsPreviewWithFailures()
     {
         // Boş DB'de section yok → SolverRequestBuilder boş Sections döndürür → mapper
@@ -171,6 +218,103 @@ public class EngineDispatchTests
             UnsatCore = new List<UnsatCoreEntry>()
         }
     };
+
+    private static void SeedSchedulableSection(
+        AppDbContext context,
+        bool addTimeSlot,
+        bool addClassroom,
+        TeachingMethod teachingMethod = TeachingMethod.FaceToFace)
+    {
+        context.Faculties.Add(new Faculty { Id = 1, Name = "Engineering", Code = "ENG" });
+        context.Departments.Add(new Department
+        {
+            Id = 1,
+            FacultyId = 1,
+            Name = "Computer Engineering",
+            Code = "CENG"
+        });
+        context.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Name = "2025-2026 Bahar",
+            ShortName = "25-26 Bahar",
+            EnglishName = "Spring 2025-2026",
+            Year = 2025,
+            TermType = TermType.Spring,
+            TermStart = DateTime.UtcNow.AddDays(-1),
+            TermEnd = DateTime.UtcNow.AddDays(90)
+        });
+        context.Courses.Add(new Course
+        {
+            Id = 1,
+            Code = "CENG101",
+            Name = "CENG101",
+            DepartmentId = 1,
+            Ects = 2,
+            TheoryHours = 2,
+            LabHours = 0,
+            NationalCredit = 2,
+            IsNonGpa = false,
+            TeachingMethod = teachingMethod
+        });
+        context.CourseSections.Add(new CourseSection
+        {
+            Id = 1,
+            CourseId = 1,
+            TermId = 1,
+            Capacity = 30,
+            SectionNumber = 1,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+
+        if (addTimeSlot)
+        {
+            context.TimeSlots.Add(new TimeSlot
+            {
+                Id = 1,
+                TermId = 1,
+                DayOfWeek = DayOfWeek.Monday,
+                SlotOrder = 1,
+                StartTime = new TimeOnly(9, 0),
+                EndTime = new TimeOnly(9, 50),
+                DisplayName = "Monday 1",
+                AllowedMode = TimeSlotAllowedMode.Both
+            });
+            context.TimeSlots.Add(new TimeSlot
+            {
+                Id = 2,
+                TermId = 1,
+                DayOfWeek = DayOfWeek.Monday,
+                SlotOrder = 2,
+                StartTime = new TimeOnly(9, 55),
+                EndTime = new TimeOnly(10, 45),
+                DisplayName = "Monday 2",
+                AllowedMode = TimeSlotAllowedMode.Both
+            });
+        }
+
+        if (addClassroom)
+        {
+            context.Classrooms.Add(new Classroom
+            {
+                Id = 1,
+                Name = "D101",
+                BuildingName = "A",
+                Floor = 1,
+                Capacity = 50,
+                Type = ClassroomType.Lecture
+            });
+            context.ClassroomTermAssignments.Add(new ClassroomTermAssignment
+            {
+                TermId = 1,
+                ClassroomId = 1,
+                FacultyId = 1
+            });
+        }
+
+        context.SaveChanges();
+    }
 
     private static (AutoScheduleEngine engine, Mock<ISolverEngine> solverMock, AppDbContext context)
         BuildAutoScheduleEngine(

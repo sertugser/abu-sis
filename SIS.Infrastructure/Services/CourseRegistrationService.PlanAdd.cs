@@ -32,7 +32,12 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        var webModuleGate = await ValidateStudentRegistrationWebModuleAsync(studentId, section.TermId);
+        var registrationControlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, section.TermId);
+        var webModuleGate = await ValidateModuleAsync(
+            registrationControlCode,
+            section.TermId,
+            "WebModuleRegistrationClosed",
+            "Ders kayıt işlemleri şu anda kullanılamıyor.");
         if (webModuleGate is not null)
         {
             response.Success = false;
@@ -44,7 +49,7 @@ public partial class CourseRegistrationService
         var term = await _context.AcademicTerms.AsNoTracking()
             .Include(t => t.AcademicCalendar)
             .FirstOrDefaultAsync(t => t.Id == section.TermId);
-        if (term != null)
+        if (term != null && !await IsManualOpenModeAsync(registrationControlCode))
         {
             if (term.AcademicCalendar == null)
             {
@@ -311,7 +316,12 @@ public partial class CourseRegistrationService
             .Include(cr => cr.CourseSection)
             .AnyAsync(cr => cr.StudentId == studentId
                 && cr.CourseSection.CourseId == section.CourseId
-                && RegistrationRulePolicy.IsPassedGrade(cr.Grade));
+                && cr.Grade != null
+                && cr.Grade != GradeCode.FF
+                && cr.Grade != GradeCode.NA
+                && cr.Grade != GradeCode.U
+                && cr.Grade != GradeCode.W
+                && cr.Grade != GradeCode.I);
 
         // Madde 6 tamamlama: AKTS + kredi snapshot + havuz ataması + (Faz 4) Açma Nedeni id snapshot
         var (snapshotEcts, snapshotCredit, appliedPoolId, openingReasonIdSnapshot) = await ResolveCourseSnapshotsAsync(studentId, section.CourseId);

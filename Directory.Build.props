@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/* 2.cs</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="**/* 2.cs" />
+  </ItemGroup>
+</Project>

@@ -67,8 +67,17 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                Window = TimeSpan.FromMinutes(1),
-                PermitLimit = 8,
+                Window = TimeSpan.FromSeconds(10),
+                PermitLimit = 40,
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("AuthLoginSettings", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(10),
+                PermitLimit = 120,
                 QueueLimit = 0,
             }));
     options.AddPolicy("PublicRead", httpContext =>

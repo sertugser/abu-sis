@@ -1,5 +1,5 @@
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import AdvisorDashboardPage from '../pages/AdvisorDashboardPage';
 import DashboardPage from '../pages/DashboardPage';
 import InstructorDashboardPage from '../pages/InstructorDashboardPage';
 import ManagementDashboardPage from '../pages/ManagementDashboardPage';
@@ -20,7 +20,7 @@ export default function RoleDashboard() {
   }
 
   if (primaryRole === 'AcademicAdvisor') {
-    return <AdvisorDashboardPage />;
+    return <Navigate to="/danisman-paneli" replace />;
   }
 
   if (primaryRole === 'Instructor') {

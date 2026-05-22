@@ -100,13 +100,9 @@ public class OnlineCourseIntegrationTest
     }
 
     [Fact]
-    public async Task SolveAsync_OnlineSectionWithIrrelevantClassroom_StillScheduled()
+    public async Task SolveAsync_OnlineSectionWithoutClassrooms_StillScheduled()
     {
-        // Online section schedules even though no real lecture room is needed.
-        // PreflightFeasibilityChecker still runs its lecture-capacity check unconditionally
-        // (Plan 9 will skip it for Online), so a dummy classroom with sufficient capacity
-        // is required here to pass preflight. Once Plan 9 lands the dummy can be removed
-        // and `Classrooms = Array.Empty<ClassroomInput>()` will work.
+        // Online section schedules even when the faculty has no physical classroom assignment.
         var section = new SectionInput
         {
             Id = 1, CourseId = 100, CourseCode = "ONLINE", CourseName = "X",
@@ -118,10 +114,7 @@ public class OnlineCourseIntegrationTest
         {
             TermId = 1, FacultyId = 1,
             Sections = new[] { section },
-            Classrooms = new[]
-            {
-                new ClassroomInput { Id = 99, Name = "Dummy", Capacity = 1000, Type = ClassroomType.Lecture }
-            },
+            Classrooms = Array.Empty<ClassroomInput>(),
             TimeSlots = BuildSlots(),
             ConstraintFlags = new Dictionary<string, bool> { ["H1"] = true }
         };

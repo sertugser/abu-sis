@@ -1055,6 +1055,20 @@ public class RegistrationValidationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Validate_SubmittedDraftRegistration_DoesNotSelfDuplicateOrSelfBlockCapacity()
+    {
+        var course = AddCourse(1005, "CS1005", "Draft Course", 5);
+        var section = AddSection(1005, course.Id, TermId, capacity: 1, enrolledCount: 1);
+        AddRegistration(1005, StudentId, section.Id, RegistrationStatus.Draft);
+
+        var result = await _service.ValidateRegistrationAsync(StudentId, new List<int> { section.Id });
+
+        result.Errors.Should().NotContain(e => e.Rule == "DuplicateRegistration");
+        result.Errors.Should().NotContain(e => e.Rule == "Capacity");
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Validate_PendingApprovalRegistration_ReturnsDuplicateError()
     {
         var course = AddCourse(1003, "CS1003", "Pending Course", 5);

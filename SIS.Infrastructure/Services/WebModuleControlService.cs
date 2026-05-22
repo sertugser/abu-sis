@@ -227,11 +227,11 @@ public class WebModuleControlService : IWebModuleControlService
             "student-course-registration" => EvaluateActiveTermEvent(term, CalendarEventType.CourseRegistration, selectedOption, announcement, "Ders kayıt penceresi şu anda açık değil.", now),
             "student-new-course-registration" => EvaluateActiveTermEvent(term, CalendarEventType.NewStudentRegistration, selectedOption, announcement, "Yeni öğrenci ders kayıt penceresi şu anda açık değil.", now),
             "student-extended-course-registration" => EvaluateActiveTermEvent(term, CalendarEventType.CourseRegistration, selectedOption, announcement, "Öğrenim süresini aşan öğrenciler için ders kayıt penceresi şu anda açık değil.", now),
-            "advisor-registration-approval" => EvaluateActiveTermEvent(term, CalendarEventType.AdvisorApproval, selectedOption, announcement, "Danışman onayı penceresi şu anda açık değil.", now),
-            "advisor-new-student-registration-approval" => EvaluateActiveTermEvent(term, CalendarEventType.AdvisorApproval, selectedOption, announcement, "Yeni öğrenci danışman onayı penceresi şu anda açık değil.", now),
+            "advisor-registration-approval" => EvaluateActiveTermEvents(term, new[] { CalendarEventType.AdvisorApproval, CalendarEventType.CourseRegistration }, selectedOption, announcement, "Danışman onayı penceresi şu anda açık değil.", now),
+            "advisor-new-student-registration-approval" => EvaluateActiveTermEvents(term, new[] { CalendarEventType.AdvisorApproval, CalendarEventType.NewStudentRegistration, CalendarEventType.CourseRegistration }, selectedOption, announcement, "Yeni öğrenci danışman onayı penceresi şu anda açık değil.", now),
             "student-add-drop" => EvaluateActiveTermEvent(term, CalendarEventType.AddDrop, selectedOption, announcement, "Ders ekle/bırak penceresi şu anda açık değil.", now),
             "student-new-add-drop" => EvaluateActiveTermEvent(term, CalendarEventType.AddDrop, selectedOption, announcement, "Yeni öğrenci ders ekle/bırak penceresi şu anda açık değil.", now),
-            "advisor-add-drop-approval" => EvaluateActiveTermEvent(term, CalendarEventType.AddDropApproval, selectedOption, announcement, "Ders ekle/bırak onay penceresi şu anda açık değil.", now),
+            "advisor-add-drop-approval" => EvaluateActiveTermEvents(term, new[] { CalendarEventType.AddDropApproval, CalendarEventType.AddDrop }, selectedOption, announcement, "Ders ekle/bırak onay penceresi şu anda açık değil.", now),
             "student-withdrawal" => EvaluateActiveTermEvent(term, CalendarEventType.CourseWithdrawal, selectedOption, announcement, "Dersten çekilme penceresi şu anda açık değil.", now),
             "midterm-grade-entry" => EvaluateActiveTermEvent(term, CalendarEventType.MidtermGradeEntry, selectedOption, announcement, "Ara sınav not girişi penceresi şu anda açık değil.", now),
             "midterm-excuse-grade-entry" => EvaluateActiveTermEvent(term, CalendarEventType.ExcuseExam, selectedOption, announcement, "Ara sınav mazeret not girişi penceresi şu anda açık değil.", now, "midterm_excuse_exam"),
@@ -267,14 +267,24 @@ public class WebModuleControlService : IWebModuleControlService
         string closedMessage,
         DateTime now,
         string? templateItemKey = null)
+        => EvaluateActiveTermEvents(term, new[] { eventType }, selectedOption, announcement, closedMessage, now, templateItemKey);
+
+    private WebModuleAccessResult EvaluateActiveTermEvents(
+        AcademicTerm term,
+        IReadOnlyCollection<CalendarEventType> eventTypes,
+        WebModuleControlOption selectedOption,
+        string? announcement,
+        string closedMessage,
+        DateTime now,
+        string? templateItemKey = null)
     {
-        var calendarEvent = term.CalendarEvents
-            .Where(evt => evt.EventType == eventType)
+        var calendarEvents = term.CalendarEvents
+            .Where(evt => eventTypes.Contains(evt.EventType))
             .Where(evt => templateItemKey == null || string.Equals(evt.TemplateItemKey, templateItemKey, StringComparison.OrdinalIgnoreCase))
             .OrderBy(evt => evt.StartDate)
-            .FirstOrDefault();
+            .ToList();
 
-        if (calendarEvent is null)
+        if (!calendarEvents.Any())
         {
             return new WebModuleAccessResult(
                 IsEnabled: true,
@@ -282,11 +292,16 @@ public class WebModuleControlService : IWebModuleControlService
                 SelectedMode: selectedOption.Code,
                 SelectedModeLabel: selectedOption.Label,
                 EffectiveStateLabel: "Takvim Eksik",
-                Message: ResolveMessage(announcement, $"{eventType} etkinliği takvimde tanımlı değil."));
+                Message: ResolveMessage(announcement, $"{string.Join(", ", eventTypes)} etkinliği takvimde tanımlı değil."));
         }
 
-        var eventEnd = calendarEvent.EndDate ?? calendarEvent.StartDate;
-        if (now < calendarEvent.StartDate || now > eventEnd)
+        var activeEvent = calendarEvents.FirstOrDefault(calendarEvent =>
+        {
+            var eventEnd = calendarEvent.EndDate ?? calendarEvent.StartDate;
+            return now >= calendarEvent.StartDate && now <= eventEnd;
+        });
+
+        if (activeEvent is null)
         {
             return new WebModuleAccessResult(
                 IsEnabled: true,

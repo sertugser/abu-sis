@@ -93,6 +93,7 @@ import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import SectioningPage from './pages/SectioningPage';
 import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
+import AdvisorDashboardPage from './pages/AdvisorDashboardPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
@@ -121,6 +122,11 @@ export default function App() {
 
                   {/* RBAC: yetki yetersiz olduğunda RoleProtectedRoute buraya yönlendirir */}
                   <Route path="forbidden" element={<ForbiddenPage />} />
+
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
+                    <Route path="danisman-paneli" element={<AdvisorDashboardPage />} />
+                    <Route path="danismanpaneli" element={<Navigate to="/danisman-paneli" replace />} />
+                  </Route>
 
                   {/* Herkesin erişebildiği sayfalar */}
                   <Route path="akademik-takvim" element={<AcademicCalendarPage />} />
