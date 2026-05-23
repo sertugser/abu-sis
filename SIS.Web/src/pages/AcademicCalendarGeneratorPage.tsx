@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, History, Info, RefreshCw, RotateCcw, Save, SlidersHorizontal, Timer, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -128,9 +128,9 @@ export default function AcademicCalendarGeneratorPage() {
 
   function renderGeneratorTab() {
     return (
-      <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="grid gap-3 md:grid-cols-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+          <div className="grid gap-3 md:grid-cols-4">
             <label className="space-y-0.5 text-sm font-medium text-slate-700">
               Akademik yıl
               <div className="flex items-center gap-2">
@@ -159,16 +159,16 @@ export default function AcademicCalendarGeneratorPage() {
             </div>
           </div>
 
-          <div className="mt-3">
-            <div className="rounded-lg border border-slate-200 p-2.5">
+          <div className="grid gap-x-8 gap-y-6 border-t border-slate-100 pt-4 md:grid-cols-2">
+            <div className="md:border-r md:border-slate-100 md:pr-8">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <GitBranch className="h-3.5 w-3.5" />
+                <GitBranch className="h-3.5 w-3.5 text-[#003366]" />
                 Tarih Sabitleme
               </div>
               <p className="text-xs text-slate-500">
                 Belirli bir etkinliğin tarihini sabitlemek için seçin ve başlangıç / bitiş tarihini girin.
               </p>
-              <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1.5fr)_140px_140px]">
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
                 <SearchableProcessSelect
                   options={durationOptions}
                   selectedKey={activePinEventKey}
@@ -203,121 +203,134 @@ export default function AcademicCalendarGeneratorPage() {
                 Kısıt Ekle
               </Button>
             </div>
-          </div>
 
-          <div className="mt-3 rounded-lg border border-slate-200 p-2.5">
-            <div className="text-sm font-semibold text-slate-800">Süre Ayarları</div>
-            <p className="text-xs text-slate-500">
-              Bir etkinliğin varsayılan süresini değiştirmek için seçin ve yeni gün sayısını girin.
-            </p>
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <Timer className="h-3.5 w-3.5 text-[#003366]" />
+                Süre Ayarları
+              </div>
+              <p className="text-xs text-slate-500">
+                Bir etkinliğin varsayılan süresini değiştirmek için seçin ve yeni gün sayısını girin.
+              </p>
 
-            <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1.5fr)_140px_auto]">
-              <SearchableProcessSelect
-                options={durationOptions}
-                selectedKey={activeDurationEventKey}
-                onChange={handleDurationEventChange}
-                disabled={templatesLoading || durationOptions.length === 0}
-                placeholder={templatesLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
-              />
-              <Input
-                type="number"
-                min={1}
-                value={durationDays}
-                onChange={e => setDurationDays(e.target.value)}
-                placeholder="Gün"
-              />
-              <Button type="button" size="sm" onClick={addDurationOverride} disabled={!selectedDurationOption}>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px]">
+                <SearchableProcessSelect
+                  options={durationOptions}
+                  selectedKey={activeDurationEventKey}
+                  onChange={handleDurationEventChange}
+                  disabled={templatesLoading || durationOptions.length === 0}
+                  placeholder={templatesLoading ? 'Yükleniyor...' : 'Etkinlik seçin'}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  value={durationDays}
+                  onChange={e => setDurationDays(e.target.value)}
+                  placeholder="Gün"
+                />
+              </div>
+              {selectedDurationOption && (
+                <p className="mt-1 text-xs font-medium text-slate-700">
+                  Seçilen: {processOptionLabel(selectedDurationOption)}. Varsayılan: {selectedDurationOption.defaultDurationDays} gün.
+                </p>
+              )}
+              <Button type="button" size="sm" className="mt-2" onClick={addDurationOverride} disabled={!selectedDurationOption}>
                 Süre ayarı ekle
               </Button>
-            </div>
-            {selectedDurationOption && (
-              <p className="mt-1 text-xs font-medium text-slate-700">
-                Seçilen: {processOptionLabel(selectedDurationOption)}. Varsayılan: {selectedDurationOption.defaultDurationDays} gün.
-              </p>
-            )}
 
-            <div className="mt-2 space-y-1.5">
-              {Object.keys(durationOverrides).length === 0 ? (
-                <p className="text-xs text-slate-500">Henüz süre ayarı yok.</p>
-              ) : Object.entries(durationOverrides).map(([key, days]) => {
-                const option = durationOptions.find(item => item.key === key);
-                return (
-                  <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                    <div>
-                      <div className="font-medium text-slate-800">{option ? processOptionLabel(option) : key}</div>
-                      <div className="text-xs text-slate-500">
-                        {option ? `${option.defaultDurationDays} gün yerine ` : ''}{days} gün
+              <div className="mt-2 space-y-1.5">
+                {Object.keys(durationOverrides).length === 0 ? (
+                  <p className="text-xs text-slate-500">Henüz süre ayarı yok.</p>
+                ) : Object.entries(durationOverrides).map(([key, days]) => {
+                  const option = durationOptions.find(item => item.key === key);
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm transition-colors hover:border-slate-300">
+                      <div>
+                        <div className="font-medium text-slate-800">{option ? processOptionLabel(option) : key}</div>
+                        <div className="text-xs text-slate-500">
+                          {option ? `${option.defaultDurationDays} gün yerine ` : ''}{days} gün
+                        </div>
                       </div>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => removeDurationOverride(key)}>
+                        Sil
+                      </Button>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => removeDurationOverride(key)}>
-                      Sil
-                    </Button>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>
-              {generate.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              Taslak Üret
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={resetGeneratorInputs}>
-              <Trash2 className="h-4 w-4" />
-              Sıfırla
-            </Button>
-            <span className="text-xs text-slate-500">Taslaklar 30 gün saklanır.</span>
+          <div className="grid gap-x-8 gap-y-4 border-t border-slate-100 pt-4 lg:grid-cols-[1fr_300px]">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <SlidersHorizontal className="h-4 w-4 text-[#003366]" />
+                Aktif Kısıtlar
+              </h2>
+              {activeGeneratorSettings.length === 0 ? (
+                <p className="mt-2 py-2 text-sm text-slate-500">Henüz ek kısıt yok.</p>
+              ) : (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {activeGeneratorSettings.map(setting => (
+                    <div key={setting.key} className="rounded-lg border border-slate-200 px-2.5 py-2 transition-colors hover:border-slate-300 hover:bg-slate-50/60">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <Badge variant={setting.badgeVariant}>{setting.badgeLabel}</Badge>
+                          <p className="mt-1 text-xs font-semibold text-slate-800">{setting.title}</p>
+                          <p className="text-xs text-slate-700">{setting.summary}</p>
+                          {setting.detailLines.length > 0 && (
+                            <div className="mt-1 grid gap-0.5 text-[11px] text-slate-500">
+                              {setting.detailLines.map(line => (
+                                <div key={`${setting.key}:${line}`}>{line}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (setting.removeKind === 'constraint') {
+                              removeConstraintAt(setting.removeIndex);
+                              return;
+                            }
+                            if (setting.removeKey)
+                              removeDurationOverride(setting.removeKey);
+                          }}
+                        >
+                          Sil
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="lg:border-l lg:border-slate-100 lg:pl-8">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[#003366]">
+                <Info className="h-3.5 w-3.5" />
+                Yönetmelik Kontrolü
+              </div>
+              <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
+                <div>Normal: 14 hafta ders, sınavlarla 16 hafta. Yaz: 7 hafta.</div>
+                <div>Çekilme/dondurma: 7. hafta. Sınav sonuçları: 10 iş günü.</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Aktif Kısıtlar</h2>
-          <div className="mt-2 space-y-1.5">
-            {activeGeneratorSettings.length === 0 ? (
-              <p className="text-sm text-slate-500">Henüz ek kısıt yok.</p>
-            ) : activeGeneratorSettings.map(setting => (
-              <div key={setting.key} className="rounded-lg border border-slate-200 px-2.5 py-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Badge variant={setting.badgeVariant}>{setting.badgeLabel}</Badge>
-                    <p className="mt-1 text-xs font-semibold text-slate-800">{setting.title}</p>
-                    <p className="text-xs text-slate-700">{setting.summary}</p>
-                    {setting.detailLines.length > 0 && (
-                      <div className="mt-1 grid gap-0.5 text-[11px] text-slate-500">
-                        {setting.detailLines.map(line => (
-                          <div key={`${setting.key}:${line}`}>{line}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (setting.removeKind === 'constraint') {
-                        removeConstraintAt(setting.removeIndex);
-                        return;
-                      }
-                      if (setting.removeKey)
-                        removeDurationOverride(setting.removeKey);
-                    }}
-                  >
-                    Sil
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-3 border-t border-cyan-200 pt-2 text-sm text-cyan-900">
-            <div className="text-xs font-semibold">Yönetmelik Kontrolü</div>
-            <div className="mt-1 space-y-0.5 text-[11px]">
-              <div>Normal: 14 hafta ders, sınavlarla 16 hafta. Yaz: 7 hafta.</div>
-              <div>Çekilme/dondurma: 7. hafta. Sınav sonuçları: 10 iş günü.</div>
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50/60 px-4 py-3">
+          <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>
+            {generate.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+            Taslak Üret
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={resetGeneratorInputs}>
+            <Trash2 className="h-4 w-4" />
+            Sıfırla
+          </Button>
+          <span className="text-xs text-slate-500">Taslaklar 30 gün saklanır.</span>
         </div>
       </div>
     );
@@ -326,7 +339,7 @@ export default function AcademicCalendarGeneratorPage() {
   function renderDraftTab() {
     if (!calendar) {
       return (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
           Henüz taslak yok. "Kısıtlar & Üret" sekmesinden bir taslak oluşturun.
         </div>
       );
@@ -338,7 +351,7 @@ export default function AcademicCalendarGeneratorPage() {
 
         <div className="grid gap-3 lg:grid-cols-3 items-start">
           <div className="space-y-3 lg:col-span-2">
-            <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">Taslak #{activeDraftId}</h2>
@@ -423,7 +436,7 @@ export default function AcademicCalendarGeneratorPage() {
                         type="button"
                         onClick={() => selectEvent(ev)}
                         className={cn(
-                          'relative grid w-full grid-cols-[minmax(0,1fr)_96px_120px] items-center gap-1 border-t px-2 py-1.5 text-left text-sm transition-all duration-150 hover:bg-slate-100 sm:grid-cols-[minmax(0,1.5fr)_130px_140px]',
+                          'relative grid w-full grid-cols-[minmax(0,1fr)_96px_120px] items-center gap-1 border-t px-2 py-1.5 text-left text-sm transition-all duration-150 hover:bg-[#003366]/5 sm:grid-cols-[minmax(0,1.5fr)_130px_140px]',
                           isSelected
                             ? 'z-10 border-transparent bg-primary/10 ring-2 ring-inset ring-primary shadow-sm'
                             : 'border-slate-100',
@@ -452,8 +465,11 @@ export default function AcademicCalendarGeneratorPage() {
           </div>
 
           <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">Tarih Düzenleme</h2>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Save className="h-4 w-4 text-[#003366]" />
+                Tarih Düzenleme
+              </h2>
               {!selectedEvent ? (
                 <p className="mt-2 text-sm text-slate-500">Bir etkinlik seçin, tarihi değiştirin ve zincirleme kaydırmayı ön izleyin.</p>
               ) : !canEditSelectedEvent ? (
@@ -516,22 +532,28 @@ export default function AcademicCalendarGeneratorPage() {
     return (
       <>
         {termAlignment.hasMismatch && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 shadow-sm">
-            <h2 className="text-sm font-semibold text-red-900">Dönem uyumsuzluğu</h2>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 shadow-sm">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-red-900">
+              <Info className="h-4 w-4" />
+              Dönem uyumsuzluğu
+            </h2>
             <p className="mt-1 text-xs leading-5 text-red-800">
               {termAlignment.message}
             </p>
           </div>
         )}
 
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Zincirleme Kaydırma Farkı</h2>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <GitBranch className="h-4 w-4 text-[#003366]" />
+            Zincirleme Kaydırma Farkı
+          </h2>
           {whatIfDiffs.length === 0 ? (
             <p className="mt-1 text-xs text-slate-500">Hesaplanmış fark yok.</p>
           ) : (
             <div className="mt-3 space-y-2">
               {whatIfDiffs.map(({ next, prev }) => (
-                <div key={next.draftEventId} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
+                <div key={next.draftEventId} className="rounded-lg border border-slate-200 px-3 py-2 text-xs transition-colors hover:border-slate-300 hover:bg-slate-50/60">
                   <div className="font-semibold text-slate-800">{displayText(next.title)}</div>
                   <div className="mt-1 text-slate-500">
                     {fmt(prev?.startDate)} -&gt; {fmt(next.startDate)}
@@ -542,10 +564,13 @@ export default function AcademicCalendarGeneratorPage() {
           )}
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="rounded-xl border border-[#003366]/20 bg-white p-3 shadow-sm ring-1 ring-[#003366]/5">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Onayla ve kaydet</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <CheckCircle2 className="h-4 w-4 text-[#003366]" />
+                Onayla ve kaydet
+              </h2>
               <p className="mt-0.5 max-w-md text-xs leading-5 text-slate-600">
                 Taslak onaylandığında eski takvim oluşturucu kayıtları temizlenir, bu etkinlikler yazılır.
                 {forceOverwrite ? ' Yayınlanmış dönemlerin üzerine yazma açık.' : ' Yayınlanmış dönem varsa işlem reddedilir.'}
@@ -619,31 +644,40 @@ export default function AcademicCalendarGeneratorPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList className="bg-white">
-            <TabsTrigger value="generator">Kısıtlar & Üret</TabsTrigger>
-            <TabsTrigger value="draft">Taslak & Zincirleme</TabsTrigger>
-            <TabsTrigger value="holidays">Tatil Tanımları</TabsTrigger>
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+          <TabsList className="h-auto gap-1 bg-slate-100 p-1">
+            <TabsTrigger value="generator" className="gap-1.5 px-3 py-1.5 text-slate-600 data-[state=active]:bg-[#003366] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <Wand2 className="h-3.5 w-3.5" />
+              Kısıtlar & Üret
+            </TabsTrigger>
+            <TabsTrigger value="draft" className="gap-1.5 px-3 py-1.5 text-slate-600 data-[state=active]:bg-[#003366] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <GitBranch className="h-3.5 w-3.5" />
+              Taslak & Zincirleme
+            </TabsTrigger>
+            <TabsTrigger value="holidays" className="gap-1.5 px-3 py-1.5 text-slate-600 data-[state=active]:bg-[#003366] data-[state=active]:text-white data-[state=active]:shadow-sm">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Tatil Tanımları
+            </TabsTrigger>
           </TabsList>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowDraftHistory(true)}>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setShowDraftHistory(true)}>
+              <History className="h-4 w-4" />
               Taslak geçmişi
             </Button>
           </div>
         </div>
 
-        <ErrorDialog message={errorNotice} onClose={() => setErrorNotice(null)} />
-
-        <NoticeToast notice={notice} tone={noticeTone} />
-
-        <TabsContent value="generator">{renderGeneratorTab()}</TabsContent>
-        <TabsContent value="draft">{renderDraftTab()}</TabsContent>
-        <TabsContent value="holidays">
+        <TabsContent value="generator" className="mt-0 flex min-h-0 flex-1 flex-col">{renderGeneratorTab()}</TabsContent>
+        <TabsContent value="draft" className="mt-0 min-h-0 flex-1 overflow-auto bg-slate-50/70 p-3">{renderDraftTab()}</TabsContent>
+        <TabsContent value="holidays" className="mt-0 flex min-h-0 flex-1 flex-col">
           <HolidaysTab isLoading={holidays.isLoading} holidays={visibleHolidayDefinitions} />
         </TabsContent>
       </Tabs>
+
+      <ErrorDialog message={errorNotice} onClose={() => setErrorNotice(null)} />
+      <NoticeToast notice={notice} tone={noticeTone} />
 
       <DraftHistoryDialog
         open={showDraftHistory}

@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { CalendarDays } from 'lucide-react';
 import { CalendarVisualizer, type VisualizerEvent } from '@/components/CalendarVisualizer';
 import { academicYearStart, dateInput } from '@/lib/calendarGenerator/dates';
 import { isEditableDraftEvent } from '@/lib/calendarGenerator/eventRules';
@@ -58,8 +59,11 @@ export function DraftMiniCalendar({
   const calendarYearStart = academicYearStart(current.academicYear);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900 mb-3">Takvim Görünümü</h2>
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <CalendarDays className="h-4 w-4 text-[#003366]" />
+        Takvim Görünümü
+      </h2>
       <CalendarVisualizer
         events={eventsToRender}
         compact={true}

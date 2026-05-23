@@ -1,3 +1,4 @@
+import { CalendarRange } from 'lucide-react';
 import { fmt, utcDate } from '@/lib/calendarGenerator/dates';
 import { SEMESTERS } from '@/lib/calendarGenerator/semesters';
 import { buildExamDayCounts, buildSemesterWeekAnalyses } from '@/lib/calendarGenerator/eventRules';
@@ -13,8 +14,11 @@ export function TermSummaryCards({ current }: TermSummaryCardsProps) {
   const analysesBySemester = new Map(analyses.map(analysis => [analysis.semester, analysis]));
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900 mb-3">Dönem Özeti</h2>
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <CalendarRange className="h-4 w-4 text-[#003366]" />
+        Dönem Özeti
+      </h2>
       <div className="overflow-x-auto rounded-md border border-slate-200">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">

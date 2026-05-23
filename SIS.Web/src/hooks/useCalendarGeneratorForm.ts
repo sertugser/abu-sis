@@ -206,13 +206,21 @@ export function useCalendarGeneratorForm(notices: CalendarNotices) {
   }
 
   function handleDurationEventChange(key: string) {
-    const option = durationOptions.find(item => item.key === key);
     setDurationEventKey(key);
+    if (!key) {
+      setDurationDays('');
+      return;
+    }
+    const option = durationOptions.find(item => item.key === key);
     setDurationDays(String(durationOverrides[key] ?? option?.defaultDurationDays ?? 1));
   }
 
   function handlePinEventChange(key: string) {
     setPinEventKey(key);
+    if (!key) {
+      setPinDate('');
+      setPinEndDate('');
+    }
   }
 
   function handlePinDateChange(value: string) {

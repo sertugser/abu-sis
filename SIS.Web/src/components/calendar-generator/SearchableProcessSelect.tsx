@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { filterProcessOptions, processOptionLabel } from '@/lib/calendarGenerator/processOptions';
@@ -41,11 +42,33 @@ export function SearchableProcessSelect({
         type="button"
         disabled={disabled}
         onClick={() => setOpen(prev => !prev)}
-        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className={cn(
+          'flex h-10 w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 text-left text-sm text-slate-800 transition-colors hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#003366]/30 disabled:cursor-not-allowed disabled:opacity-60',
+          open ? 'border-[#003366]/40' : 'border-slate-200',
+          selected ? 'pr-9' : '',
+        )}
       >
-        <span className="min-w-0 truncate">{selected ? processOptionLabel(selected) : placeholder}</span>
-        <span className="shrink-0 text-slate-500">v</span>
+        <span className={cn('min-w-0 truncate', !selected && 'text-slate-400')}>
+          {selected ? processOptionLabel(selected) : placeholder}
+        </span>
+        {!selected && <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />}
       </button>
+
+      {selected && !disabled && (
+        <button
+          type="button"
+          onClick={event => {
+            event.stopPropagation();
+            onChange('');
+            setQuery('');
+          }}
+          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Seçimi temizle"
+          title="Seçimi temizle"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
 
       {open && (
         <div className="absolute left-0 right-0 top-11 z-30 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
