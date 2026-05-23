@@ -153,6 +153,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
         var oldEnd = target.EndDate ?? target.StartDate;
         var newStart = EnsureUtcDate(dto.StartDate);
         var newEnd = EnsureUtcDate(dto.EndDate ?? dto.StartDate);
+        EnsureValidDateRange(newStart, newEnd);
 
         events = events.Select(e => e.DraftEventId == draftEventId
                 ? e with
@@ -206,6 +207,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
             throw new InvalidOperationException("Resmi tatil ve bloklayici ozel gunler icin what-if tarih degisikligi yapilamaz.");
         var newStart = EnsureUtcDate(request.StartDate);
         var newEnd = EnsureUtcDate(request.EndDate ?? request.StartDate);
+        EnsureValidDateRange(newStart, newEnd);
 
         events = events.Select(e => e.DraftEventId == request.DraftEventId
                 ? e with { StartDate = newStart, EndDate = newStart.Date == newEnd.Date ? null : newEnd }
@@ -268,6 +270,7 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
 
         var newStart = EnsureUtcDate(startDate);
         var newEnd = EnsureUtcDate(endDate ?? startDate);
+        EnsureValidDateRange(newStart, newEnd);
 
         events = events.Select(e => e.DraftEventId == draftEventId
                 ? e with { StartDate = newStart, EndDate = newStart.Date == newEnd.Date ? null : newEnd }

@@ -763,17 +763,6 @@ public class AcademicCalendarService : IAcademicCalendarService
         return EnsureUtcDate(trimmedEnd);
     }
 
-    private static bool ContainsWeekend(DateTime startDate, DateTime endDate)
-    {
-        for (var day = startDate.Date; day <= endDate.Date; day = day.AddDays(1))
-        {
-            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                return true;
-        }
-
-        return false;
-    }
-
     private static void EnsureNoBlockingOverlap(IEnumerable<TermCalendarEvent> events, TermCalendarEvent movingEvent, DateTime startDate, DateTime endDate)
     {
         var blockingEvent = events

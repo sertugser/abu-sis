@@ -1135,6 +1135,14 @@ public partial class CalendarGeneratorService
     private static DateTime EnsureUtcDate(DateTime date) => DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
     private static DateTime Utc(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
 
+    // API sınırı doğrulaması: dışarıdan gelen tarih düzenlemelerinde bitiş, başlangıçtan önce olamaz.
+    // (Frontend de engelliyor; bu sunucu tarafı son savunma — ham/ters tarih event'i oluşmasını önler.)
+    private static void EnsureValidDateRange(DateTime start, DateTime end)
+    {
+        if (end.Date < start.Date)
+            throw new InvalidOperationException("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+    }
+
     private static int ParseAcademicYearStart(string academicYear)
     {
         var parts = academicYear.Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
