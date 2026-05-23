@@ -17,6 +17,8 @@ interface Props {
   onBulkOpen: (request: BulkOpenCoursesRequest) => Promise<unknown>;
   isOpening?: boolean;
   defaultCapacity?: number;
+  // Permission gating: when false, the bulk-open action button is hidden.
+  canBulkOpen?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function PoolCandidatesDialog({
   onBulkOpen,
   isOpening = false,
   defaultCapacity = 40,
+  canBulkOpen = true,
 }: Props) {
   const candidatesQuery = usePoolCandidates(open ? slot?.poolId ?? null : null, termId);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -179,13 +182,15 @@ export function PoolCandidatesDialog({
             <Button variant="outline" size="sm" onClick={() => handleClose(false)}>
               Kapat
             </Button>
-            <Button
-              size="sm"
-              disabled={selectedIds.size === 0 || isOpening}
-              onClick={handleOpenSelected}
-            >
-              {isOpening ? 'Açılıyor...' : `Seçilenleri Aç (${selectedIds.size})`}
-            </Button>
+            {canBulkOpen && (
+              <Button
+                size="sm"
+                disabled={selectedIds.size === 0 || isOpening}
+                onClick={handleOpenSelected}
+              >
+                {isOpening ? 'Açılıyor...' : `Seçilenleri Aç (${selectedIds.size})`}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>

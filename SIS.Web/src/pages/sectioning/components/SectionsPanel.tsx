@@ -11,6 +11,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { DepartmentSectionClassList } from '@/types/academicOperations';
 import type { CourseGroup } from '../types';
 import { EmptyMessage } from './EmptyMessage';
@@ -44,6 +45,10 @@ export function SectionsPanel({
   onCloseSection,
   onReactivateSection,
 }: SectionsPanelProps) {
+  const { hasPermission } = usePermissions();
+  const canAddSection = hasPermission('menu.ders-acma-islemleri.open');
+  const canBulkAssign = hasPermission('menu.ogretim-elemani-atama.bulk-assign');
+  const canCloseAll = hasPermission('menu.ders-acma-islemleri.close-all');
   const hasSections = !!course && course.sections.length > 0;
 
   return (
@@ -58,36 +63,42 @@ export function SectionsPanel({
           )}
         </span>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs"
-            disabled={!course}
-            onClick={onAddSection}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Yeni Şube
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs"
-            disabled={!hasSections}
-            onClick={onBulkAssignInstructor}
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Öğretim Elemanı Seç
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs text-red-700 hover:text-red-800"
-            disabled={!hasSections}
-            onClick={onDeleteAllSections}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Tüm Şubelerini Sil
-          </Button>
+          {canAddSection && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              disabled={!course}
+              onClick={onAddSection}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Yeni Şube
+            </Button>
+          )}
+          {canBulkAssign && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              disabled={!hasSections}
+              onClick={onBulkAssignInstructor}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Öğretim Elemanı Seç
+            </Button>
+          )}
+          {canCloseAll && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs text-red-700 hover:text-red-800"
+              disabled={!hasSections}
+              onClick={onDeleteAllSections}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Tüm Şubelerini Sil
+            </Button>
+          )}
         </div>
       </div>
       <div className="max-h-[280px] min-h-[200px] overflow-y-auto">
@@ -152,6 +163,10 @@ function SectionRow({
   onCloseSection,
   onReactivateSection,
 }: SectionRowProps) {
+  const { hasPermission } = usePermissions();
+  const canEdit = hasPermission('menu.ders-acma-islemleri.edit');
+  const canCloseSection = hasPermission('menu.ders-acma-islemleri.close-section');
+  const canReactivate = hasPermission('menu.ders-acma-islemleri.reactivate');
   return (
     <TableRow
       onClick={onSelect}
@@ -177,26 +192,32 @@ function SectionRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
-            <DropdownMenuItem onClick={onAssignInstructor}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Hoca Ata / Değiştir
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onEditCapacity}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Kontenjan Düzenle
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {section.isActive ? (
-              <DropdownMenuItem onClick={onCloseSection} className="text-red-700 focus:text-red-700">
-                <XCircle className="mr-2 h-4 w-4" />
-                Şubeyi Kapat
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onClick={onReactivateSection}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Şubeyi Yeniden Aç
+            {canEdit && (
+              <DropdownMenuItem onClick={onAssignInstructor}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Hoca Ata / Değiştir
               </DropdownMenuItem>
             )}
+            {canEdit && (
+              <DropdownMenuItem onClick={onEditCapacity}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Kontenjan Düzenle
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            {section.isActive
+              ? canCloseSection && (
+                  <DropdownMenuItem onClick={onCloseSection} className="text-red-700 focus:text-red-700">
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Şubeyi Kapat
+                  </DropdownMenuItem>
+                )
+              : canReactivate && (
+                  <DropdownMenuItem onClick={onReactivateSection}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Şubeyi Yeniden Aç
+                  </DropdownMenuItem>
+                )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>

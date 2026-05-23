@@ -34,6 +34,8 @@ interface Props {
   filtersSlot?: ReactNode;
   onOpenFreeCourseDialog?: () => void;
   freeDialogDisabled?: boolean;
+  // Permission gating: when false, course-opening action buttons are hidden.
+  canOpen?: boolean;
 }
 
 const HEADER_GRID =
@@ -59,6 +61,7 @@ export function CurriculumPanel({
   filtersSlot,
   onOpenFreeCourseDialog,
   freeDialogDisabled = false,
+  canOpen = true,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTopShadow, setShowTopShadow] = useState(false);
@@ -195,7 +198,7 @@ export function CurriculumPanel({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {onOpenFreeCourseDialog && (
+          {canOpen && onOpenFreeCourseDialog && (
             <Button
               type="button"
               variant="ghost"
@@ -209,21 +212,23 @@ export function CurriculumPanel({
               Serbest Ders Aç
             </Button>
           )}
-          <Button
-            size="sm"
-            className="h-7 text-xs px-3"
-            onClick={onOpenSelected}
-            disabled={selectableCount === 0}
-            title="Seçili dersleri aktif döneme aç"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Seçilenleri Aç
-            {selectableCount > 0 && (
-              <span className="ml-1.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
-                {selectableCount}
-              </span>
-            )}
-          </Button>
+          {canOpen && (
+            <Button
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={onOpenSelected}
+              disabled={selectableCount === 0}
+              title="Seçili dersleri aktif döneme aç"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Seçilenleri Aç
+              {selectableCount > 0 && (
+                <span className="ml-1.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {selectableCount}
+                </span>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* Filtreler — parent'tan render edilen filter bar */}

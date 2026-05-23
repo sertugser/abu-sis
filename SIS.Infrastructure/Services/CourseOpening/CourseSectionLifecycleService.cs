@@ -358,7 +358,11 @@ public class CourseSectionLifecycleService(
         var registeredCount = await _helpers.GetRegisteredCountAsync(section.Id, ct);
         var draftOrPendingCount = await _helpers.GetDraftOrPendingCountAsync(section.Id, ct);
 
-        if (request.InstructorId.HasValue)
+        if (request.ClearInstructor)
+        {
+            section.InstructorId = null;
+        }
+        else if (request.InstructorId.HasValue)
         {
             await _helpers.ValidateInstructorAssignmentAsync(request.InstructorId.Value, section.Course.DepartmentId, ct);
             await ValidateInstructorWeeklyLoadLimitAsync(

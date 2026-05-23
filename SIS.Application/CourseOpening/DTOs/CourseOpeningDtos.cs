@@ -218,6 +218,13 @@ public class UpdateOpenedSectionRequest
     public int? Capacity { get; set; }
     public int? InternalQuota { get; set; }
     public int? ExternalQuota { get; set; }
+
+    /// <summary>
+    /// true ise şubenin öğretim elemanı ataması kaldırılır (InstructorId = null).
+    /// InstructorId değerini göz ardı eder. "Don't touch" (null InstructorId) ile
+    /// "kaldır" arasındaki belirsizliği ortadan kaldırmak için açık bayrak.
+    /// </summary>
+    public bool ClearInstructor { get; set; }
 }
 
 // ── Bulk Assign ──
@@ -231,6 +238,26 @@ public class SectionInstructorAssignment
 {
     public int SectionId { get; set; }
     public int InstructorId { get; set; }
+}
+
+// ── Geçmiş Dönemden Hoca Kopyalama (Öğretim Elemanı Atama) ──
+
+public class CopyInstructorAssignmentsRequest
+{
+    public int DepartmentId { get; set; }
+    public int SourceTermId { get; set; }
+    public int TargetTermId { get; set; }
+}
+
+public class CopyInstructorAssignmentsResultDto
+{
+    /// <summary>Kaynak dönemden hoca atanan (boş) şube sayısı.</summary>
+    public int AssignedCount { get; set; }
+    /// <summary>Kaynak dönemde karşılığı bulunamadığı için atlanan boş şube sayısı.</summary>
+    public int SkippedNoSourceCount { get; set; }
+    /// <summary>Atama denenip hata alan şube sayısı (örn. haftalık yük limiti).</summary>
+    public int FailedCount { get; set; }
+    public List<string> Errors { get; set; } = [];
 }
 
 public class BulkAssignInstructorResultDto

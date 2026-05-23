@@ -15,10 +15,10 @@ import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
   useAdminProgramsByStructure,
 } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import {
   useBulkOpenCourses,
   useCloseSection,
@@ -35,14 +35,19 @@ import {
   useUpdateOpenedSection,
 } from '../hooks/useCourseOpening';
 import { useDepartmentForecast } from '../hooks/useForecast';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { CourseDemandForecastDto } from '../types/forecast';
 import type { CurriculumCourseForOpeningDto, PoolSlotForOpeningDto } from '../types/courseOpening';
 
 export default function CourseOpeningPage() {
+  const { hasPermission } = usePermissions();
+  const canOpenCourse = hasPermission('menu.ders-acma-islemleri.open');
+  const canBulkOpen = hasPermission('menu.ders-acma-islemleri.bulk-open');
+  const canEditSection = hasPermission('menu.ders-acma-islemleri.edit');
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
   const { data: allTerms } = useAdminTerms();
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
   const accessibleDepartments = useMemo(
     () => contextQuery.data?.accessibleDepartments ?? [],
@@ -380,6 +385,7 @@ export default function CourseOpeningPage() {
           }
           onOpenFreeCourseDialog={() => setFreeCourseDialogOpen(true)}
           freeDialogDisabled={!deptId || !targetTermId || isTargetTermHistorical}
+          canOpen={canOpenCourse}
         />
         <div className="bg-gray-200 w-px hidden lg:block" />
         <OpenedCoursesPanel
@@ -406,6 +412,7 @@ export default function CourseOpeningPage() {
           externalCourses={externalCoursesQuery.data}
           onOpenExternalDrawer={() => setExternalDrawerOpen(true)}
           readOnly={isTargetTermHistorical}
+          canEdit={canEditSection}
           filtersSlot={
             <OpenedCoursesPanelFilters
               faculties={faculties ?? []}
@@ -446,6 +453,7 @@ export default function CourseOpeningPage() {
             });
           }}
           isOpening={openMutation.isPending}
+          canOpen={canOpenCourse}
         />
       )}
       {freeCourseDialogOpen && deptId && targetTermId && (
@@ -470,6 +478,7 @@ export default function CourseOpeningPage() {
         onOpenChange={(o) => !o && setActivePoolSlot(null)}
         onBulkOpen={(req) => bulkMutation.mutateAsync(req)}
         isOpening={bulkMutation.isPending}
+        canBulkOpen={canBulkOpen}
       />
     </div>
   );

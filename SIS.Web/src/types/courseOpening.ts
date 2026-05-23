@@ -164,12 +164,29 @@ export interface UpdateOpenedSectionRequest {
   capacity?: number;
   internalQuota?: number | null;
   externalQuota?: number | null;
+  /** true ise şubenin hoca ataması kaldırılır (instructorId göz ardı edilir). */
+  clearInstructor?: boolean;
 }
 
 // ── Bulk Assign ──
 
 export interface BulkAssignInstructorRequest {
   assignments: { sectionId: number; instructorId: number }[];
+}
+
+// ── Geçmiş Dönemden Hoca Kopyalama ──
+
+export interface CopyInstructorAssignmentsRequest {
+  departmentId: number;
+  sourceTermId: number;
+  targetTermId: number;
+}
+
+export interface CopyInstructorAssignmentsResultDto {
+  assignedCount: number;
+  skippedNoSourceCount: number;
+  failedCount: number;
+  errors: string[];
 }
 
 export interface BulkAssignInstructorResultDto {

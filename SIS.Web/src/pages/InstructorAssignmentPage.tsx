@@ -4,11 +4,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { InstructorListPanel } from '../components/instructor-assignment/InstructorListPanel';
 import { SectionAssignmentTable } from '../components/instructor-assignment/SectionAssignmentTable';
+import { CopyPreviousTermDialog } from '../components/instructor-assignment/CopyPreviousTermDialog';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import { useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import {
   useBulkAssignInstructor,
+  useCopyInstructorAssignments,
   useDepartmentInstructors,
   useOpenedCourses,
   useUpdateOpenedSection,
@@ -17,7 +20,7 @@ import {
 export default function InstructorAssignmentPage() {
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
   const accessibleDepartments = contextQuery.data?.accessibleDepartments;
   const departments = useMemo(() => accessibleDepartments ?? [], [accessibleDepartments]);
@@ -27,6 +30,7 @@ export default function InstructorAssignmentPage() {
   const [selectedInstructorId, setSelectedInstructorId] = useState<number | null>(null);
   const [selectedSectionIds, setSelectedSectionIds] = useState<Set<number>>(new Set());
   const [inlineAssignments, setInlineAssignments] = useState<Map<number, number>>(new Map());
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const deptId = selectedDeptId ?? departments[0]?.departmentId ?? null;
@@ -44,6 +48,7 @@ export default function InstructorAssignmentPage() {
   const instructorsQuery = useDepartmentInstructors(deptId, termId);
   const bulkAssignMut = useBulkAssignInstructor(deptId ?? 0, termId ?? 0);
   const updateMut = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
+  const copyMut = useCopyInstructorAssignments(deptId ?? 0, termId ?? 0);
 
   const availableFaculties = useMemo(() => {
     if (!faculties || !structureDepartments) return [];
@@ -147,6 +152,31 @@ export default function InstructorAssignmentPage() {
     );
   }, [selectedInstructorId, selectedSectionIds, bulkAssignMut]);
 
+  const handleUnassign = useCallback(
+    (sectionId: number) => {
+      updateMut.mutate(
+        { sectionId, clearInstructor: true },
+        {
+          onSuccess: () => {
+            setInlineAssignments(prev => {
+              const next = new Map(prev);
+              next.delete(sectionId);
+              return next;
+            });
+            setToast({ type: 'success', message: 'Öğretim üyesi ataması kaldırıldı.' });
+          },
+          onError: (err: unknown) => {
+            setToast({
+              type: 'error',
+              message: err instanceof Error ? err.message : 'Atama kaldırılamadı.',
+            });
+          },
+        },
+      );
+    },
+    [updateMut],
+  );
+
   const handleClearInvisibleSelections = useCallback((visibleIds: number[]) => {
     const visibleSet = new Set(visibleIds);
     setSelectedSectionIds(prev => {
@@ -157,12 +187,23 @@ export default function InstructorAssignmentPage() {
   }, []);
 
   const handleCopyPreviousTerm = useCallback(() => {
-    // D2: Özellik henüz bu sayfada yok — ayrı bir akış "Dönem Programı Aktarım" sayfasında mevcut
-    setToast({
-      type: 'error',
-      message: 'Bu sayfada önceki dönemden kopyalama yok. Dönem Programı Aktarım sayfasını kullanın.',
-    });
-  }, []);
+    if (!termId) {
+      setToast({ type: 'error', message: 'Aktif dönem bulunamadı.' });
+      return;
+    }
+    setCopyDialogOpen(true);
+  }, [termId]);
+
+  const handleCopySubmit = useCallback(
+    (sourceTermId: number) => {
+      if (!deptId || !termId) return;
+      copyMut.mutate(
+        { departmentId: deptId, sourceTermId, targetTermId: termId },
+        { onSuccess: () => setCopyDialogOpen(false) },
+      );
+    },
+    [copyMut, deptId, termId],
+  );
 
   if (contextQuery.isLoading) {
     return (
@@ -216,6 +257,7 @@ export default function InstructorAssignmentPage() {
             selectedInstructorId={selectedInstructorId}
             inlineAssignments={inlineAssignments}
             onInlineAssign={handleInlineAssign}
+            onUnassign={handleUnassign}
             selectedSectionIds={selectedSectionIds}
             onClearInvisibleSelections={handleClearInvisibleSelections}
             onToggleSection={toggleSection}
@@ -227,6 +269,14 @@ export default function InstructorAssignmentPage() {
           />
         </div>
       </div>
+
+      <CopyPreviousTermDialog
+        open={copyDialogOpen}
+        currentTermId={termId}
+        isSubmitting={copyMut.isPending}
+        onClose={() => setCopyDialogOpen(false)}
+        onSubmit={handleCopySubmit}
+      />
     </div>
   );
 }

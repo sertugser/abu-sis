@@ -15,6 +15,7 @@ interface Props {
   selectedInstructorId: number | null;
   inlineAssignments: Map<number, number>;
   onInlineAssign: (sectionId: number, instructorId: number) => void;
+  onUnassign: (sectionId: number) => void;
   selectedSectionIds: Set<number>;
   onClearInvisibleSelections: (visibleIds: number[]) => void;
   onToggleSection: (sectionId: number) => void;
@@ -31,6 +32,7 @@ export function SectionAssignmentTable({
   selectedInstructorId,
   inlineAssignments,
   onInlineAssign,
+  onUnassign,
   selectedSectionIds,
   onClearInvisibleSelections,
   onToggleSection,
@@ -139,7 +141,10 @@ export function SectionAssignmentTable({
             {filtered.map(section => {
               const isChecked = selectedSectionIds.has(section.sectionId);
               const noInstructor = !section.instructorId;
-              const inlineVal = inlineAssignments.get(section.sectionId) ?? '';
+              // Optimistic inline atama varsa onu, yoksa sunucudaki mevcut hocayı yansıt.
+              const effectiveInstructorId =
+                inlineAssignments.get(section.sectionId) ?? section.instructorId ?? null;
+              const selectVal = effectiveInstructorId == null ? '' : String(effectiveInstructorId);
 
               return (
                 <tr
@@ -172,12 +177,16 @@ export function SectionAssignmentTable({
                   <td className="p-2">
                     <select
                       className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs"
-                      value={inlineVal}
+                      value={selectVal}
                       onChange={e => {
-                        if (e.target.value) onInlineAssign(section.sectionId, Number(e.target.value));
+                        const raw = e.target.value;
+                        const next = raw ? Number(raw) : null;
+                        if (next === effectiveInstructorId) return;
+                        if (next !== null) onInlineAssign(section.sectionId, next);
+                        else onUnassign(section.sectionId);
                       }}
                     >
-                      <option value="">-- Seç --</option>
+                      <option value="">{effectiveInstructorId != null ? '— Hocayı Kaldır —' : '-- Seç --'}</option>
                       {instructors.map(i => (
                         <option key={i.instructorId} value={i.instructorId}>
                           {i.fullName}
@@ -225,7 +234,13 @@ export function SectionAssignmentTable({
           <UserPlus className="h-3.5 w-3.5 mr-1.5" />
           Seçilenlere Ata ({selectedSectionIds.size})
         </Button>
-        <Button size="sm" variant="outline" className="text-xs h-8" onClick={onCopyPreviousTerm} disabled title="Yakın zamanda eklenecek">
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs h-8"
+          onClick={onCopyPreviousTerm}
+          title="Seçilen kaynak dönemin hoca atamalarını, bu dönemin atanmamış şubelerine kopyalar"
+        >
           <Copy className="h-3.5 w-3.5 mr-1.5" />
           Önceki Dönemden Kopyala
         </Button>

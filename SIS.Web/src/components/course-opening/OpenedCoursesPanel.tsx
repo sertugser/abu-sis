@@ -58,6 +58,8 @@ interface Props {
   onOpenExternalDrawer?: () => void;
   // Geçmiş dönem read-only
   readOnly?: boolean;
+  // Permission gating: hide section add/edit actions when lacking permission.
+  canEdit?: boolean;
 }
 
 interface CourseGroup {
@@ -92,6 +94,7 @@ export function OpenedCoursesPanel({
   externalCourses,
   onOpenExternalDrawer,
   readOnly = false,
+  canEdit = true,
 }: Props) {
   const [sortField, _setSortField] = useState<SortField>('code');
   const [sortDir, _setSortDir] = useState<SortDir>('asc');
@@ -527,6 +530,7 @@ export function OpenedCoursesPanel({
         workloadData={workloadData}
         onInstructorSelect={onInstructorSelect}
         readOnly={readOnly}
+        canEdit={canEdit}
       />
     </div>
   );

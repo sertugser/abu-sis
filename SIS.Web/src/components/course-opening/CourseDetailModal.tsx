@@ -30,6 +30,8 @@ interface CourseDetailModalProps {
     instructorId?: number;
   }) => void;
   isOpening: boolean;
+  // Permission gating: when false, the open-course action button is hidden.
+  canOpen?: boolean;
 }
 
 export function CourseDetailModal({
@@ -40,6 +42,7 @@ export function CourseDetailModal({
   instructors,
   onOpenCourse,
   isOpening,
+  canOpen = true,
 }: CourseDetailModalProps) {
   const [sectionCount, setSectionCount] = useState(forecast?.recommendedSectionCount ?? 1);
   const [capacity, setCapacity] = useState(
@@ -425,22 +428,24 @@ export function CourseDetailModal({
                 </Select>
               </div>
             </div>
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                disabled={isOpening}
-                onClick={() =>
-                  onOpenCourse({
-                    courseId: course.courseId,
-                    sectionCount,
-                    capacityPerSection: capacity,
-                    instructorId,
-                  })
-                }
-              >
-                {isOpening ? 'Açılıyor...' : 'Bu Dersi Aç'}
-              </Button>
-            </div>
+            {canOpen && (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  disabled={isOpening}
+                  onClick={() =>
+                    onOpenCourse({
+                      courseId: course.courseId,
+                      sectionCount,
+                      capacityPerSection: capacity,
+                      instructorId,
+                    })
+                  }
+                >
+                  {isOpening ? 'Açılıyor...' : 'Bu Dersi Aç'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </ResizableDialogContent>
