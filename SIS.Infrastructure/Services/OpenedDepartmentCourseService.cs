@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.OpenedDepartmentCourses.DTOs;
 using SIS.Application.OpenedDepartmentCourses.Services;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -43,7 +44,8 @@ public class OpenedDepartmentCourseService : IOpenedDepartmentCourseService
         var now = DateTime.UtcNow;
         var term = await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now, ct);
+            .ActiveTerm()
+            .FirstOrDefaultAsync(ct);
 
         if (term is null)
         {

@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -427,7 +428,8 @@ public class SchedulingController : ControllerBase
         var nowSched = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowSched && t.TermEnd >= nowSched, ct);
+            .ActiveTerm()
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task<string> GetInstructorDisplayNameAsync(Domain.Entities.Instructor instructor, CancellationToken ct)

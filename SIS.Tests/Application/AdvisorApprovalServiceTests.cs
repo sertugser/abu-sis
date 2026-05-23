@@ -94,6 +94,7 @@ public class AdvisorApprovalServiceTests : IDisposable
             Name = "2025-2026 Spring",
             Year = 2025,
             TermType = TermType.Spring,
+            IsActivated = true,
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar

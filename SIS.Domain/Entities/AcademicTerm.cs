@@ -28,7 +28,9 @@ public class AcademicTerm
     // SİLİNDİ (Faz 2): RegistrationStart/End, AddDropStart/End, WithdrawalDeadline,
     //                  GradeEntryStart/End + 4 override — TermAcademicCalendar'a taşındı
 
-    public bool IsActivated { get; set; } = true;
+    // Varsayılan KAPALI: yeni dönem otomatik aktif olmaz; admin "Kullanıma Aç" ile açar.
+    // Tek-aktif değişmezi AdminTermService.ActivateTermAsync'te korunur (Proliz/Banner modeli).
+    public bool IsActivated { get; set; } = false;
     public bool IsCancelled { get; set; } = false;
     public YoksisStatus YoksisStatus { get; set; } = YoksisStatus.Inactive;
 
@@ -51,10 +53,13 @@ public class AcademicTerm
     /// </summary>
     public DateTime EffectiveEnd => OverrideEnd ?? TermEnd;
 
+    // Aktiflik manuel "Kullanıma Aç" bayrağına bağlıdır (Proliz/Banner modeli) —
+    // tarih aralığı (TermStart/TermEnd) artık aktifliği BELİRLEMEZ. İşlem pencereleri
+    // (kayıt/ek-bırak/not girişi) ayrıca faz metotlarındaki takvim tarihleriyle kapılanır.
+    // 'now' parametresi imza uyumluluğu için korunur (faz metotları kullanır).
     public TermStatus GetStatus(DateTime now) =>
         IsCancelled ? TermStatus.Cancelled
-        : !IsActivated ? TermStatus.Inactive
-        : (now >= EffectiveStart && now <= EffectiveEnd) ? TermStatus.Active
+        : IsActivated ? TermStatus.Active
         : TermStatus.Inactive;
 
     public bool IsActive(DateTime now) => GetStatus(now) == TermStatus.Active;

@@ -52,6 +52,7 @@ const MONTH_NAMES = [
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
 const MAX_LANES = 4;
+const YEAR_MAX_LANES = 3;
 
 type DragState = {
   eventId: VisualizerEvent['id'];
@@ -545,8 +546,8 @@ export function CalendarVisualizer({
     });
 
     return (
-      <div key={`year-${y}-${m}`} className="min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between bg-[#003366] px-3 py-1.5 text-white">
+      <div key={`year-${y}-${m}`} className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex shrink-0 items-center justify-between bg-[#003366] px-3 py-1.5 text-white">
           <button
             type="button"
             onClick={() => setExpandedMonth({ y, m })}
@@ -564,7 +565,7 @@ export function CalendarVisualizer({
           )}
         </div>
 
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-[9px] font-bold uppercase tracking-wide text-gray-400">
+        <div className="grid shrink-0 grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-[9px] font-bold uppercase tracking-wide text-gray-400">
           {WEEKDAYS.map((day, index) => (
             <div key={day} className={cn('border-r border-gray-100 py-1 last:border-r-0', index >= 5 && 'text-rose-500')}>
               {day.substring(0, 2)}
@@ -574,13 +575,15 @@ export function CalendarVisualizer({
 
         {weeks.map((week, wi) => {
           const { bars, maxLane } = weekData[wi];
+          const visible = bars.filter(b => b.lane < YEAR_MAX_LANES);
+          const overflow = bars.length - visible.length;
           const eventTopBase = 18;
-          const eventH = maxLane * 17;
+          const eventH = Math.min(maxLane, YEAR_MAX_LANES) * 17 + (overflow > 0 ? 12 : 0);
           const cellMinHeight = Math.max(38, eventTopBase + eventH);
 
           return (
-            <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
-              <div className="grid grid-cols-7">
+            <div key={wi} className="relative grow shrink-0 border-b border-gray-100 last:border-b-0 overflow-hidden">
+              <div className="grid h-full grid-cols-7">
                 {week.map((day, di) => {
                   const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
                   const isWeekend = isWeekendDateValue(day.str);
@@ -615,7 +618,7 @@ export function CalendarVisualizer({
                 })}
               </div>
 
-              {bars.map((b, i) => {
+              {visible.map((b, i) => {
                 const s = CAT_STYLE[b.cat];
                 const isDraggable = b.event.draggable === true && !dragDisabled && !!onEventDrop;
 
@@ -654,6 +657,18 @@ export function CalendarVisualizer({
                   </TooltipProvider>
                 );
               })}
+
+              {overflow > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedMonth({ y, m })}
+                  className="absolute left-1 text-[9px] font-bold text-[#003366] transition hover:underline"
+                  style={{ top: `${eventTopBase + YEAR_MAX_LANES * 17}px` }}
+                  title={`${MONTH_NAMES[m]} ${y} ayını büyüt`}
+                >
+                  +{overflow} daha
+                </button>
+              )}
             </div>
           );
         })}
@@ -661,7 +676,8 @@ export function CalendarVisualizer({
     );
   }
 
-  function renderMonth(y: number, m: number) {
+  function renderMonth(y: number, m: number, expanded = false) {
+    const laneCap = expanded ? Number.POSITIVE_INFINITY : MAX_LANES;
     const weeks = buildGrid(y, m);
     const weekData = weeks.map(w => {
       const bars = weekBars(w, renderedEvents);
@@ -692,9 +708,9 @@ export function CalendarVisualizer({
 
         {weeks.map((week, wi) => {
           const { bars, maxLane } = weekData[wi];
-          const visible = bars.filter(b => b.lane < MAX_LANES);
+          const visible = bars.filter(b => b.lane < laneCap);
           const overflow = bars.length - visible.length;
-          const eventH = Math.min(maxLane, MAX_LANES) * 24 + (overflow > 0 ? 16 : 0);
+          const eventH = Math.min(maxLane, laneCap) * 24 + (overflow > 0 ? 16 : 0);
           const eventTopBase = compact ? 28 : 36;
           const cellMinHeight = Math.max(compact ? 56 : 96, eventTopBase + eventH);
 
@@ -788,7 +804,7 @@ export function CalendarVisualizer({
               {overflow > 0 && (
                 <div
                   className="absolute left-1 sm:left-2 text-[10px] sm:text-xs font-semibold text-[#003366]"
-                  style={{ top: `${eventTopBase + MAX_LANES * 24}px` }}
+                  style={{ top: `${eventTopBase + laneCap * 24}px` }}
                 >
                   +{overflow} daha
                 </div>
@@ -880,7 +896,7 @@ export function CalendarVisualizer({
             </div>
           </div>
           <div className="bg-slate-50 p-2">
-            <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+            <div className="grid min-h-0 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
             </div>
           </div>
@@ -913,7 +929,7 @@ export function CalendarVisualizer({
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto bg-slate-50 p-2 sm:p-4">
-                {renderMonth(expandedMonth.y, expandedMonth.m)}
+                {renderMonth(expandedMonth.y, expandedMonth.m, true)}
               </div>
             </div>
           </div>
@@ -1017,7 +1033,7 @@ export function CalendarVisualizer({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-2">
-              <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+              <div className="grid min-h-0 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
               </div>
             </div>

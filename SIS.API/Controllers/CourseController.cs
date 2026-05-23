@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -47,7 +48,8 @@ public class CourseController : ControllerBase
         // Find active term
         var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
+            .ActiveTerm()
+            .FirstOrDefaultAsync();
 
         if (activeTerm == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });
@@ -167,7 +169,7 @@ public class CourseController : ControllerBase
 
         // 2. Active term
         var nowCatalog = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowCatalog && t.TermEnd >= nowCatalog);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
             return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
 
@@ -563,7 +565,8 @@ public class CourseController : ControllerBase
         var now = _clock.UtcNow;
         var term = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
+            .ActiveTerm()
+            .FirstOrDefaultAsync();
 
         if (term == null)
             return NotFound(new { error = "Aktif donem bulunamadi." });

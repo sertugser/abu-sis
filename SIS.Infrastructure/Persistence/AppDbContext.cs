@@ -647,7 +647,9 @@ builder.Entity<GradingCriteria>(e =>
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
-            e.Property(t => t.IsActivated).HasDefaultValue(true);
+            // Varsayılan KAPALI: dönem oluşunca otomatik aktif olmaz; admin "Kullanıma Aç"
+            // ile tek-aktif olarak açar (Proliz/Banner modeli).
+            e.Property(t => t.IsActivated).HasDefaultValue(false);
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
 
             // Faz metotları (IsRegistrationOpen/AddDrop/Withdrawal/GradeEntry) AcademicCalendar

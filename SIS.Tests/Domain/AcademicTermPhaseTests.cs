@@ -111,16 +111,12 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsRegistrationOpen_OverrideTrue_StillRequiresActive()
+    public void IsRegistrationOpen_OverrideTrue_StillRequiresActivated()
     {
-        // Term is not yet started (termStart is in the future from 'now')
-        var futureStart = DateTime.UtcNow.AddDays(30);
-        var term = BuildTerm(
-            termStart: futureStart,
-            termEnd: futureStart.AddDays(120),
-            regOverride: true);
-        // now = today, term hasn't started → IsActive returns false → IsRegistrationOpen false
-        term.IsRegistrationOpen(DateTime.UtcNow).Should().BeFalse();
+        // Dönem "Kullanıma Açık" değil (IsActivated=false). Kayıt override'ı true olsa da,
+        // aktif olmayan dönemde kayıt açılmaz.
+        var term = BuildTerm(isActivated: false, regOverride: true);
+        term.IsRegistrationOpen(term.TermStart.AddDays(1)).Should().BeFalse();
     }
 
     [Fact]
@@ -149,11 +145,14 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsActive_TrueWhenNowWithinTermDatesAndNotCancelled()
+    public void IsActive_TrueWhenActivatedAndNotCancelled_RegardlessOfDate()
     {
         var term = BuildTerm();
-        // now is within [TermStart, TermEnd]
+        // Aktiflik artık tarih aralığına değil, "Kullanıma Aç" bayrağına bağlı:
+        // dönem tarihlerinin dışında bile aktif sayılır.
         term.IsActive(term.TermStart.AddDays(1)).Should().BeTrue();
+        term.IsActive(term.TermStart.AddYears(-1)).Should().BeTrue();
+        term.IsActive(term.TermEnd.AddYears(1)).Should().BeTrue();
     }
 
     [Fact]
@@ -164,31 +163,19 @@ public class AcademicTermPhaseTests
     }
 
     [Fact]
-    public void IsActive_FalseWhenNotActivated()
+    public void IsActive_FalseWhenNotActivated_EvenWithinTermDates()
     {
         var term = BuildTerm(isActivated: false);
+        // Tarih aralığının içinde olsa bile: açık değilse aktif değil.
         term.IsActive(term.TermStart.AddDays(1)).Should().BeFalse();
     }
 
     [Fact]
-    public void IsActive_FalseWhenBeforeTermStart()
-    {
-        var term = BuildTerm();
-        term.IsActive(term.TermStart.AddDays(-1)).Should().BeFalse();
-    }
-
-    [Fact]
-    public void IsActive_FalseWhenAfterTermEnd()
-    {
-        var term = BuildTerm();
-        term.IsActive(term.TermEnd.AddDays(1)).Should().BeFalse();
-    }
-
-    [Fact]
-    public void GetStatus_ReturnsActive_WhenWithinDatesAndNotCancelled()
+    public void GetStatus_ReturnsActive_WhenActivatedAndNotCancelled_RegardlessOfDate()
     {
         var term = BuildTerm();
         term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Active);
+        term.GetStatus(term.TermStart.AddYears(-1)).Should().Be(TermStatus.Active);
     }
 
     [Fact]
@@ -203,12 +190,5 @@ public class AcademicTermPhaseTests
     {
         var term = BuildTerm(isActivated: false);
         term.GetStatus(term.TermStart.AddDays(1)).Should().Be(TermStatus.Inactive);
-    }
-
-    [Fact]
-    public void GetStatus_ReturnsInactive_WhenBeforeTerm()
-    {
-        var term = BuildTerm();
-        term.GetStatus(term.TermStart.AddDays(-1)).Should().Be(TermStatus.Inactive);
     }
 }

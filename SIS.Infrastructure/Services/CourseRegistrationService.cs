@@ -56,7 +56,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
         var now = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
 
@@ -185,8 +185,6 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 cr.CourseSection.Term.TermType,
                 IsActive = !cr.CourseSection.Term.IsCancelled
                     && cr.CourseSection.Term.IsActivated
-                    && cr.CourseSection.Term.TermStart <= DateTime.UtcNow
-                    && cr.CourseSection.Term.TermEnd >= DateTime.UtcNow
             })
             .Distinct()
             .ToListAsync();
@@ -222,7 +220,8 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             var nowAttendance = _clock.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowAttendance && t.TermEnd >= nowAttendance);
+                .ActiveTerm()
+                .FirstOrDefaultAsync();
 
             if (activeTerm == null)
                 return null;
@@ -587,7 +586,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         var nowReport = _clock.UtcNow;
         var activeTermName = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowReport && t.TermEnd >= nowReport)
+            .ActiveTerm()
             .Select(t => t.Name)
             .FirstOrDefaultAsync();
 

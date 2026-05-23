@@ -413,7 +413,8 @@ public class AcademicProgressionService : IAcademicProgressionService
             ? await _context.AcademicTerms.AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Id == termId.Value, cancellationToken)
             : await _context.AcademicTerms.AsNoTracking()
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= DateTime.UtcNow && t.TermEnd >= DateTime.UtcNow, cancellationToken);
+                .ActiveTerm()
+                .FirstOrDefaultAsync(cancellationToken);
 
         if (resolvedTerm == null)
         {

@@ -128,6 +128,7 @@ public class AdvisorInfoServiceTests
             ShortEnglishName = "25F",
             Year = 2025,
             TermType = TermType.Fall,
+            IsActivated = true,
             TermStart = n.AddDays(-30),
             TermEnd = n.AddDays(60),
             IsCancelled = false,

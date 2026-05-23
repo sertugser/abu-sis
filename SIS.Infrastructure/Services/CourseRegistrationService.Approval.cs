@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.CourseRegistration.DTOs;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services;
@@ -15,7 +16,7 @@ public partial class CourseRegistrationService
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
         var nowPending = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowPending && t.TermEnd >= nowPending);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -235,7 +236,8 @@ public partial class CourseRegistrationService
         var nowApprove = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
+            .ActiveTerm()
+            .FirstOrDefaultAsync();
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -336,7 +338,7 @@ public partial class CourseRegistrationService
         }
 
         var nowReject = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowReject && t.TermEnd >= nowReject);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
         {
             return new ApprovalResponseDto

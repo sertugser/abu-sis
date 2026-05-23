@@ -31,17 +31,20 @@ All thresholds below are configurable via SystemConfig (admin panel), values sho
 - Instructor cannot be assigned to overlapping sections
 - Registration plan: soft hold on capacity, cleared at midnight if unconfirmed
 
-## Term Lifecycle (Faz 4 — IsActivated + tarih bazlı hibrit model)
+## Term Lifecycle (Faz 5 — flag-bazlı tek-aktif model, Proliz/Banner)
 Inactive → Active → Cancelled
 
+- **Aktiflik manuel bayrağa bağlıdır, tarihe DEĞİL** (Proliz/Banner "güncel dönem" modeli). 2026-05-23'te tarih-bazlı hibrit model kaldırıldı.
 - `TermStatus` enum **gösterim** için (stored değil). Durum `term.GetStatus(now)` ile hesaplanır.
-- Stored manuel alanlar: `IsActivated: bool` (default true), `IsCancelled: bool`, `OverrideStart?`, `OverrideEnd?`.
-- `GetStatus(now)`: `IsCancelled` → Cancelled; `!IsActivated` → Inactive; `EffectiveStart ≤ now ≤ EffectiveEnd` → Active; aksi halde Inactive.
-- `EffectiveStart = OverrideStart ?? TermStart`, `EffectiveEnd = OverrideEnd ?? TermEnd` (admin erken aktivasyon / uzatma override'ları).
-- Active: `IsActivated && EffectiveStart ≤ now ≤ EffectiveEnd`.
+- Stored manuel alanlar: `IsActivated: bool` (**default false** — yeni dönem kapalı başlar), `IsCancelled: bool`, `OverrideStart?`, `OverrideEnd?` (override'lar artık aktifliği etkilemez; sadece EffectiveStart/End computed alanlarını besler, dormant).
+- `GetStatus(now)`: `IsCancelled` → Cancelled; `IsActivated` → Active; aksi halde Inactive. **TermStart/TermEnd aktifliği belirlemez.**
+- `IsActive(now) = !IsCancelled && IsActivated`.
+- **Tek-aktif değişmezi**: `ActivateTermAsync(id)` bu dönemi açar **+ diğer tüm açık dönemleri kapatır** → her an en çok bir dönem açık. CreateTermAsync/generator dönemi kapalı oluşturur.
+- **"Aktif dönem" sorgusu TEK kaynak**: `AcademicTerms.ActiveTerm()` extension (`SIS.Domain/Entities/AcademicTermQueryExtensions.cs`) = `Where(!IsCancelled && IsActivated).OrderByDescending(TermStart)`. Önceki ~33 inline kopya (`...&& TermStart<=now && TermEnd>=now`) bununla değiştirildi.
 - IsActivated: admin "Kullanıma Aç/Kapat" ile değiştirir (activate/deactivate endpoint'leri).
 - Cancelled: admin iptal etmiş (manuel). Cascade: tüm section'lar Cancelled olur.
 - Unique constraint: `(Year, TermType)` — aynı yıl/tip kombinasyonu tek kayıt.
+- Migration: `SingleActiveTermFlagModel` (kolon default false + tek seferlik tek-aktif veri normalizasyonu).
 
 ## TermType (9 değer — Ankara Bilim pattern)
 Fall, Spring, Summer, FallResit, SpringResit, SummerResit, SpringOther, SummerOther, Exemption

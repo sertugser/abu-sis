@@ -416,6 +416,7 @@ public class EnrollmentForecastServiceTests
                 Name = "2025-2026 Fall",
                 Year = 2025,
                 TermType = TermType.Fall,
+                IsActivated = true,
                 TermStart = DateTime.UtcNow.AddDays(-14),
                 TermEnd = DateTime.UtcNow.AddDays(90),
                 AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
@@ -605,6 +606,7 @@ public class EnrollmentForecastServiceTests
             Name = $"{year}-{year + 1} {semester}",
             Year = year,
             TermType = termType,
+            IsActivated = isActive,
             TermStart = DateTime.UtcNow.AddDays(-70),
             TermEnd = termEnd,
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar

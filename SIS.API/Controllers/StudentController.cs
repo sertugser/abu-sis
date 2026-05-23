@@ -1118,11 +1118,9 @@ public class StudentController : ControllerBase
 
         if (!activeTermId.HasValue)
         {
-            var now = DateTime.UtcNow;
             activeTermId = await _context.AcademicTerms
                 .AsNoTracking()
-                .Where(term => !term.IsCancelled && term.TermStart <= now && term.TermEnd >= now)
-                .OrderByDescending(term => term.TermStart)
+                .ActiveTerm()
                 .Select(term => (int?)term.Id)
                 .FirstOrDefaultAsync();
         }

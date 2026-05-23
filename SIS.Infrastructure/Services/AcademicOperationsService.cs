@@ -756,7 +756,8 @@ public class AcademicOperationsService : IAcademicOperationsService
         var now = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(term => !term.IsCancelled && term.IsActivated && term.TermStart <= now && term.TermEnd >= now, cancellationToken);
+            .ActiveTerm()
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<DepartmentScopeResolution> ResolveAccessibleDepartmentsAsync(

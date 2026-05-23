@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -55,7 +56,8 @@ public class DraftRegistrationCleanupService : BackgroundService
         {
             var now = DateTime.UtcNow;
             var activeTerm = await context.AcademicTerms
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now, cancellationToken);
+                .ActiveTerm()
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (activeTerm == null)
                 return;

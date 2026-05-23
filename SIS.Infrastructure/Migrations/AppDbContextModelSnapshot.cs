@@ -270,7 +270,7 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsActivated")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsCancelled")
                         .HasColumnType("boolean");
