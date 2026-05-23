@@ -215,6 +215,26 @@ public partial class CourseRegistrationService
 
         await _context.SaveChangesAsync();
 
+        // Bildirim: öğrencinin danışmanına "kayıt onay bekliyor". Null-safe + opsiyonel; push hatası akışı bozmaz.
+        if (_notifications is not null && registrations.Count > 0 && student.AdvisorId is int submitAdvisorId)
+        {
+            var advisorUserId = await _context.Instructors
+                .Where(i => i.Id == submitAdvisorId)
+                .Select(i => (int?)i.UserId)
+                .FirstOrDefaultAsync();
+            if (advisorUserId is int advisorUid)
+            {
+                await _notifications.NotifyAsync(
+                    advisorUid,
+                    NotificationType.RegistrationSubmittedForApproval,
+                    "Ders kaydı onay bekliyor",
+                    $"{student.StudentNumber} numaralı öğrenci {registrations.Count} dersini onayınıza gönderdi.",
+                    link: "/ders-kayit-duzenleme",
+                    severity: NotificationSeverity.Info,
+                    entityRef: $"student:{student.Id}");
+            }
+        }
+
         response.Success = true;
         response.ValidationResult = validationResult; // May contain NeedsApproval warnings
         response.Registrations = registrations.Select(r => new RegistrationItemDto

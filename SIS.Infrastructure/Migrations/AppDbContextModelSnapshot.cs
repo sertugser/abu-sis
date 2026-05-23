@@ -267,13 +267,13 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsCancelled")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsActivated")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -538,11 +538,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("QrSubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("PresentSlotNumbersCsv")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("QrSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Source")
                         .HasColumnType("integer");
@@ -2687,10 +2687,11 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("AdvisorOptOutRequested")
-                        .HasColumnType("boolean");
                     b.Property<int?>("AdvisorAssignmentCapacity")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("AdvisorOptOutRequested")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2823,7 +2824,7 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("InternalAnnouncements");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.OsymRegistrationCalendar", b =>
+            modelBuilder.Entity("SIS.Domain.Entities.Notification", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -2831,79 +2832,54 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Description")
+                    b.Property<string>("EntityRef")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GroupKey")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Link")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<DateTime>("EndDate")
+                    b.Property<DateTime?>("ReadAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Year")
+                    b.Property<int>("UserId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Year", "Type");
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
 
-                    b.ToTable("OsymRegistrationCalendars");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("ProgramId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProgramId", "Year", "Type")
-                        .IsUnique();
-
-                    b.ToTable("ProgramQuotas");
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
@@ -5037,17 +5013,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("TargetFaculty");
 
                     b.Navigation("TargetSection");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
-                        .WithMany()
-                        .HasForeignKey("ProgramId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>

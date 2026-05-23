@@ -61,9 +61,7 @@ export const ROUTES = {
   WEB_MODULE_SETTINGS: '/web-modul-ayarlari',
   EBYS_SIGNATURE_AUTHORITIES: '/ebys-imza-yetkilileri',
   FACULTY_SIGNATURE_UPLOAD: '/fakulte-imza-yukleme-islemleri',
-  OSYM_REGISTRATION_CALENDAR: '/osym-kayit-takvimi',
   TIME_SLOT_MANAGEMENT: '/ders-saatleri-yonetimi',
-  PROGRAM_QUOTA: '/program-kontenjan',
   SCHEDULE_APPROVAL: '/program-onayi',
   CLASSROOM_ADMIN: '/derslik-yonetimi',
   CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
@@ -83,6 +81,8 @@ export const ROUTES = {
   // Internal Announcements
   ANNOUNCEMENTS: '/duyurular',
   ANNOUNCEMENT_MANAGEMENT: '/duyuru-yonetimi',
+  // Kişisel bildirimler
+  NOTIFICATIONS: '/bildirimler',
 } as const;
 
 export const QUERY_KEYS = {
@@ -191,6 +191,7 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
 export const IMPLEMENTED_ROUTES = new Set([
   '/',
   '/akademik-takvim',
+  '/bildirimler',
   '/ders-kayit',
   '/akilli-planlama',
   '/plan',
@@ -264,8 +265,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/degerlendirme-donemi-yonetimi',
   '/duyurular',
   '/duyuru-yonetimi',
-  '/osym-kayit-takvimi',
-  '/program-kontenjan',
   '/ders-saatleri-yonetimi',
   '/sinav-mufredati',
   '/subelendirme-islemleri',

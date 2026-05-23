@@ -42,8 +42,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
-    public DbSet<OsymRegistrationCalendar> OsymRegistrationCalendars => Set<OsymRegistrationCalendar>();
-    public DbSet<ProgramQuota> ProgramQuotas => Set<ProgramQuota>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
 public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
@@ -650,6 +649,12 @@ builder.Entity<GradingCriteria>(e =>
         {
             e.Property(t => t.IsActivated).HasDefaultValue(true);
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
+
+            // Faz metotları (IsRegistrationOpen/AddDrop/Withdrawal/GradeEntry) AcademicCalendar
+            // yüklenmemişse sessizce false döner — ".Include unutuldu" ile "takvim yok" ayırt edilemez.
+            // AutoInclude her AcademicTerm sorgusunda takvimi otomatik yükleyerek bu tuzağı kapatır.
+            // İstisnai durumda sorgu bazında .IgnoreAutoInclude() ile devre dışı bırakılabilir.
+            e.Navigation(t => t.AcademicCalendar).AutoInclude();
         });
 
         // ── TermAcademicCalendar (1-1 AcademicTerm) ────────────
@@ -673,6 +678,19 @@ builder.Entity<GradingCriteria>(e =>
 
             e.HasIndex(ev => new { ev.TermId, ev.StartDate });
             e.HasIndex(ev => new { ev.IsGenerated, ev.GeneratedDraftId });
+        });
+
+        // ── Notification (kişisel bildirim) ────────────────────
+        builder.Entity<Notification>(e =>
+        {
+            e.Property(n => n.Title).HasMaxLength(200);
+            e.Property(n => n.Body).HasMaxLength(2000);
+            e.Property(n => n.Link).HasMaxLength(500);
+            e.Property(n => n.EntityRef).HasMaxLength(120);
+            e.Property(n => n.GroupKey).HasMaxLength(120);
+
+            // Zil/sayfa sorguları: kullanıcının okunmamışları + en güncel önce.
+            e.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt });
         });
 
         // ── Academic Calendar Generator ────────────────────────
@@ -1243,25 +1261,6 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(r => r.UserId);
         });
 
-        // ── OsymRegistrationCalendar ───────────────────────────
-        builder.Entity<OsymRegistrationCalendar>(e =>
-        {
-            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(500);
-            e.HasIndex(x => new { x.Year, x.Type });
-        });
-
-        // ── ProgramQuota ────────────────────────────────────────
-        builder.Entity<ProgramQuota>(e =>
-        {
-            e.Property(x => x.Description).HasMaxLength(500);
-            e.HasOne(q => q.Program)
-             .WithMany()
-             .HasForeignKey(q => q.ProgramId)
-             .OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
-        });
-
         // ── UserScope ────────────────────────────────────────────
         builder.Entity<UserScope>(e =>
         {
@@ -1401,9 +1400,6 @@ builder.Entity<GradingCriteria>(e =>
 
         builder.Entity<Instructor>().HasQueryFilter(instructor =>
             !_scope.IsActive || _scope.FacultyId == instructor.Department.FacultyId);
-
-        builder.Entity<ProgramQuota>().HasQueryFilter(quota =>
-            !_scope.IsActive || _scope.FacultyId == quota.Program.Department.FacultyId);
 
         builder.Entity<ElectiveGroup>().HasQueryFilter(group =>
             !_scope.IsActive

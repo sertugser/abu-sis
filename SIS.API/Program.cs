@@ -214,6 +214,9 @@ builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleProgr
 // Singleton — tüm hub instance'ları aynı registry üzerinden çalışır.
 builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleCancelRegistry,
     SIS.Infrastructure.Services.Scheduling.ScheduleCancelRegistry>();
+// Bildirim gerçek-zamanlı push (SignalR). IHubContext singleton-safe → Singleton.
+builder.Services.AddSingleton<SIS.Application.Notifications.Services.INotificationRealtimePush,
+    SIS.API.Hubs.SignalRNotificationPush>();
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -226,6 +229,7 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
@@ -272,8 +276,6 @@ builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>(
 builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
 builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
-builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCalendarService>();
-builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
@@ -337,6 +339,7 @@ app.UseMiddleware<SIS.API.Middleware.ScopePreloadMiddleware>();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
+app.MapHub<SIS.API.Hubs.NotificationHub>("/hubs/notifications");
 
 // Seed database
 if (app.Environment.IsDevelopment())

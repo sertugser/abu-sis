@@ -300,6 +300,19 @@ public partial class CourseRegistrationService
 
         await _context.SaveChangesAsync();
 
+        // Bildirim: öğrenciye "kaydınız onaylandı".
+        if (_notifications is not null && registrations.Count > 0)
+        {
+            await _notifications.NotifyAsync(
+                student.UserId,
+                NotificationType.RegistrationApproved,
+                "Ders kaydınız onaylandı",
+                $"{registrations.Count} dersiniz danışmanınız tarafından onaylandı.",
+                link: "/alinan-dersler",
+                severity: NotificationSeverity.Success,
+                entityRef: $"student:{student.Id}");
+        }
+
         return new ApprovalResponseDto
         {
             Success = true,
@@ -377,6 +390,20 @@ public partial class CourseRegistrationService
         }
 
         await _context.SaveChangesAsync();
+
+        // Bildirim: öğrenciye "kaydınız reddedildi" (+ varsa danışman notu).
+        if (_notifications is not null && registrations.Count > 0)
+        {
+            var rejectReason = string.IsNullOrWhiteSpace(dto.Note) ? string.Empty : $" Not: {dto.Note}";
+            await _notifications.NotifyAsync(
+                student.UserId,
+                NotificationType.RegistrationRejected,
+                "Ders kaydınız reddedildi",
+                $"{registrations.Count} ders kaydınız danışmanınız tarafından reddedildi.{rejectReason}",
+                link: "/plan",
+                severity: NotificationSeverity.Warning,
+                entityRef: $"student:{student.Id}");
+        }
 
         return new ApprovalResponseDto
         {

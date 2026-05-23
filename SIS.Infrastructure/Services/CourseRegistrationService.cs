@@ -5,6 +5,7 @@ using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Common.Services;
+using SIS.Application.Notifications.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -28,6 +29,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     private readonly IWebModuleSettingsProvider _webSettings;
     private readonly IWebModuleControlService _webModuleControls;
     private readonly bool _useCalendarFallbackForWebModuleControls;
+    private readonly INotificationService? _notifications;
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
@@ -37,7 +39,8 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         ISystemConfigProvider? config = null,
         IAdvisorConstraintService? advisorConstraintService = null,
         IWebModuleSettingsProvider? webSettings = null,
-        IWebModuleControlService? webModuleControls = null)
+        IWebModuleControlService? webModuleControls = null,
+        INotificationService? notifications = null)
     {
         _context = context;
         _validationService = validationService;
@@ -47,6 +50,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         _webSettings = webSettings ?? new NullWebModuleSettingsProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
         _useCalendarFallbackForWebModuleControls = webModuleControls is null;
+        _notifications = notifications;
     }
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)

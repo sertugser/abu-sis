@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Admin.DTOs;
 using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
+using SIS.Application.Notifications.DTOs;
+using SIS.Application.Notifications.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -11,8 +14,38 @@ namespace SIS.Tests.Application;
 
 public class AdvisorApprovalServiceTests : IDisposable
 {
+    // Tetiklenen bildirimleri yakalayan minimal sahte servis.
+    private sealed class RecordingNotifications : INotificationService
+    {
+        public List<(int UserId, NotificationType Type)> Sent { get; } = new();
+
+        public Task NotifyAsync(int userId, NotificationType type, string title, string body,
+            string? link = null, NotificationSeverity severity = NotificationSeverity.Info,
+            string? entityRef = null, string? groupKey = null, DateTime? expiresAt = null, CancellationToken ct = default)
+        {
+            Sent.Add((userId, type));
+            return Task.CompletedTask;
+        }
+
+        public Task NotifyManyAsync(IEnumerable<int> userIds, NotificationType type, string title, string body,
+            string? link = null, NotificationSeverity severity = NotificationSeverity.Info, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<PagedResult<NotificationDto>> GetForUserAsync(int userId, NotificationFilter filter, CancellationToken ct = default)
+            => Task.FromResult(new PagedResult<NotificationDto>(new List<NotificationDto>(), 0, 1, 20));
+
+        public Task<IReadOnlyList<NotificationDto>> GetRecentAsync(int userId, int max, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<NotificationDto>>(new List<NotificationDto>());
+
+        public Task<int> GetUnreadCountAsync(int userId, CancellationToken ct = default) => Task.FromResult(0);
+        public Task MarkReadAsync(int userId, int id, CancellationToken ct = default) => Task.CompletedTask;
+        public Task MarkAllReadAsync(int userId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DeleteAsync(int userId, int id, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
     private readonly AppDbContext _context;
     private readonly CourseRegistrationService _service;
+    private readonly RecordingNotifications _notifications = new();
 
     private const int FacultyId = 1;
     private const int DepartmentId = 1;
@@ -34,7 +67,7 @@ public class AdvisorApprovalServiceTests : IDisposable
         _context = new AppDbContext(options);
         var clock = new FakeClock();
         var validationService = new RegistrationValidationService(_context, clock);
-        _service = new CourseRegistrationService(_context, validationService, clock);
+        _service = new CourseRegistrationService(_context, validationService, clock, notifications: _notifications);
 
         SeedBaseData();
     }
@@ -409,6 +442,30 @@ public class AdvisorApprovalServiceTests : IDisposable
 
         var updatedSection = await _context.CourseSections.FindAsync(1);
         updatedSection!.EnrolledCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Approve_NotifiesStudent()
+    {
+        var course = AddCourse(1, "CENG101", "Intro to CS", 6);
+        var section = AddSection(1, course.Id, 40);
+        AddRegistration(1, StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        await _service.ApproveStudentRegistrationsAsync(AdvisorInstructorId, new ApprovalActionDto { StudentId = StudentId });
+
+        _notifications.Sent.Should().ContainSingle(n => n.UserId == StudentUserId && n.Type == NotificationType.RegistrationApproved);
+    }
+
+    [Fact]
+    public async Task Reject_NotifiesStudent()
+    {
+        var course = AddCourse(1, "CENG101", "Intro to CS", 6);
+        var section = AddSection(1, course.Id, 40, enrolledCount: 1);
+        AddRegistration(1, StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        await _service.RejectStudentRegistrationsAsync(AdvisorInstructorId, new ApprovalActionDto { StudentId = StudentId });
+
+        _notifications.Sent.Should().ContainSingle(n => n.UserId == StudentUserId && n.Type == NotificationType.RegistrationRejected);
     }
 
     public void Dispose()
