@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
@@ -15,10 +16,13 @@ namespace SIS.API.Middleware;
 ///   ArgumentException         → 400
 ///   InvalidOperationException → 400  (iş kuralı ihlali)
 ///   UnauthorizedAccessException → 403
+///   DbUpdateException         → 500  (EF'in İngilizce iç mesajı yerine genel TR mesaj)
 ///   diğerleri                 → 500
 ///
 /// Response body: { error, status, type, traceId, details? }
 /// Frontend extractError mevcut haliyle data.error'ı okuyor; başka değişiklik gerekmez.
+/// Not: DbUpdateException dışında client'a gönderilen error = ex.Message; tam bağlam her durumda
+/// AuditLog'a yazılır (DbUpdateException'da da ham mesaj + stack log'a gider, client'a gitmez).
 /// </summary>
 public sealed class GlobalExceptionMiddleware
 {
@@ -79,9 +83,16 @@ public sealed class GlobalExceptionMiddleware
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json; charset=utf-8";
 
+        // DbUpdateException'ın ex.Message'ı EF'in jenerik İngilizce metnidir ("An error occurred
+        // while saving the entity changes...") — client'a anlamsız. Genel TR mesaja çevir; ham
+        // detay zaten AuditLog'a + ILogger'a yazıldı.
+        var clientError = ex is DbUpdateException
+            ? "Veritabanı işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin; sorun sürerse yöneticinize başvurun."
+            : ex.Message;
+
         var body = new Dictionary<string, object?>
         {
-            ["error"] = ex.Message,
+            ["error"] = clientError,
             ["status"] = status,
             ["type"] = ex.GetType().Name,
             ["traceId"] = context.TraceIdentifier,

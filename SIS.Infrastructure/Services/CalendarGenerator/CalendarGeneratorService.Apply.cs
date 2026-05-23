@@ -229,6 +229,7 @@ public partial class CalendarGeneratorService
 
         var snapshots = Deserialize<List<TermSnapshot>>(draft.PreviousSnapshotJson ?? "[]");
         var restored = new List<int>();
+        var skipped = new List<string>();
 
         foreach (var snapshot in snapshots)
         {
@@ -236,8 +237,19 @@ public partial class CalendarGeneratorService
                 .Include(t => t.CalendarEvents)
                 .Include(t => t.AcademicCalendar)
                 .FirstOrDefaultAsync(t => t.Id == snapshot.TermId, ct);
-            if (term == null || term.IsCancelled)
+            // İptal edilmiş dönem admin'in bilinçli (ve daha güncel) kararıdır; üzerine snapshot
+            // geri yüklemek iptali kısmen bozar — bu yüzden atlanır. Silinmiş dönemde de yapılacak
+            // bir şey yoktur. Sessiz kalmamak için atlananlar sonuç mesajında raporlanır.
+            if (term == null)
+            {
+                skipped.Add($"#{snapshot.TermId} (dönem bulunamadı)");
                 continue;
+            }
+            if (term.IsCancelled)
+            {
+                skipped.Add($"{term.Name} (iptal edilmiş)");
+                continue;
+            }
 
             if (snapshot.WasCreatedFromDraft)
             {
@@ -292,7 +304,10 @@ public partial class CalendarGeneratorService
         draft.AppliedByUserId = userId;
         await _context.SaveChangesAsync(ct);
 
-        return new ApplyCalendarDraftResultDto(true, "Akademik takvim geri alındı.", restored);
+        var message = skipped.Count == 0
+            ? "Akademik takvim geri alındı."
+            : $"Akademik takvim geri alındı. Atlanan dönemler: {string.Join(", ", skipped)}.";
+        return new ApplyCalendarDraftResultDto(true, message, restored);
     }
 
     private record TermSnapshot(
