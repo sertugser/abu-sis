@@ -374,9 +374,12 @@ public sealed class SolverRequestBuilder
         var s4MinPair = await _systemConfigProvider.GetIntAsync("SoftConstraint.S4.MinCoPairThreshold", 20, ct);
         var s4Weight = await _systemConfigProvider.GetIntAsync("Schedule.S4Weight", 1, ct);
 
-        // S5 LunchBreak
-        var s5LunchStart = await ReadTimeAsync("Schedule.LunchBreak.Start", new TimeOnly(11, 40), ct);
-        var s5LunchEnd = await ReadTimeAsync("Schedule.LunchBreak.End", new TimeOnly(12, 20), ct);
+        // S5 LunchBreak — H13 / Ders Saatleri Yönetimi ile TEK ortak anahtar.
+        // 2026-05-24: Eski noktalı key ("Schedule.LunchBreak.Start") hiç yazılmadığı için soft
+        // encoder her zaman default'a düşüyordu (admin'in öğle saati yok sayılıyordu). Hard encoder,
+        // slot validasyonu ve H13 parametre formu zaten "Schedule.LunchBreakStart/End" kullanıyor.
+        var s5LunchStart = await ReadTimeAsync("Schedule.LunchBreakStart", new TimeOnly(11, 40), ct);
+        var s5LunchEnd = await ReadTimeAsync("Schedule.LunchBreakEnd", new TimeOnly(12, 20), ct);
         var s5Weight = await _systemConfigProvider.GetIntAsync("Schedule.S5Weight", 8, ct);
 
         // S7 StudentGap
