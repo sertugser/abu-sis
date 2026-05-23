@@ -23,8 +23,6 @@ export default function ClassroomPrintReport({ dashboard, termName, conflictsCou
 
   const cellMap = new Map(dashboard.heatmap.map(h => [`${h.day}-${h.slotOrder}`, h]));
 
-  const slotsPerDay = dashboard.slotsPerDay || 10;
-
   return (
     <div className="p-8 max-w-4xl mx-auto bg-white print:p-4">
       <style>{`
@@ -106,9 +104,7 @@ export default function ClassroomPrintReport({ dashboard, termName, conflictsCou
             <tbody>
               {dashboard.classrooms.map(c => {
                 const courseCount = new Set(c.schedules.map(s => s.courseCode)).size;
-                const totalWeeklySlots = 5 * slotsPerDay;
-                const usedSlots = c.schedules.length;
-                const occ = totalWeeklySlots > 0 ? Math.round((usedSlots / totalWeeklySlots) * 100) : 0;
+                const occ = c.weeklyOccupancyRate;
                 return (
                   <tr key={c.id}>
                     <td className="border p-1.5">{c.name}</td>

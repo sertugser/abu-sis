@@ -26,8 +26,8 @@ public interface ISchedulingService
     Task<List<AvailableClassroomResultDto>> SearchAvailableClassroomsAsync(
         int termId,
         List<int> days,
-        int startHour,
-        int endHour,
+        TimeOnly startTime,
+        TimeOnly endTime,
         int? minCapacity = null,
         string? classroomType = null,
         int? facultyId = null,

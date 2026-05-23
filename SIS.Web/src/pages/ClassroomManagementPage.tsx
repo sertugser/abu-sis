@@ -18,14 +18,7 @@ import ClassroomListTab from '@/components/classroom-dashboard/ClassroomListTab'
 import AvailableClassroomSearchTab from '@/components/classroom-dashboard/AvailableClassroomSearchTab';
 import ConflictDrawer from '@/components/classroom-dashboard/ConflictDrawer';
 import ClassroomPrintReport from '@/components/classroom-dashboard/ClassroomPrintReport';
-
-const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal Sınıf',
-  Lab: 'Laboratuvar',
-  Computer: 'Bilgisayar Lab',
-  Seminar: 'Seminer',
-  Amphitheater: 'Amfi',
-};
+import { classroomTypeLabel } from '@/lib/classroomLabels';
 
 const CAPACITY_RANGES = [
   { label: 'Tümünü Göster', min: null, max: null },
@@ -68,7 +61,7 @@ export default function ClassroomManagementPage() {
     setExportError(null);
     setIsExporting(true);
     try {
-      const file = await exportClassroomCsv(activeTerm?.id);
+      const file = await exportClassroomCsv(dashboardParams);
       downloadBlob(file, 'classroom-occupancy.csv');
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'CSV dosyası indirilemedi.');
@@ -124,7 +117,7 @@ export default function ClassroomManagementPage() {
           >
             <option value="">Tüm Tipler</option>
             {(filterOptions?.classroomTypes ?? []).map(t => (
-              <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+              <option key={t} value={t}>{classroomTypeLabel(t)}</option>
             ))}
           </select>
 
@@ -237,7 +230,11 @@ export default function ClassroomManagementPage() {
           <OccupancyHeatmapTab dashboard={dashboard} isLoading={isLoading} />
         )}
         {activeTab === 'list' && (
-          <ClassroomListTab classrooms={dashboard?.classrooms ?? []} isLoading={isLoading} />
+          <ClassroomListTab
+            classrooms={dashboard?.classrooms ?? []}
+            slots={filterOptions?.slots ?? []}
+            isLoading={isLoading}
+          />
         )}
         {activeTab === 'search' && (
           activeTerm?.id ? (
@@ -245,6 +242,7 @@ export default function ClassroomManagementPage() {
               termId={activeTerm.id}
               filters={filters}
               classroomTypes={filterOptions?.classroomTypes ?? []}
+              slots={filterOptions?.slots ?? []}
             />
           ) : (
             <p className="text-center text-muted-foreground py-8">Aktif dönem bulunamadı.</p>

@@ -43,38 +43,51 @@ public partial class SchedulingService
             .OrderBy(t => t)
             .ToList();
 
+        var slotGrid = await LoadTermSlotGridAsync(termId, cancellationToken);
+
         return new ClassroomFilterOptionsDto
         {
             Faculties = faculties,
             Buildings = buildings,
-            ClassroomTypes = classroomTypes
+            ClassroomTypes = classroomTypes,
+            Slots = ProjectSlotSummaries(slotGrid)
         };
     }
 
     public async Task<List<AvailableClassroomResultDto>> SearchAvailableClassroomsAsync(
         int termId,
         List<int> days,
-        int startHour,
-        int endHour,
+        TimeOnly startTime,
+        TimeOnly endTime,
         int? minCapacity = null,
         string? classroomType = null,
         int? facultyId = null,
         string? buildingName = null,
         CancellationToken cancellationToken = default)
     {
+        // Savunma: geçersiz aralık/gün → boş sonuç (controller da doğrular).
+        if (days.Count == 0 || endTime <= startTime)
+            return new List<AvailableClassroomResultDto>();
+
         var snapshot = await BuildRuntimeSnapshotAsync(termId, null, null, cancellationToken);
+        var slotGrid = await LoadTermSlotGridAsync(termId, cancellationToken);
 
         var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
 
+        // Term-scope: derslikler her zaman döneme atanmış olanlarla sınırlı; fakülte
+        // seçilirse o fakülteye daralır. (Önceki davranışta fakülte seçilmeyince DB'deki
+        // tüm derslikler dönüyordu — döneme atanmamışlar dahil.)
+        var assignmentQuery = _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(a => a.TermId == termId);
         if (facultyId.HasValue)
-        {
-            var assignedIds = await _context.ClassroomTermAssignments
-                .AsNoTracking()
-                .Where(a => a.TermId == termId && a.FacultyId == facultyId.Value)
-                .Select(a => a.ClassroomId)
-                .ToListAsync(cancellationToken);
-            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
-        }
+            assignmentQuery = assignmentQuery.Where(a => a.FacultyId == facultyId.Value);
+
+        var assignedIds = await assignmentQuery
+            .Select(a => a.ClassroomId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
 
         if (!string.IsNullOrWhiteSpace(buildingName))
             classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
@@ -87,57 +100,51 @@ public partial class SchedulingService
 
         var classrooms = await classroomQuery.ToListAsync(cancellationToken);
 
-        var occupiedSlots = snapshot.Sections
+        // Derslik başına bloklar (gün + gerçek başlangıç/bitiş saatleri).
+        var blocksByClassroom = snapshot.Sections
             .Where(s => s.PrimaryClassroomId.HasValue)
             .SelectMany(s => s.Blocks.Select(tb => new
             {
                 ClassroomId = s.PrimaryClassroomId!.Value,
-                Day = tb.Day,
-                StartHour = tb.StartTime.Hour,
-                EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1
+                Section = s,
+                Block = tb
             }))
             .GroupBy(x => x.ClassroomId)
             .ToDictionary(g => g.Key, g => g.ToList());
-
-        var weeklyUsage = occupiedSlots.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.Sum(s => s.EndHour - s.StartHour + 1));
 
         var results = new List<AvailableClassroomResultDto>();
 
         foreach (var classroom in classrooms)
         {
-            var slots = occupiedSlots.TryGetValue(classroom.Id, out var s) ? s : new();
+            var entries = blocksByClassroom.TryGetValue(classroom.Id, out var e) ? e : new();
 
-            bool isAvailable = true;
-            foreach (var day in days)
-            {
-                for (int h = startHour; h <= endHour && isAvailable; h++)
-                {
-                    if (slots.Any(sl => sl.Day == day && h >= sl.StartHour && h <= sl.EndHour))
-                    {
-                        isAvailable = false;
-                    }
-                }
-            }
+            // Interval-overlap müsaitlik: seçilen günlerde [startTime, endTime) ile
+            // çakışan blok yoksa derslik müsait. (Eski tam-saat döngüsü 50 dk slotlarda
+            // hatalı sonuç veriyordu; "Bitiş Saati dahil" off-by-one'ı da burada kalkar.)
+            var isAvailable = !entries.Any(x =>
+                days.Contains((int)x.Block.Day)
+                && x.Block.StartTime < endTime
+                && startTime < x.Block.EndTime);
 
             if (!isAvailable) continue;
 
-            int totalWeeklySlots = 5 * 10;
-            int used = weeklyUsage.TryGetValue(classroom.Id, out var u) ? u : 0;
+            var occupancy = ComputeWeeklyOccupancyRate(
+                entries.Select(x => ((int)x.Block.Day, x.Block.StartTime, x.Block.EndTime)),
+                slotGrid);
 
-            var classroomSchedules = snapshot.Sections
-                .Where(sec => sec.PrimaryClassroomId == classroom.Id)
-                .SelectMany(sec => sec.Blocks.Select(tb => new ClassroomScheduleSlotDto
+            var classroomSchedules = entries
+                .Select(x => new ClassroomScheduleSlotDto
                 {
-                    Day = tb.Day,
-                    StartHour = tb.StartTime.Hour,
-                    EndHour = tb.EndTime.Minute > 0 ? tb.EndTime.Hour : tb.EndTime.Hour - 1,
-                    CourseCode = sec.CourseCode,
-                    CourseName = sec.CourseName,
-                    InstructorName = sec.InstructorName
-                }))
-                .OrderBy(sl => sl.Day).ThenBy(sl => sl.StartHour)
+                    Day = (int)x.Block.Day,
+                    StartHour = x.Block.StartTime.Hour,
+                    EndHour = x.Block.EndTime.Minute > 0 ? x.Block.EndTime.Hour : x.Block.EndTime.Hour - 1,
+                    StartTime = x.Block.StartTime.ToString("HH:mm"),
+                    EndTime = x.Block.EndTime.ToString("HH:mm"),
+                    CourseCode = x.Section.CourseCode,
+                    CourseName = x.Section.CourseName,
+                    InstructorName = x.Section.InstructorName
+                })
+                .OrderBy(sl => sl.Day).ThenBy(sl => sl.StartTime)
                 .ToList();
 
             results.Add(new AvailableClassroomResultDto
@@ -148,7 +155,7 @@ public partial class SchedulingService
                 Type = classroom.Type.ToString(),
                 BuildingName = classroom.BuildingName,
                 Floor = classroom.Floor,
-                WeeklyOccupancyRate = totalWeeklySlots > 0 ? Math.Round((double)used / totalWeeklySlots * 100) : 0,
+                WeeklyOccupancyRate = occupancy,
                 Schedules = classroomSchedules
             });
         }

@@ -45,11 +45,11 @@ public partial class SchedulingService
 
         var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
 
-        if (facultyId.HasValue)
-        {
-            var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
-            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
-        }
+        // Term-scope: rapor her zaman döneme atanmış dersliklerle sınırlı (fakülte
+        // seçilmese bile). Önceki davranışta fakülte seçilmeyince DB'deki tüm
+        // derslikler sayılıyordu → döneme atanmamışlar paydayı şişiriyordu.
+        var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
+        classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
 
         if (!string.IsNullOrWhiteSpace(buildingName))
             classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
@@ -66,6 +66,9 @@ public partial class SchedulingService
         var classrooms = await classroomQuery.ToListAsync(cancellationToken);
         result.TotalClassrooms = classrooms.Count;
 
+        // Haftalık doluluk oranını tek formülle (slot grid) hesaplamak için.
+        var slotGrid = await LoadTermSlotGridAsync(resolvedTerm.Id, cancellationToken);
+
         // Her derslik için o donemdeki dersleri haritala
         var classroomSchedules = snapshot.Sections
             .Where(s => s.PrimaryClassroomId.HasValue)
@@ -77,15 +80,28 @@ public partial class SchedulingService
                     Day = slot.Day,
                     StartHour = slot.StartTime.Hour,
                     EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
+                    StartTime = slot.StartTime.ToString("HH:mm"),
+                    EndTime = slot.EndTime.ToString("HH:mm"),
                     CourseCode = s.CourseCode,
                     CourseName = s.CourseName,
                     InstructorName = s.InstructorName
                 })).ToList()
             );
 
+        // Doluluk için ham blok pencereleri (gün + gerçek saatler).
+        var blockTuplesByClassroom = snapshot.Sections
+            .Where(s => s.PrimaryClassroomId.HasValue)
+            .GroupBy(s => s.PrimaryClassroomId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.SelectMany(s => s.Blocks.Select(b => (Day: b.Day, b.StartTime, b.EndTime))).ToList());
+
         result.Classrooms = classrooms.Select(c =>
         {
             var fac = facultyLookup.TryGetValue(c.Id, out var f) ? f : null;
+            var blocks = blockTuplesByClassroom.TryGetValue(c.Id, out var bt)
+                ? bt
+                : new List<(int Day, TimeOnly StartTime, TimeOnly EndTime)>();
             return new ClassroomInfoDto
             {
                 Id = c.Id,
@@ -96,6 +112,7 @@ public partial class SchedulingService
                 Floor = c.Floor,
                 FacultyId = fac?.FacultyId ?? 0,
                 FacultyName = fac?.FacultyName ?? string.Empty,
+                WeeklyOccupancyRate = ComputeWeeklyOccupancyRate(blocks, slotGrid),
                 Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
             };
         }).OrderBy(c => c.Name).ToList();

@@ -18,9 +18,18 @@ public class ClassroomExportController(AppDbContext context, ISchedulingService 
 
     [HttpGet("csv")]
     [RequirePermission("menu.derslik-doluluk.export")]
-    public async Task<IActionResult> ExportCsv([FromQuery] int? termId, CancellationToken ct)
+    public async Task<IActionResult> ExportCsv(
+        [FromQuery] int? termId,
+        [FromQuery] int? facultyId,
+        [FromQuery] string? buildingName,
+        [FromQuery] string? classroomType,
+        [FromQuery] int? minCapacity,
+        [FromQuery] int? maxCapacity,
+        CancellationToken ct)
     {
-        var dashboard = await _schedulingService.GetClassroomDashboardAsync(termId, cancellationToken: ct);
+        // CSV ekrandaki aktif filtrelerle aynı kapsamı yansıtsın (PDF zaten yansıtıyordu).
+        var dashboard = await _schedulingService.GetClassroomDashboardAsync(
+            termId, facultyId, buildingName, classroomType, minCapacity, maxCapacity, ct);
         var classroomMetadata = await _context.Classrooms
             .AsNoTracking()
             .ToDictionaryAsync(

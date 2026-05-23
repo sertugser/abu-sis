@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -8,7 +8,8 @@ import { Search, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ClassroomWeeklyGrid from './ClassroomWeeklyGrid';
 import { useAvailableClassrooms } from '@/hooks/useScheduling';
-import type { AvailableClassroomSearchParams } from '@/types/scheduling';
+import { classroomTypeLabel } from '@/lib/classroomLabels';
+import type { AvailableClassroomSearchParams, TimeSlotSummary } from '@/types/scheduling';
 import type { ClassroomFilterState } from './ClassroomFilters';
 
 const DAY_OPTIONS = [
@@ -19,26 +20,18 @@ const DAY_OPTIONS = [
   { value: 5, label: 'Cum' },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal Sınıf',
-  Lab: 'Laboratuvar',
-  Computer: 'Bilgisayar Lab',
-  Seminar: 'Seminer',
-  Amphitheater: 'Amfi',
-};
-
-const HOURS = Array.from({ length: 10 }, (_, i) => i + 8);
-
 interface AvailableClassroomSearchTabProps {
   termId: number;
   filters: ClassroomFilterState;
   classroomTypes: string[];
+  /** Dönemin gerçek slotları (akşam dahil) — saat seçimini ve ızgarayı besler. */
+  slots: TimeSlotSummary[];
 }
 
-export default function AvailableClassroomSearchTab({ termId, filters, classroomTypes }: AvailableClassroomSearchTabProps) {
+export default function AvailableClassroomSearchTab({ termId, filters, classroomTypes, slots }: AvailableClassroomSearchTabProps) {
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [startHour, setStartHour] = useState(8);
-  const [endHour, setEndHour] = useState(10);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [minCapacity, setMinCapacity] = useState<string>('');
   const [classroomType, setClassroomType] = useState<string>('');
   const [searchParams, setSearchParams] = useState<AvailableClassroomSearchParams | null>(null);
@@ -47,13 +40,27 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
 
   const { data: results, isLoading, isFetched } = useAvailableClassrooms(searchParams);
 
+  // Saat dropdown'ları dönemin gerçek slot sınırlarından beslenir. Varsayılan,
+  // kullanıcı seçim yapana kadar ilk slot — effect yerine türetilmiş değerle
+  // (cascading render'ı önler).
+  const startOptions = useMemo(
+    () => [...new Set(slots.map(s => s.startTime))].sort(),
+    [slots],
+  );
+  const effectiveStart = startTime || startOptions[0] || '';
+  const endOptions = useMemo(
+    () => [...new Set(slots.map(s => s.endTime))].sort().filter(e => e > effectiveStart),
+    [slots, effectiveStart],
+  );
+  const effectiveEnd = (endTime && endTime > effectiveStart ? endTime : '') || endOptions[0] || '';
+
   function handleSearch() {
-    if (selectedDays.length === 0) return;
+    if (selectedDays.length === 0 || !effectiveStart || !effectiveEnd) return;
     setSearchParams({
       termId,
       days: selectedDays,
-      startHour,
-      endHour,
+      startTime: effectiveStart,
+      endTime: effectiveEnd,
       minCapacity: minCapacity ? Number(minCapacity) : undefined,
       classroomType: classroomType || filters.classroomType || undefined,
       facultyId: filters.facultyId ?? undefined,
@@ -64,8 +71,8 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
 
   function handleClear() {
     setSelectedDays([]);
-    setStartHour(8);
-    setEndHour(10);
+    setStartTime('');
+    setEndTime('');
     setMinCapacity('');
     setClassroomType('');
     setSearchParams(null);
@@ -87,11 +94,12 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
     }
   });
 
-  const highlightSlots = selectedDays.map(day => ({
-    day,
-    startHour,
-    endHour,
-  }));
+  // Aranan zaman penceresiyle çakışan slotlar, seçili her gün için vurgulanır.
+  const highlightSlots = useMemo(() => {
+    if (!effectiveStart || !effectiveEnd) return [];
+    const inWindow = slots.filter(s => s.startTime < effectiveEnd && effectiveStart < s.endTime);
+    return selectedDays.flatMap(day => inWindow.map(s => ({ day, slotOrder: s.slotOrder })));
+  }, [slots, selectedDays, effectiveStart, effectiveEnd]);
 
   return (
     <div className="space-y-5">
@@ -124,24 +132,26 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Başlangıç Saati</label>
               <select
-                value={startHour}
-                onChange={e => setStartHour(Number(e.target.value))}
-                className="h-9 w-full rounded-lg border bg-white px-3 text-sm"
+                value={effectiveStart}
+                onChange={e => setStartTime(e.target.value)}
+                disabled={slots.length === 0}
+                className="h-9 w-full rounded-lg border bg-white px-3 text-sm disabled:opacity-50"
               >
-                {HOURS.map(h => (
-                  <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                {startOptions.map(t => (
+                  <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Bitiş Saati</label>
               <select
-                value={endHour}
-                onChange={e => setEndHour(Number(e.target.value))}
-                className="h-9 w-full rounded-lg border bg-white px-3 text-sm"
+                value={effectiveEnd}
+                onChange={e => setEndTime(e.target.value)}
+                disabled={slots.length === 0}
+                className="h-9 w-full rounded-lg border bg-white px-3 text-sm disabled:opacity-50"
               >
-                {HOURS.filter(h => h >= startHour).map(h => (
-                  <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                {endOptions.map(t => (
+                  <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
@@ -164,14 +174,14 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
               >
                 <option value="">Tümü</option>
                 {classroomTypes.map(t => (
-                  <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+                  <option key={t} value={t}>{classroomTypeLabel(t)}</option>
                 ))}
               </select>
             </div>
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={handleSearch} disabled={selectedDays.length === 0}>
+            <Button onClick={handleSearch} disabled={selectedDays.length === 0 || !effectiveStart || !effectiveEnd}>
               <Search className="mr-1.5 h-4 w-4" />
               Ara
             </Button>
@@ -235,7 +245,7 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
                         onClick={() => setExpandedId(isExpanded ? null : c.id)}
                       >
                         <TableCell className="text-xs font-medium">{c.name}</TableCell>
-                        <TableCell className="text-xs">{TYPE_LABELS[c.type] ?? c.type}</TableCell>
+                        <TableCell className="text-xs">{classroomTypeLabel(c.type)}</TableCell>
                         <TableCell className="text-xs text-right">{c.capacity}</TableCell>
                         <TableCell className="text-xs text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -255,7 +265,7 @@ export default function AvailableClassroomSearchTab({ termId, filters, classroom
                       {isExpanded && (
                         <TableRow>
                           <TableCell colSpan={4} className="p-4 bg-gray-50/50">
-                            <ClassroomWeeklyGrid schedules={c.schedules} highlightSlots={highlightSlots} />
+                            <ClassroomWeeklyGrid schedules={c.schedules} slots={slots} highlightSlots={highlightSlots} />
                           </TableCell>
                         </TableRow>
                       )}
