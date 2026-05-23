@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, GitBranch, RefreshCw, RotateCcw, Save, Trash2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CalendarVisualizer, type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { type DropFeedback, type DropFeedbackRequest, type VisualizerEvent } from '@/components/CalendarVisualizer';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -31,7 +30,6 @@ import {
   dayDifference,
   defaultAcademicYear,
   fmt,
-  fmtLong,
   isDateValueWithinRange,
   isWeekend,
   maxDateValue,
@@ -81,14 +79,11 @@ import {
   type PendingConfirm,
 } from '@/lib/calendarGenerator/types';
 import {
-  buildExamDayCounts,
-  buildSemesterWeekAnalyses,
   daySpan,
   eventCategoryLabel,
   eventCategoryValue,
   getDraftId,
   getErrorMessage,
-  holidayDateText,
   isAtaturkMemorialHoliday,
   isCriticalEvent,
   isEditableDraftEvent,
@@ -99,9 +94,16 @@ import {
   validateDraftEventDateEdit,
   validateDraftEventHolidayOverlap,
 } from '@/lib/calendarGenerator/eventRules';
-import { warningRows } from '@/lib/calendarGenerator/warnings';
-import { draftStatusBadgeVariant, processOptionLabel } from '@/lib/calendarGenerator/processOptions';
+import { processOptionLabel } from '@/lib/calendarGenerator/processOptions';
 import { SearchableProcessSelect } from '@/components/calendar-generator/SearchableProcessSelect';
+import { TermSummaryCards } from '@/components/calendar-generator/TermSummaryCards';
+import { WarningsPanel } from '@/components/calendar-generator/WarningsPanel';
+import { HolidaysTab } from '@/components/calendar-generator/HolidaysTab';
+import { DraftMiniCalendar } from '@/components/calendar-generator/DraftMiniCalendar';
+import { DraftHistoryDialog } from '@/components/calendar-generator/DraftHistoryDialog';
+import { ConfirmDialog } from '@/components/calendar-generator/ConfirmDialog';
+import { ErrorDialog } from '@/components/calendar-generator/ErrorDialog';
+import { NoticeToast } from '@/components/calendar-generator/NoticeToast';
 
 export default function AcademicCalendarGeneratorPage() {
   const [activeTab, setActiveTab] = useState('generator');
@@ -1274,7 +1276,7 @@ export default function AcademicCalendarGeneratorPage() {
 
     return (
       <div className="space-y-3">
-        {renderWarningsPanel(calendar)}
+        <WarningsPanel current={calendar} />
 
         <div className="grid gap-3 lg:grid-cols-3 items-start">
           <div className="space-y-3 lg:col-span-2">
@@ -1545,277 +1547,16 @@ export default function AcademicCalendarGeneratorPage() {
           </div>
         </div>
 
-        {renderDraftMiniCalendar(current)}
-        {renderTermSummaryCards(current)}
-      </>
-    );
-  }
-
-  function renderDraftMiniCalendar(current: CalendarView) {
-    const defaultEvents = current.events;
-    
-    // Map to VisualizerEvent format
-    const eventsToRender: VisualizerEvent[] = defaultEvents.map(e => {
-      // Find if this event is modified in the what-if state
-      const whatIfEvent = whatIf.data?.events.find(we => we.draftEventId === e.draftEventId);
-      
-      let isChangedPreview = false;
-      let targetEvent = e;
-
-      if (whatIfEvent && (dateInput(whatIfEvent.startDate) !== dateInput(e.startDate) || dateInput(whatIfEvent.endDate) !== dateInput(e.endDate))) {
-        isChangedPreview = true;
-        targetEvent = whatIfEvent; // Render the new dates
-      }
-
-      return {
-        id: targetEvent.draftEventId,
-        eventType: targetEvent.eventType,
-        title: displayText(targetEvent.title),
-        startDate: dateInput(targetEvent.startDate),
-        endDate: dateInput(targetEvent.endDate) || dateInput(targetEvent.startDate),
-        note: null,
-        isChangedPreview,
-        templateItemKey: targetEvent.templateItemKey,
-        draggable: isEditableDraftEvent(e),
-      };
-    });
-
-    if (eventsToRender.length === 0) return null;
-
-    // Use the calendar's academic year to correctly anchor the year view range
-    const calendarYearStart = academicYearStart(current.academicYear);
-
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Takvim Görünümü</h2>
-        <CalendarVisualizer
-          events={eventsToRender}
-          compact={true}
-          multiMonth={true}
-          academicYearStart={calendarYearStart}
+        <DraftMiniCalendar
+          current={current}
+          whatIfData={whatIf.data}
           onEventDrop={handleDraftEventDrop}
           getDropFeedback={getDraftDropFeedback}
           onInvalidEventDrop={handleInvalidDraftEventDrop}
           dragDisabled={updateDraftEvent.isPending}
         />
-      </div>
-    );
-  }
-
-  function renderTermSummaryCards(current: CalendarView) {
-    const examDayCounts = buildExamDayCounts(current.events);
-    const analyses = buildSemesterWeekAnalyses(current.events);
-    const analysesBySemester = new Map(analyses.map(analysis => [analysis.semester, analysis]));
-
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Dönem Özeti</h2>
-        <div className="overflow-x-auto rounded-md border border-slate-200">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
-              <tr>
-                <th className="px-3 py-2 font-medium">Dönem</th>
-                <th className="px-3 py-2 font-medium">Tarihler</th>
-                <th className="px-3 py-2 font-medium">Ders / Tatil / Sınav (Gün)</th>
-                <th className="px-3 py-2 font-medium">Vize Öncesi</th>
-                <th className="px-3 py-2 font-medium">Vize Haftası</th>
-                <th className="px-3 py-2 font-medium">Vize Sonrası</th>
-                <th className="px-3 py-2 font-medium">Final Haftası</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {current.termSummaries.map(summary => {
-                const analysis = analysesBySemester.get(summary.semester);
-                const isSummer = summary.semester === 'Summer';
-                const examDays = examDayCounts[summary.semester] ?? summary.examDays;
-                return (
-                  <tr key={summary.semester} className="hover:bg-slate-50 transition-colors">
-                    <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">
-                      {SEMESTERS.find(s => s.value === summary.semester)?.label}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {fmt(summary.termStart)} - {fmt(summary.termEnd)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <span className="font-medium text-slate-700">{summary.teachingDays}</span> /{' '}
-                      <span className="text-slate-500">{summary.holidayDaysInTerm}</span> /{' '}
-                      <span className="text-red-600">{examDays}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {isSummer || !analysis ? '-' : (
-                        <span title={analysis.midtermStart ? `Vize Başlangıcı: ${fmt(utcDate(analysis.midtermStart))}` : 'Tarih yok'} className={analysis.midtermStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
-                          {analysis.weeksBeforeMidterm ?? '-'} hafta
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {isSummer || !analysis ? '-' : (
-                        <span title={analysis.midtermStart && analysis.midtermEnd ? `${fmt(utcDate(analysis.midtermStart))} - ${fmt(utcDate(analysis.midtermEnd))}` : 'Tarih yok'} className={analysis.midtermStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
-                          {analysis.midtermWeek ? `${analysis.midtermWeek}. hafta` : '-'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {isSummer || !analysis ? '-' : (
-                        <span title={analysis.finalStart ? `Final Başlangıcı: ${fmt(utcDate(analysis.finalStart))}` : 'Tarih yok'} className={analysis.finalStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
-                          {analysis.weeksAfterMidterm ?? '-'} hafta
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {isSummer || !analysis ? '-' : (
-                        <span title={analysis.finalStart && analysis.finalEnd ? `${fmt(utcDate(analysis.finalStart))} - ${fmt(utcDate(analysis.finalEnd))}` : 'Tarih yok'} className={analysis.finalStart ? 'cursor-help border-b border-dotted border-slate-400' : ''}>
-                          {analysis.finalWeek ? `${analysis.finalWeek}. hafta` : '-'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  function renderWarningsPanel(current: CalendarView) {
-    const rows = warningRows(current);
-    const failedEvents = current.events.filter(event => event.isFailed);
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Uyarılar</h2>
-        <div className="mt-2 space-y-1.5">
-          {failedEvents.length > 0 && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              <div className="font-semibold">Program seçtiğiniz kısıtlardan dolayı oluşturulamadı.</div>
-              <div className="mt-1 text-xs">
-                Yerleşemeyen etkinlikler: {failedEvents.map(event => `${semesterLabel(event.semester)} - ${displayText(event.title)}`).join(', ')}
-              </div>
-            </div>
-          )}
-          {rows.length === 0 && failedEvents.length === 0 ? (
-            <p className="text-sm text-slate-500">Uyarı yok.</p>
-          ) : rows.map(row => (
-            <div key={row.key} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <Badge variant={row.badgeVariant}>
-                {row.badgeLabel}
-              </Badge>
-              <span className="ml-2 text-slate-700">{row.message}</span>
-              {row.detail && (
-                <div className="mt-1 text-xs text-slate-500">{row.detail}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  function renderHolidaysTab() {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Tatil tanımları</h2>
-        <p className="text-xs text-slate-600">Sabit resmi tatiller, dini bayramlar ve bloklayıcı önemli günler.</p>
-        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {holidays.isLoading ? (
-            <p className="text-sm text-slate-500">Yükleniyor...</p>
-          ) : visibleHolidayDefinitions.length === 0 ? (
-            <p className="text-sm text-slate-500">Gösterilecek tatil tanımı yok.</p>
-          ) : visibleHolidayDefinitions.map(holiday => (
-            <div key={holiday.id} className="rounded-lg border border-slate-200 px-3 py-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-slate-800">{displayText(holiday.name)}</span>
-                {holiday.type === 'HijriCalculated' && (
-                  <Badge variant="default">Hicri hesaplandı</Badge>
-                )}
-              </div>
-              <div className="mt-2 font-medium text-slate-700">
-                {holidayDateText(holiday)}
-              </div>
-              <div className="mt-1 text-xs text-slate-600">
-                Süre: {holiday.durationDays} gün
-              </div>
-              {holiday.overrides.length > 0 && (
-                <div className="mt-1 text-xs text-slate-500">
-                  Kaynak tarih: {holiday.overrides.map(o => `${o.year}: ${fmtLong(o.startDate)}${dateInput(o.startDate) === dateInput(o.endDate) ? '' : ` - ${fmtLong(o.endDate)}`}`).join(', ')}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  function renderDraftHistoryDialog() {
-    if (!showDraftHistory) return null;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
-        <div className="w-full max-w-4xl rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Taslak geçmişi</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Önceden üretilen taslakları açabilir veya artık gerek olmayanları silebilirsin.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => drafts.refetch()} disabled={drafts.isFetching}>
-                Yenile
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={deleteAllDraftsFromHistory}
-                disabled={deleteDraft.isPending || drafts.isLoading || (drafts.data?.length ?? 0) === 0}
-              >
-                Tümünü Sil
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setShowDraftHistory(false)}>
-                Kapat
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-4 max-h-[70vh] overflow-auto">
-            {drafts.isLoading ? (
-              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Taslaklar yükleniyor...</p>
-            ) : (drafts.data?.length ?? 0) === 0 ? (
-              <p className="rounded-lg border border-slate-200 px-3 py-4 text-sm text-slate-500">Henüz taslak yok.</p>
-            ) : (
-              <div className="space-y-2">
-                {drafts.data?.map(summary => (
-                  <div key={summary.id} className="grid gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-slate-900">Taslak #{summary.id}</span>
-                        <Badge variant={draftStatusBadgeVariant(summary.status)}>{summary.status}</Badge>
-                      </div>
-                      <div className="mt-2 text-slate-700">
-                        {summary.academicYear} · {summary.eventCount} etkinlik · {summary.warningCount} uyarı
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Güncelleme: {fmt(summary.updatedAt)} · Saklama bitişi: {fmt(summary.expiresAt)}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 md:justify-end">
-                      <Button type="button" size="sm" variant="outline" onClick={() => openDraftFromHistory(summary)}>
-                        Aç
-                      </Button>
-                      <Button type="button" size="sm" variant="destructive" onClick={() => deleteDraftFromHistory(summary)} disabled={deleteDraft.isPending}>
-                        Sil
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        <TermSummaryCards current={current} />
+      </>
     );
   }
 
@@ -1835,79 +1576,31 @@ export default function AcademicCalendarGeneratorPage() {
           </div>
         </div>
 
-        <Dialog open={!!errorNotice} onOpenChange={(open) => !open && setErrorNotice(null)}>
-          <DialogContent className="z-[150] max-w-md border-red-200">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-900">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-                Hata
-              </DialogTitle>
-              <DialogDescription className="text-sm leading-6 text-slate-700">
-                {errorNotice}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" onClick={() => setErrorNotice(null)}>
-                Tamam
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ErrorDialog message={errorNotice} onClose={() => setErrorNotice(null)} />
 
-        {notice && (
-          <div
-            role="status"
-            aria-live="polite"
-            className={cn(
-              'fixed right-4 top-4 z-[140] max-h-[40vh] w-[min(calc(100vw-2rem),32rem)] overflow-auto rounded-lg border px-4 py-3 text-sm shadow-xl',
-              noticeTone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
-              noticeTone === 'error' && 'border-red-200 bg-red-50 text-red-900',
-              noticeTone === 'info' && 'border-slate-200 bg-white text-slate-700',
-            )}
-          >
-            {notice}
-          </div>
-        )}
+        <NoticeToast notice={notice} tone={noticeTone} />
 
         <TabsContent value="generator">{renderGeneratorTab()}</TabsContent>
         <TabsContent value="draft">{renderDraftTab()}</TabsContent>
-        <TabsContent value="holidays">{renderHolidaysTab()}</TabsContent>
+        <TabsContent value="holidays">
+          <HolidaysTab isLoading={holidays.isLoading} holidays={visibleHolidayDefinitions} />
+        </TabsContent>
       </Tabs>
 
-      {renderDraftHistoryDialog()}
+      <DraftHistoryDialog
+        open={showDraftHistory}
+        drafts={drafts.data}
+        isLoading={drafts.isLoading}
+        isFetching={drafts.isFetching}
+        deletePending={deleteDraft.isPending}
+        onClose={() => setShowDraftHistory(false)}
+        onRefetch={() => drafts.refetch()}
+        onOpenDraft={openDraftFromHistory}
+        onDeleteDraft={deleteDraftFromHistory}
+        onDeleteAll={deleteAllDraftsFromHistory}
+      />
 
-      {pendingConfirm && (
-        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-          <div
-            className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="calendar-confirm-title"
-          >
-            <h2 id="calendar-confirm-title" className="text-lg font-semibold text-slate-900">
-              {pendingConfirm.title}
-            </h2>
-            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">
-              {pendingConfirm.message}
-            </p>
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              {pendingConfirm.showCancel !== false && (
-                <Button type="button" variant="outline" onClick={() => closeConfirm(false)}>
-                  {pendingConfirm.cancelLabel ?? 'Vazgeç'}
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant={pendingConfirm.tone === 'danger' ? 'destructive' : 'default'}
-                className={pendingConfirm.tone === 'info' ? 'bg-cyan-700 hover:bg-cyan-800' : undefined}
-                onClick={() => closeConfirm(true)}
-              >
-                {pendingConfirm.confirmLabel}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog confirm={pendingConfirm} onClose={closeConfirm} />
     </div>
   );
 }
