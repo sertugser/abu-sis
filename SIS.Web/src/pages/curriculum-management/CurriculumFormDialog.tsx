@@ -13,9 +13,9 @@ import {
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import {
   useAdminDepartmentsByStructure,
-  useAdminFaculties,
   useAdminProgramsByStructure,
 } from '../../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../../hooks/useAdminLookup';
 import { useCurriculumList } from '../../hooks/useCurriculumManagement';
 import type { CurriculumListDto } from '../../types/curriculumManagement';
 
@@ -95,7 +95,7 @@ export default function CurriculumFormDialog({
   const [programId, setProgramId] = useState<number | undefined>();
 
   // ── Cascade query'leri ──
-  const { data: faculties, isLoading: loadingFaculties } = useAdminFaculties();
+  const { data: faculties, isLoading: loadingFaculties } = useFacultyLookup();
   const { data: departments, isLoading: loadingDepts } = useAdminDepartmentsByStructure(facultyId);
   const { data: programs, isLoading: loadingPrograms } = useAdminProgramsByStructure(departmentId);
   const { data: curriculaForCopy } = useCurriculumList({ programId });

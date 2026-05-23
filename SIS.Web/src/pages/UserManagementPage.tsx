@@ -17,7 +17,7 @@ import {
   useSetUserStatus,
   type AdminUserListItem,
 } from '../hooks/useAdminUsers';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { UserScopeAssignmentField } from '../components/admin/UserScopeAssignmentField';
 import { useClearUserScope, useSetUserScope, useUserScope } from '../hooks/useUserScope';
 
@@ -82,7 +82,7 @@ export default function UserManagementPage() {
   const updateRoles = useUpdateUserRoles();
   const resetPassword = useResetPassword();
   const setStatus = useSetUserStatus();
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: currentScope, isLoading: scopeLoading } = useUserScope(selectedUser?.id ?? null);
   const setUserScope = useSetUserScope(selectedUser?.id ?? null);
   const clearUserScope = useClearUserScope(selectedUser?.id ?? null);

@@ -13,9 +13,9 @@ import {
   useDeleteAccessPolicy,
 } from '../../hooks/useCourseAccessPolicy';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
 } from '../../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../../hooks/useAdminLookup';
 
 interface Props {
   courseId: number;
@@ -33,7 +33,7 @@ export function AccessPolicyPopover({ courseId, termId, courseDepartmentId, cour
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
 
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: departments = [] } = useAdminDepartmentsByStructure(
     addMode === 'department' && selectedFacultyId ? Number(selectedFacultyId) : undefined
   );

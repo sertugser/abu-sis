@@ -33,9 +33,9 @@ import {
   useSectionEvaluationResults,
 } from '../hooks/useCourseEvaluation';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
 } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import ResultChart from '../components/course-evaluation/ResultChart';
 import type { QuestionResult, SectionEvaluationResult } from '../types/courseEvaluation';
@@ -84,7 +84,7 @@ function ManagementView() {
   const { user } = useAuth();
   const isAdmin = hasAnyRole(user?.roles ?? [], ['SystemAdministrator']);
 
-  const { data: faculties = [], isLoading: facultiesLoading } = useAdminFaculties();
+  const { data: faculties = [], isLoading: facultiesLoading } = useFacultyLookup();
   const { data: terms = [] } = useAdminTerms();
   const { data: activePeriodResponse } = useActiveEvaluationPeriod();
 

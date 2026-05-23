@@ -26,8 +26,8 @@ import {
 
 import {
   useAdminDepartmentsByStructure,
-  useAdminFaculties,
 } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 
 type CalculationMethod = 'Absolute' | 'Relative';
 
@@ -162,7 +162,7 @@ function mapTemplateToRows(template: ExamCurriculumTemplate): ComponentRow[] {
 }
 
 export default function ExamCurriculumPage() {
-  const facultiesQuery = useAdminFaculties();
+  const facultiesQuery = useFacultyLookup();
 
   const [facultyIdText, setFacultyIdText] = useState('');
   const [departmentIdText, setDepartmentIdText] = useState('');

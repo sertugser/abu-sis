@@ -1,6 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 
+export interface LookupFaculty {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export interface LookupDepartment {
   id: number;
   name: string;
@@ -18,6 +24,22 @@ export interface LookupAdvisor {
   id: number;
   fullName: string;
   departmentName: string;
+}
+
+/**
+ * Fakülte lookup'ı — dropdown/filtre için hafif {id,name,code} listesi.
+ * Backend `lookup.faculty` (her authenticated user'a açık, scope-filtreli) ucunu çağırır.
+ * Fakülte YÖNETİM sayfaları (count alanları gerektiren) için `useAdminFaculties` kullanılmalı.
+ */
+export function useFacultyLookup() {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'faculties'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupFaculty[]>('/admin/faculties');
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 export function useAdminDepartments() {

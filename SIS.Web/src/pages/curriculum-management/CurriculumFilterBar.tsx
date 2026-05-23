@@ -7,10 +7,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
   useAdminProgramsByStructure,
 } from '../../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../../hooks/useAdminLookup';
 
 export type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 export type YearFilter = 'all' | string;
@@ -48,7 +48,7 @@ export default function CurriculumFilterBar({
   onSearchKeywordChange,
   onOpenCreateDialog,
 }: Props) {
-  const { data: faculties, isLoading: loadingFaculties } = useAdminFaculties();
+  const { data: faculties, isLoading: loadingFaculties } = useFacultyLookup();
   const { data: departments, isLoading: loadingDepts } = useAdminDepartmentsByStructure(facultyId);
   const { data: programs, isLoading: loadingPrograms } = useAdminProgramsByStructure(departmentId);
 

@@ -7,10 +7,10 @@ import {
 } from '@/components/ui/select';
 import { Copy, Edit2, Scissors, Users } from 'lucide-react';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
   useAdminProgramsByStructure,
 } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useCurriculumList } from '../hooks/useCurriculumManagement';
 import { useCurriculumTermRules } from '../hooks/useCurriculumTermRules';
 import {
@@ -37,7 +37,7 @@ export default function MufredatSinifDonemTanimlariPage() {
   const [curriculumId, setCurriculumId] = useState<number | undefined>();
 
   // ── Cascade queries ──
-  const { data: faculties = [], isLoading: loadingFaculties } = useAdminFaculties();
+  const { data: faculties = [], isLoading: loadingFaculties } = useFacultyLookup();
   const { data: departments = [] } = useAdminDepartmentsByStructure(facultyId);
   const { data: programs = [] } = useAdminProgramsByStructure(departmentId);
   const { data: curricula = [] } = useCurriculumList({ programId });

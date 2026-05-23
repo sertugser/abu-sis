@@ -12,6 +12,19 @@ namespace SIS.API.Controllers;
 [Authorize]
 public class AdminLookupController(AppDbContext db, ISystemConfigProvider systemConfig) : ControllerBase
 {
+    [HttpGet("faculties")]
+    [RequirePermission("lookup.faculty")]
+    public async Task<IActionResult> GetFaculties()
+    {
+        // Scope-aware: db.Faculties global query filter'ı sayesinde scope-bound roller
+        // (Dean) yalnızca atanmış fakültelerini görür; diğer roller hepsini görür.
+        var faculties = await db.Faculties
+            .OrderBy(f => f.Name)
+            .Select(f => new { f.Id, f.Name, f.Code })
+            .ToListAsync();
+        return Ok(faculties);
+    }
+
     [HttpGet("departments")]
     [RequirePermission("lookup.department")]
     public async Task<IActionResult> GetDepartments()

@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import {
   useAssignSection, useFacultyPlanningConflicts, useFacultyPlanningSections,
   useFacultyPlanningTimeSlots, useUnassignSection,
@@ -261,7 +261,7 @@ export default function SchedulingEditorPage() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const { data: activeTerm, isLoading: termLoading } = useActiveTerm();
-  const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
+  const { data: faculties, isLoading: facultiesLoading } = useFacultyLookup();
   const { isFullscreen, toggle } = useFullscreen();
 
   const urlFacultyId = searchParams.get('facultyId');

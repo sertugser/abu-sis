@@ -10,7 +10,7 @@ import { STATUS_CONFIG } from '../components/faculty-planning/sectionUtils';
 import { cn } from '@/lib/utils';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useExportExcel, useExportPdf } from '../hooks/useExcelSchedule';
 import { ConflictBar } from '../components/faculty-planning/ConflictBar';
 import { SectionListTab } from '../components/faculty-planning/SectionListTab';
@@ -26,7 +26,7 @@ export default function FacultyPlanningPage() {
   const [importOpen, setImportOpen] = useState(false);
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
-  const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
+  const { data: faculties, isLoading: facultiesLoading } = useFacultyLookup();
 
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const facultyId = selectedFacultyId ?? faculties?.[0]?.id ?? null;

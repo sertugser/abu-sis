@@ -19,7 +19,7 @@ import {
   Plus, Search, Sparkles, Trash2, X, ArrowRight,
 } from 'lucide-react';
 import { useAdminTerms, type AdminTermDto } from '../hooks/useAdminTerms';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useClassrooms } from '../hooks/useClassrooms';
 import {
   useClassroomAssignments,
@@ -72,7 +72,7 @@ function paletteFor(id: number) {
 
 export default function ClassroomAssignmentPage() {
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: classrooms = [] } = useClassrooms();
 
   // Term selection: default to active term

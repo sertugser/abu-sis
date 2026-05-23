@@ -32,7 +32,8 @@ import {
   useDeleteElectiveGroup,
   useRemoveCourseFromGroup,
 } from '../../hooks/useElectiveGroups';
-import { useAdminFaculties, useAdminDepartmentsByStructure } from '../../hooks/useAdminAcademicStructure';
+import { useAdminDepartmentsByStructure } from '../../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../../hooks/useAdminLookup';
 import { useElectiveSubtypeList } from '../../hooks/useElectiveSubtypes';
 import { findSubtypeById, getSubtypeColorByCode } from '../../lib/electiveSubtypeUtils';
 import type { ElectiveGroupDetailDto, ElectiveGroupUsageDto, UpdateElectiveGroupRequest } from '../../types/electiveGroup';
@@ -125,7 +126,7 @@ export default function ElectiveGroupDetailSheet({ groupId, onClose }: Props) {
   const [syncedGroupId, setSyncedGroupId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'courses' | 'usages'>('courses');
 
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const facultyIdNum = facultyId ? Number(facultyId) : undefined;
   const { data: departments } = useAdminDepartmentsByStructure(facultyIdNum);
   // Faz E: DB-driven subtype lookup (eski hardcoded enum string check yerine)
