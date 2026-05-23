@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SIS.API.Authorization;
 using SIS.API.Filters;
 using SIS.Application.Admin.DTOs;
@@ -37,6 +38,9 @@ public class StudentManagementController : ControllerBase
     {
     }
 
+    // Birden fazla constructor DI tarafından çözülebildiği için ambiguity oluşuyordu;
+    // DI'nin kullanacağı kanonik constructor bu (diğerleri test kolaylığı için).
+    [ActivatorUtilitiesConstructor]
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
