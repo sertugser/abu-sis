@@ -13,6 +13,25 @@ import { useSystemConfigs, useUpdateSystemConfig } from '../../hooks/useSystemCo
 import { TIMESLOT_GRID_SETTINGS, type GridSettingMeta, validateGridSetting } from '../../lib/timeSlotGridConfig';
 import { getErrorMessage } from '../../lib/errorMessage';
 
+// Çalışma günleri seçicisi — backend Schedule.WorkDays "Monday,Tuesday,..." formatını bekler.
+// Sıra önemli: çıktı her zaman bu hafta sırasıyla üretilir (Pzt → Paz).
+const WORKDAY_PICKER: ReadonlyArray<{ name: string; label: string }> = [
+  { name: 'Monday', label: 'Pzt' },
+  { name: 'Tuesday', label: 'Sal' },
+  { name: 'Wednesday', label: 'Çar' },
+  { name: 'Thursday', label: 'Per' },
+  { name: 'Friday', label: 'Cum' },
+  { name: 'Saturday', label: 'Cmt' },
+  { name: 'Sunday', label: 'Paz' },
+];
+
+/** "Monday,Saturday" → "Pzt, Cmt" (görüntüleme için Türkçe kısa adlar, hafta sırasıyla). */
+function formatWorkDays(value: string): string {
+  const selected = new Set(value.split(',').map(d => d.trim()).filter(Boolean));
+  const labels = WORKDAY_PICKER.filter(d => selected.has(d.name)).map(d => d.label);
+  return labels.length > 0 ? labels.join(', ') : '—';
+}
+
 interface TemplateSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -156,6 +175,38 @@ function SettingRow({ setting, value, validate, onSave, isPending }: SettingRowP
         />
       );
     }
+    if (setting.type === 'workdays') {
+      const selected = new Set(draft.split(',').map(d => d.trim()).filter(Boolean));
+      const toggle = (name: string) => {
+        const next = new Set(selected);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        // Hafta sırasıyla yeniden derle — backend ve grid sıralı bekler.
+        setDraft(WORKDAY_PICKER.filter(d => next.has(d.name)).map(d => d.name).join(','));
+      };
+      return (
+        <div className="flex items-center gap-1 flex-wrap justify-end max-w-[260px]">
+          {WORKDAY_PICKER.map(d => {
+            const on = selected.has(d.name);
+            return (
+              <button
+                key={d.name}
+                type="button"
+                onClick={() => toggle(d.name)}
+                aria-pressed={on}
+                className={`px-2 py-1 text-xs rounded-md border transition ${
+                  on
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                }`}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
     return (
       <Input
         className="h-8 w-72"
@@ -169,6 +220,9 @@ function SettingRow({ setting, value, validate, onSave, isPending }: SettingRowP
     if (setting.type === 'bool') {
       const checked = value === 'true' || value === '1';
       return <Badge variant={checked ? 'default' : 'secondary'} className="text-[10px]">{checked ? 'Aktif' : 'Pasif'}</Badge>;
+    }
+    if (setting.type === 'workdays') {
+      return <span className="text-sm font-medium">{formatWorkDays(value)}</span>;
     }
     return <span className="text-sm font-medium">{value}</span>;
   }

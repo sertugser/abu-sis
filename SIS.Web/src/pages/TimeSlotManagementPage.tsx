@@ -24,7 +24,6 @@ import {
   parseTimeToMinutes,
   minutesToTime,
   normalizeTime,
-  DURATION_PRESETS,
   type ScheduleSettings,
 } from '../hooks/useScheduleSettings';
 import { SELECT_CLS } from '../components/academic-structure/shared-constants';
@@ -152,18 +151,26 @@ export default function TimeSlotManagementPage() {
     };
   }, [settings.lunchBreakStart, settings.lunchBreakEnd, axisStartMin, axisEndMin]);
 
-  // Tüm 7 günü sırayla göster — admin hafta sonu için de slot ekleyebilsin.
+  // Yalnızca Schedule.WorkDays config'inde tanımlı günleri göster — backend bu günler
+  // dışına slot kabul etmez. Admin hafta sonu isterse Şablon Ayarları → Çalışma Günleri'nden
+  // ekler, UI otomatik yansıtır. Böylece "ekran izin verdi ama kayıt reddetti" tuzağı kalkar.
   // Sıralama: Pzt, Sal, Çar, Per, Cuma, Cts, Paz. (System.DayOfWeek: Sun=0..Sat=6)
+  const workDaySet = useMemo(() => new Set(settings.workDays), [settings.workDays]);
   const DAY_ORDER: DayOfWeekName[] = [1, 2, 3, 4, 5, 6, 0];
-  const visibleDays = DAY_ORDER.map(d => ({
-    value: d,
-    label: DAY_OF_WEEK_OPTIONS.find(o => o.value === d)!.label,
-  }));
+  const visibleDays = DAY_ORDER
+    .filter(d => workDaySet.has(d))
+    .map(d => ({
+      value: d,
+      label: DAY_OF_WEEK_OPTIONS.find(o => o.value === d)!.label,
+    }));
+  // Form dropdown'u ve kopyalama hedefleri de aynı filtreye tabi.
+  const dayOptions = DAY_OF_WEEK_OPTIONS.filter(d => workDaySet.has(d.value));
 
   function openCreate(presetDay?: DayOfWeekName) {
+    const firstWorkDay = visibleDays[0]?.value ?? 1;
     setForm({
       ...emptyForm(),
-      dayOfWeek: presetDay ?? 1,
+      dayOfWeek: presetDay ?? firstWorkDay,
     });
     setFormError('');
     setCreateOpen(true);
@@ -200,10 +207,35 @@ export default function TimeSlotManagementPage() {
     );
   }, [slots, form, editItem]);
 
+  /**
+   * Süre ve öğle-arası kuralı — backend ValidateConfiguredRulesAsync ile birebir aynı.
+   * Form geçerliyken kayıt-bloklayıcı uyarı döndürür; böylece kullanıcı kaydetmeden önce görür.
+   */
+  const liveRuleError = useMemo<string | null>(() => {
+    if (settings.isLoading) return null;
+    if (!form.startTime || !form.endTime || form.endTime <= form.startTime) return null;
+
+    const duration = parseTimeToMinutes(form.endTime) - parseTimeToMinutes(form.startTime);
+    if (duration !== settings.slotDurationMinutes) {
+      return `Slot süresi sistem ayarı gereği tam ${settings.slotDurationMinutes} dakika olmalı (şu an ${duration} dk).`;
+    }
+
+    if (settings.lunchBreakIsHard) {
+      const lunchStart = parseTimeToMinutes(normalizeTime(settings.lunchBreakStart));
+      const lunchEnd = parseTimeToMinutes(normalizeTime(settings.lunchBreakEnd));
+      const start = parseTimeToMinutes(form.startTime);
+      const end = parseTimeToMinutes(form.endTime);
+      if (start < lunchEnd && end > lunchStart) {
+        return `Öğle arası (${normalizeTime(settings.lunchBreakStart)}–${normalizeTime(settings.lunchBreakEnd)}) içine slot tanımlanamaz.`;
+      }
+    }
+    return null;
+  }, [form, settings]);
+
   function validate(): string | null {
     if (!form.startTime || !form.endTime) return 'Başlangıç ve bitiş saati zorunludur.';
     if (form.endTime <= form.startTime) return 'Bitiş başlangıçtan sonra olmalı.';
-    return null;
+    return liveRuleError;
   }
 
   /** Create — closeAfter=false ise dialog açık kalır ve form bir sonraki öneriye hazırlanır. */
@@ -237,9 +269,12 @@ export default function TimeSlotManagementPage() {
     const targetExisting = slotsByDay.get(targetDay) ?? [];
     if (sourceSlots.length === 0) return;
 
-    // Var olan hedef slotlarla çakışmayanları kopyala (hata yerine atla — kullanıcı dostu)
+    // Var olan hedef slotlarla çakışmayanları kopyala (hata yerine atla — kullanıcı dostu).
+    // Çakışma ile backend reddini AYRI sayıyoruz; aksi halde "ders günü değil" hatası
+    // yanlışlıkla "çakışma" diye raporlanıyordu.
     let copiedCount = 0;
-    let skippedCount = 0;
+    let overlapSkipped = 0;
+    const failureReasons: string[] = [];
     for (const src of sourceSlots) {
       const overlap = findOverlappingSlot(
         targetExisting.map(s => ({ ...s, dayOfWeek: targetDay })),
@@ -248,7 +283,7 @@ export default function TimeSlotManagementPage() {
         normalizeTime(src.endTime),
         null
       );
-      if (overlap) { skippedCount++; continue; }
+      if (overlap) { overlapSkipped++; continue; }
       try {
         await createSlot.mutateAsync({
           termId: selectedTermId,
@@ -258,14 +293,23 @@ export default function TimeSlotManagementPage() {
           allowedMode: src.allowedMode,
         });
         copiedCount++;
-      } catch {
-        skippedCount++;
+      } catch (e: unknown) {
+        const reason = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+          ?? 'bilinmeyen hata';
+        failureReasons.push(reason);
       }
     }
     setCopyFromDay(null);
-    // Küçük bir geri bildirim — alert yerine sessiz başarı. İstersen toast eklenir.
-    if (skippedCount > 0) {
-      alert(`${copiedCount} slot kopyalandı, ${skippedCount} atlandı (çakışma).`);
+
+    // Sonucu gerçek nedenleriyle bildir — çakışma ve backend reddi ayrı satırlarda.
+    const parts: string[] = [`${copiedCount} slot kopyalandı`];
+    if (overlapSkipped > 0) parts.push(`${overlapSkipped} tanesi çakışma nedeniyle atlandı`);
+    if (failureReasons.length > 0) {
+      const uniqueReasons = [...new Set(failureReasons)].join('; ');
+      parts.push(`${failureReasons.length} tanesi eklenemedi: ${uniqueReasons}`);
+    }
+    if (overlapSkipped > 0 || failureReasons.length > 0) {
+      alert(parts.join('. ') + '.');
     }
   }
 
@@ -533,7 +577,7 @@ export default function TimeSlotManagementPage() {
                 value={form.dayOfWeek}
                 onChange={e => setForm({ ...form, dayOfWeek: Number(e.target.value) as DayOfWeekName })}
               >
-                {DAY_OF_WEEK_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                {dayOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
 
@@ -548,38 +592,33 @@ export default function TimeSlotManagementPage() {
               </div>
             </div>
 
-            {/* Süre preset'leri — config'teki varsayılan süre küçük yıldız ile işaretli */}
+            {/* Süre — sistem ayarı tek bir geçerli süre dayatır (Schedule.SlotDurationMinutes).
+                Buton başlangıca göre bitişi o süreye ayarlar; başka süre backend tarafından reddedilir. */}
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1.5">Süre</label>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {DURATION_PRESETS.map(p => {
+              <div className="flex items-center gap-2 flex-wrap">
+                {(() => {
                   const currentDur = parseTimeToMinutes(form.endTime) - parseTimeToMinutes(form.startTime);
-                  const active = currentDur === p.minutes;
-                  const isConfigDefault = p.minutes === settings.slotDurationMinutes;
+                  const active = currentDur === settings.slotDurationMinutes;
                   return (
                     <button
-                      key={p.minutes}
                       type="button"
-                      onClick={() => applyDuration(p.minutes)}
-                      title={isConfigDefault ? 'Şablon varsayılanı (Schedule.SlotDurationMinutes)' : undefined}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition inline-flex items-center gap-1 ${
+                      onClick={() => applyDuration(settings.slotDurationMinutes)}
+                      disabled={!form.startTime}
+                      title="Başlangıç saatine göre bitişi sistem süresine ayarlar"
+                      className={`px-2.5 py-1 text-xs rounded-md border transition inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed ${
                         active
                           ? 'bg-slate-900 text-white border-slate-900'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
                       }`}
                     >
-                      {p.label}
-                      {isConfigDefault && (
-                        <span
-                          className={active ? 'text-amber-300' : 'text-amber-500'}
-                          aria-label="Şablon varsayılanı"
-                        >
-                          ★
-                        </span>
-                      )}
+                      {settings.slotDurationMinutes} dk uygula
                     </button>
                   );
-                })}
+                })()}
+                <span className="text-[11px] text-slate-400">
+                  Tüm slotlar tam {settings.slotDurationMinutes} dakika olmalı (sistem ayarı).
+                </span>
               </div>
             </div>
 
@@ -612,6 +651,14 @@ export default function TimeSlotManagementPage() {
               </div>
             )}
 
+            {/* Kural uyarısı — süre / öğle arası (backend ile birebir). Kayıt engellenir. */}
+            {liveRuleError && (
+              <div className="p-2.5 rounded-md bg-red-50 border border-red-200 text-xs text-red-800 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>{liveRuleError}</span>
+              </div>
+            )}
+
             {/* Config bilgi kartı — sadece yeni slot oluştururken gösterilir */}
             {!editItem && <ConfigInfoCard settings={settings} />}
           </div>
@@ -625,7 +672,7 @@ export default function TimeSlotManagementPage() {
               <Button
                 variant="ghost"
                 onClick={() => handleCreate(false)}
-                disabled={createSlot.isPending}
+                disabled={createSlot.isPending || !!liveOverlap || !!liveRuleError}
                 title="Bu slotu kaydet ve dialog açık kalsın — aynı güne hızlı ekleme"
                 className="text-slate-600"
               >
@@ -635,7 +682,7 @@ export default function TimeSlotManagementPage() {
             )}
             <Button
               onClick={editItem ? handleUpdate : () => handleCreate(true)}
-              disabled={createSlot.isPending || updateSlot.isPending}
+              disabled={createSlot.isPending || updateSlot.isPending || !!liveOverlap || !!liveRuleError}
             >
               {createSlot.isPending || updateSlot.isPending ? 'Kaydediliyor...' : 'Kaydet ve Kapat'}
             </Button>
@@ -720,7 +767,7 @@ export default function TimeSlotManagementPage() {
               Hedef günde aynı saat varsa o slot atlanır, çakışma üretilmez.
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {DAY_OF_WEEK_OPTIONS.filter(d => d.value !== copyFromDay).map(d => (
+              {dayOptions.filter(d => d.value !== copyFromDay).map(d => (
                 <Button
                   key={d.value}
                   size="sm"
