@@ -87,14 +87,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<AnnouncementRead> AnnouncementReads => Set<AnnouncementRead>();
     public DbSet<AnnouncementCategory> AnnouncementCategories => Set<AnnouncementCategory>();
     public DbSet<AnnouncementAttachment> AnnouncementAttachments => Set<AnnouncementAttachment>();
-    public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
-    public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
     public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
     public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
     public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
-    public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
-    public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
     public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
 
@@ -1014,22 +1010,6 @@ builder.Entity<GradingCriteria>(e =>
             e.HasOne(ce => ce.Term).WithMany().HasForeignKey(ce => ce.TermId).OnDelete(DeleteBehavior.SetNull);
         });
 
-        // ── ConstraintProfile ────────────────────────────────────
-        builder.Entity<ConstraintProfileItem>(e =>
-        {
-            e.HasIndex(i => new { i.ProfileId, i.ConstraintDefinitionId }).IsUnique();
-
-            e.HasOne(i => i.Profile)
-             .WithMany(p => p.Items)
-             .HasForeignKey(i => i.ProfileId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(i => i.ConstraintDefinition)
-             .WithMany()
-             .HasForeignKey(i => i.ConstraintDefinitionId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
         // ── DistributionConstraint ──────────────────────────────
         builder.Entity<DistributionConstraint>(e =>
         {
@@ -1058,19 +1038,6 @@ builder.Entity<GradingCriteria>(e =>
         {
             e.HasIndex(s => new { s.RequestId, s.StepOrder });
             e.HasOne(s => s.Request).WithMany(r => r.ApprovalSteps).HasForeignKey(s => s.RequestId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ── ConstraintViolationSnapshot ────────────────────────────
-        builder.Entity<ConstraintViolationSnapshot>(e =>
-        {
-            e.HasIndex(s => new { s.TermId, s.SnapshotAt });
-            e.HasOne(s => s.Term).WithMany().HasForeignKey(s => s.TermId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        builder.Entity<ConstraintViolationSnapshotDetail>(e =>
-        {
-            e.HasIndex(d => d.SnapshotId);
-            e.HasOne(d => d.Snapshot).WithMany(s => s.Details).HasForeignKey(d => d.SnapshotId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Performance Indexes ──────────────────────────────────

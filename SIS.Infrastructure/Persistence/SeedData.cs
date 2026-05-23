@@ -27,7 +27,6 @@ public static partial class SeedData
         await SeedTimeSlotsAsync(context);
         await SeedConstraintDefinitionsAsync(context);
         await SeedEvaluationQuestionsAsync(context);
-        await SeedConstraintProfilesAsync(context);
 
         // ── Course lookups (Açma Nedeni + Ders Kategorisi) ────
         await CurriculumCourseOpeningReasonSeed.SeedAsync(context);

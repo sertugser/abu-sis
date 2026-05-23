@@ -244,12 +244,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.import",
 
                 // ── Kısıtlamalar (toggle/weight HARİÇ — SysAdmin only; exception HARİÇ — DepMgr+) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
 
                 // ── Dönem Programı Aktarım ──
                 "menu.donem-programi-aktarim.transfer",
@@ -373,12 +371,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.unlock",
 
                 // ── Kısıtlamalar (exception DAHIL) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
                 "menu.ders-programi-kisitlamalari.exception",
                 "menu.ders-programi-kisitlamalari.exception-pending",
                 "menu.ders-programi-kisitlamalari.exception-approve",
@@ -516,12 +512,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.unlock",
 
                 // ── Kısıtlamalar (exception DAHIL) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
                 "menu.ders-programi-kisitlamalari.exception",
                 "menu.ders-programi-kisitlamalari.exception-pending",
                 "menu.ders-programi-kisitlamalari.exception-approve",

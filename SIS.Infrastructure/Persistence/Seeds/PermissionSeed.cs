@@ -190,14 +190,12 @@ public static class PermissionSeed
         ("menu.ders-saatleri-yonetimi.regenerate",       PermissionCategory.Menu, "Time slot grid yeniden üret"),
 
         // Ders Programı Kısıtlamaları
-        ("menu.ders-programi-kisitlamalari.view",        PermissionCategory.Menu, "Constraint görüntüleme (profile/distribution/analytics)"),
-        ("menu.ders-programi-kisitlamalari.create",      PermissionCategory.Menu, "Yeni constraint/profile/distribution"),
+        ("menu.ders-programi-kisitlamalari.view",        PermissionCategory.Menu, "Constraint görüntüleme (distribution dahil)"),
+        ("menu.ders-programi-kisitlamalari.create",      PermissionCategory.Menu, "Yeni constraint/distribution"),
         ("menu.ders-programi-kisitlamalari.edit",        PermissionCategory.Menu, "Constraint parametre/category/weight düzenleme"),
-        ("menu.ders-programi-kisitlamalari.delete",      PermissionCategory.Menu, "Constraint/profile/distribution silme"),
+        ("menu.ders-programi-kisitlamalari.delete",      PermissionCategory.Menu, "Constraint/distribution silme"),
         ("menu.ders-programi-kisitlamalari.toggle",      PermissionCategory.Menu, "Constraint aktif/pasif toggle"),
-        ("menu.ders-programi-kisitlamalari.snapshot",    PermissionCategory.Menu, "Constraint analytics snapshot"),
         ("menu.ders-programi-kisitlamalari.simulate",    PermissionCategory.Menu, "Constraint simülasyon (move/suggest/change)"),
-        ("menu.ders-programi-kisitlamalari.apply",       PermissionCategory.Menu, "Constraint profile uygulama"),
         ("menu.ders-programi-kisitlamalari.exception",   PermissionCategory.Menu, "Constraint exception oluştur/sil"),
         ("menu.ders-programi-kisitlamalari.exception-request",  PermissionCategory.Menu, "Exception talebi oluştur (authenticated)"),
         ("menu.ders-programi-kisitlamalari.exception-my",       PermissionCategory.Menu, "Kendi exception talepleri"),
