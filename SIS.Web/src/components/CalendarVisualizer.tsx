@@ -630,21 +630,23 @@ export function CalendarVisualizer({
                         event={b.event}
                         disabled={!isDraggable}
                         className={cn(
-                          'absolute flex h-4 items-center overflow-hidden rounded border-l-4 px-1.5 text-[10px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
+                          'absolute flex h-4 items-center overflow-hidden text-[10px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
                           s.bg,
                           s.border,
                           s.text,
+                          b.start ? 'rounded-l border-l-4 px-1.5' : 'px-0',
+                          b.end && 'rounded-r',
                           b.event.isChangedPreview && 'ring-1 ring-primary bg-primary/20',
                           isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
                           dragState && 'pointer-events-none',
                         )}
                         style={{
                           top: `${eventTopBase + b.lane * 17}px`,
-                          left: `calc(${(b.col / 7) * 100}% + 2px)`,
-                          width: `calc(${(b.span / 7) * 100}% - 4px)`,
+                          left: `calc(${(b.col / 7) * 100}% + ${b.start ? 2 : 0}px)`,
+                          width: `calc(${(b.span / 7) * 100}% - ${(b.start ? 2 : 0) + (b.end ? 2 : 0)}px)`,
                         }}
                       >
-                        <span className="truncate">{b.event.title}</span>
+                        {b.start && <span className="truncate">{b.event.title}</span>}
                       </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>
@@ -763,10 +765,12 @@ export function CalendarVisualizer({
                         event={b.event}
                         disabled={!isDraggable}
                         className={cn(
-                          'absolute flex h-5 items-center rounded border-l-[3px] px-1 text-[10px] font-medium truncate transition-shadow hover:z-10 hover:shadow-md sm:h-6 sm:px-2 sm:text-[13px]',
+                          'absolute flex h-5 items-center text-[10px] font-medium truncate transition-shadow hover:z-10 hover:shadow-md sm:h-6 sm:text-[13px]',
                           s.bg,
                           s.border,
                           s.text,
+                          b.start ? 'rounded-l border-l-[3px] px-1 sm:px-2' : 'px-0',
+                          b.end && 'rounded-r',
                           isContinuation && 'opacity-90',
                           b.event.isChangedPreview && 'ring-2 ring-primary border-primary bg-primary/20 bg-blend-multiply',
                           isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
@@ -774,14 +778,18 @@ export function CalendarVisualizer({
                         )}
                         style={{
                           top: `${eventTopBase + b.lane * 24}px`,
-                          left: `calc(${(b.col / 7) * 100}% + 3px)`,
-                          width: `calc(${(b.span / 7) * 100}% - 6px)`,
+                          left: `calc(${(b.col / 7) * 100}% + ${b.start ? 3 : 0}px)`,
+                          width: `calc(${(b.span / 7) * 100}% - ${(b.start ? 3 : 0) + (b.end ? 3 : 0)}px)`,
                         }}
                       >
-                        <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
-                          {s.label}
-                        </span>
-                        <span className="truncate">{b.event.title}</span>
+                        {b.start && (
+                          <>
+                            <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
+                              {s.label}
+                            </span>
+                            <span className="truncate">{b.event.title}</span>
+                          </>
+                        )}
                       </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>

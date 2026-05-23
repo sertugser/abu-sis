@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AlertTriangle, Bell, CalendarDays, CheckCircle2, FileDown, LogOut, RefreshCw, Repeat2, Save, Undo2, UserPlus, X } from 'lucide-react';
 import { CalendarVisualizer, type VisualizerEvent } from '@/components/CalendarVisualizer';
+import { AcademicTimeline } from '@/components/AcademicTimeline';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -314,6 +315,7 @@ export default function AcademicCalendarPage() {
             <div className="flex items-center gap-2">
               <TabsList className="h-8 bg-slate-200/60">
                 <TabsTrigger value="calendar" className="text-xs h-6 px-3">Takvim</TabsTrigger>
+                <TabsTrigger value="timeline" className="text-xs h-6 px-3">Zaman Çizelgesi</TabsTrigger>
                 <TabsTrigger value="list" className="text-xs h-6 px-3">Liste</TabsTrigger>
               </TabsList>
               <Button
@@ -422,6 +424,10 @@ export default function AcademicCalendarPage() {
               onInvalidEventDrop={handleInvalidEventDrop}
               dragDisabled={isCalendarMutating}
             />
+          </TabsContent>
+
+          <TabsContent value="timeline" className="space-y-3 mt-0">
+            <AcademicTimeline events={visualizerEvents} />
           </TabsContent>
 
           <TabsContent value="list" className="space-y-3">
