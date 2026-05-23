@@ -2,25 +2,17 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   CheckCircle2,
   ChevronRight,
   Edit2,
-  Link2,
   Plus,
-  Search,
-  SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   useAdminDepartmentsByStructure,
-  useAdminFaculties,
   useAdminProgramsByStructure,
   useCreateProgram,
   useDeleteProgram,
@@ -29,24 +21,26 @@ import {
   type ProgramDto,
   type ProgramUpsertDto,
 } from '../hooks/useAdminAcademicStructure';
-import { DeleteConfirmDialog, ProgramFormFields } from '../components/academic-structure/shared';
+import { ProgramFormFields, SortHeader } from '../components/academic-structure/shared';
+import { ProgramDeleteDialog } from '../components/academic-structure/ProgramDeleteDialog';
+import { ListToolbar } from '../components/academic-structure/ListToolbar';
+import { useListController } from '../hooks/useListController';
 import {
   DEGREE_LEVELS,
   EDUCATION_TYPES,
   emptyProgramForm,
+  extractErrorMessage,
+  formatDateTime,
   type ProgramFormState,
 } from '../components/academic-structure/shared-constants';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { ROUTES } from '@/lib/constants';
 
-type SortKey = 'name' | 'code' | 'degreeLevel' | 'totalRequiredEcts' | 'curriculumCount';
-type SortDir = 'asc' | 'desc';
-type CurriculumFilter = 'all' | 'has' | 'none';
+// Sayfa başına varsayılan 15 program; sonrası pagination ile.
+const DEFAULT_PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [15, 30, 50];
 
-interface FilterState {
-  degreeLevel: string | 'all';
-  educationType: string | 'all';
-  curriculumStatus: CurriculumFilter;
-}
+type SortKey = 'name' | 'code' | 'degreeLevel' | 'totalRequiredEcts' | 'curriculumCount';
 
 interface ProgramDetailPanelProps {
   program: ProgramDto;
@@ -55,45 +49,18 @@ interface ProgramDetailPanelProps {
   onDelete: () => void;
 }
 
-interface SortHeaderProps {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
+function matchesProgramSearch(p: ProgramDto, q: string): boolean {
+  return p.name.toLowerCase().includes(q)
+    || p.code.toLowerCase().includes(q)
+    || (p.externalSystemCode ?? '').toLowerCase().includes(q);
 }
 
-interface SummaryCardProps {
-  label: string;
-  value: number;
-  tone: 'default' | 'warning' | 'success';
-  helper: string;
-}
-
-const EMPTY_FILTERS: FilterState = {
-  degreeLevel: 'all',
-  educationType: 'all',
-  curriculumStatus: 'all',
-};
-
-const SELECT_CLS = 'h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700';
-
-function extractErrorMessage(e: unknown, fallback: string): string {
-  const resp = (e as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data;
-  return resp?.error ?? resp?.message ?? resp?.title ?? (e instanceof Error ? e.message : fallback);
-}
-
-function countActiveFilters(
-  filters: FilterState,
-  facultyId: number | undefined,
-  departmentId: number | undefined,
-): number {
-  let count = 0;
-  if (facultyId !== undefined) count++;
-  if (departmentId !== undefined) count++;
-  if (filters.degreeLevel !== 'all') count++;
-  if (filters.educationType !== 'all') count++;
-  if (filters.curriculumStatus !== 'all') count++;
-  return count;
+function compareProgram(a: ProgramDto, b: ProgramDto, key: SortKey): number {
+  if (key === 'name') return a.name.localeCompare(b.name, 'tr');
+  if (key === 'code') return a.code.localeCompare(b.code, 'tr');
+  if (key === 'degreeLevel') return a.degreeLevel.localeCompare(b.degreeLevel, 'tr');
+  if (key === 'totalRequiredEcts') return a.totalRequiredEcts - b.totalRequiredEcts;
+  return a.curriculumCount - b.curriculumCount;
 }
 
 function degreeLabel(value: string): string {
@@ -151,56 +118,22 @@ function ExternalCodeBadge({ code }: { code: string | null }) {
   );
 }
 
-function SummaryCard({ label, value, tone, helper }: SummaryCardProps) {
-  const toneMap = {
-    default: 'border-slate-200 bg-white text-slate-900',
-    warning: 'border-amber-200 bg-amber-50/60 text-amber-900',
-    success: 'border-emerald-200 bg-emerald-50/60 text-emerald-900',
-  } as const;
-
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${toneMap[tone]}`}>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
-      <p className="mt-1 text-xs text-slate-500">{helper}</p>
-    </div>
-  );
-}
-
 export default function ProgramDefinitionsPage() {
-  const { data: faculties = [] } = useAdminFaculties();
   const { data: allDepartments = [] } = useAdminDepartmentsByStructure(undefined);
-  const { data: programs = [], isLoading } = useAdminProgramsByStructure(undefined);
+  const { data: programs = [], isLoading, isError, refetch } = useAdminProgramsByStructure(undefined);
 
   const createProgram = useCreateProgram();
   const updateProgram = useUpdateProgram();
   const deleteProgram = useDeleteProgram();
 
-  const [facultyFilter, setFacultyFilter] = useState<number | undefined>(undefined);
-  const [departmentFilter, setDepartmentFilter] = useState<number | undefined>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [editItem, setEditItem] = useState<ProgramDto | null>(null);
   const [deleteItem, setDeleteItem] = useState<ProgramDto | null>(null);
   const [detailItem, setDetailItem] = useState<ProgramDto | null>(null);
   const [form, setForm] = useState<ProgramFormState>(emptyProgramForm());
   const [formError, setFormError] = useState('');
-  const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [successMessage, setSuccessMessage] = useState('');
   const [actionError, setActionError] = useState('');
-
-  const dialogOpen = createOpen || !!editItem;
-  const isSavePending = createProgram.isPending || updateProgram.isPending;
-  const activeFilterCount = countActiveFilters(filters, facultyFilter, departmentFilter);
-  const hasAnyConstraint = search.trim().length > 0 || activeFilterCount > 0;
-
-  const visibleDepartments = useMemo(() => {
-    if (!facultyFilter) return allDepartments;
-    return allDepartments.filter(item => item.facultyId === facultyFilter);
-  }, [allDepartments, facultyFilter]);
 
   const departmentMap = useMemo(() => {
     const map = new Map<number, DepartmentDto>();
@@ -208,76 +141,16 @@ export default function ProgramDefinitionsPage() {
     return map;
   }, [allDepartments]);
 
-  const visiblePrograms = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    let result = programs;
+  const list = useListController<ProgramDto, SortKey>({
+    items: programs,
+    initialSortKey: 'name',
+    defaultPageSize: DEFAULT_PAGE_SIZE,
+    matchesSearch: matchesProgramSearch,
+    compare: compareProgram,
+  });
 
-    if (facultyFilter) {
-      const departmentIds = new Set(visibleDepartments.map(item => item.id));
-      result = result.filter(item => departmentIds.has(item.departmentId));
-    }
-
-    if (departmentFilter) {
-      result = result.filter(item => item.departmentId === departmentFilter);
-    }
-
-    if (query) {
-      result = result.filter(item =>
-        item.name.toLowerCase().includes(query) ||
-        item.code.toLowerCase().includes(query) ||
-        (item.externalSystemCode ?? '').toLowerCase().includes(query),
-      );
-    }
-
-    if (filters.degreeLevel !== 'all') {
-      result = result.filter(item => item.degreeLevel === filters.degreeLevel);
-    }
-
-    if (filters.educationType !== 'all') {
-      result = result.filter(item => item.educationType === filters.educationType);
-    }
-
-    if (filters.curriculumStatus === 'has') {
-      result = result.filter(item => item.curriculumCount > 0);
-    } else if (filters.curriculumStatus === 'none') {
-      result = result.filter(item => item.curriculumCount === 0);
-    }
-
-    return [...result].sort((a, b) => {
-      let comparison = 0;
-
-      if (sortKey === 'name') comparison = a.name.localeCompare(b.name, 'tr');
-      else if (sortKey === 'code') comparison = a.code.localeCompare(b.code, 'tr');
-      else if (sortKey === 'degreeLevel') comparison = a.degreeLevel.localeCompare(b.degreeLevel, 'tr');
-      else if (sortKey === 'totalRequiredEcts') comparison = a.totalRequiredEcts - b.totalRequiredEcts;
-      else comparison = a.curriculumCount - b.curriculumCount;
-
-      return sortDir === 'asc' ? comparison : -comparison;
-    });
-  }, [departmentFilter, facultyFilter, filters, programs, search, sortDir, sortKey, visibleDepartments]);
-
-  const summary = useMemo(() => {
-    const missingCurriculum = visiblePrograms.filter(item => item.curriculumCount === 0).length;
-    const missingExternalCode = visiblePrograms.filter(item => !item.externalSystemCode).length;
-    const fullyReady = visiblePrograms.filter(item => item.curriculumCount > 0 && item.externalSystemCode).length;
-
-    return {
-      total: visiblePrograms.length,
-      missingCurriculum,
-      missingExternalCode,
-      fullyReady,
-    };
-  }, [visiblePrograms]);
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(current => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-
-    setSortKey(key);
-    setSortDir('asc');
-  }
+  const dialogOpen = createOpen || !!editItem;
+  const isSavePending = createProgram.isPending || updateProgram.isPending;
 
   function showSuccess(message: string) {
     setSuccessMessage(message);
@@ -285,7 +158,7 @@ export default function ProgramDefinitionsPage() {
   }
 
   function openCreate() {
-    const fallbackDepartmentId = departmentFilter ?? visibleDepartments[0]?.id ?? allDepartments[0]?.id ?? 0;
+    const fallbackDepartmentId = allDepartments[0]?.id ?? 0;
     setForm(emptyProgramForm(fallbackDepartmentId));
     setFormError('');
     setEditItem(null);
@@ -351,15 +224,8 @@ export default function ProgramDefinitionsPage() {
     }
   }
 
-  function clearAll() {
-    setSearch('');
-    setFilters(EMPTY_FILTERS);
-    setFacultyFilter(undefined);
-    setDepartmentFilter(undefined);
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 flex-col gap-3 min-h-0">
       {actionError && (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <span className="shrink-0 font-semibold">Hata:</span>
@@ -375,123 +241,85 @@ export default function ProgramDefinitionsPage() {
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <SummaryCard label="Görünen Program" value={summary.total} tone="default" helper="Mevcut filtrelerle listelenen toplam kayıt." />
-        <SummaryCard label="Müfredatı Eksik" value={summary.missingCurriculum} tone="warning" helper="Bu programlarda sonraki ders akışları eksik kalabilir." />
-        <SummaryCard label="Dış Kodu Eksik" value={summary.missingExternalCode} tone="default" helper="Şimdilik zorunlu değil, ama entegrasyon hazırlığı için tamamlanabilir." />
-        <SummaryCard label="Tam Hazır" value={summary.fullyReady} tone="success" helper="Müfredatı ve dış sistem kodu birlikte tanımlı olan programlar." />
-      </div>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white flex flex-1 flex-col min-h-0">
+        <ListToolbar
+          searchPlaceholder="Ad, kod veya dış sistem kodu ara..."
+          search={list.search}
+          onSearchChange={list.setSearch}
+          hasAnyConstraint={list.hasAnyConstraint}
+          onClear={list.clearAll}
+          successMessage={successMessage}
+          actions={
+            <Button size="sm" className="h-8 shrink-0" onClick={openCreate} disabled={allDepartments.length === 0}>
+              <Plus className="mr-1 h-4 w-4" />
+              Program Ekle
+            </Button>
+          }
+        />
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-        <div className="flex items-start gap-3">
-          <div className="rounded-full bg-white p-2 text-slate-700">
-            <Link2 className="h-4 w-4" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-900">Program tanımı sonrası gizli kalan adımları görünür tutuyoruz.</p>
-            <p className="text-sm text-slate-600">
-              Kılavuzlardaki en büyük sorun, kullanıcıların programı ekledikten sonra neden ilerleyemediğini sonradan fark etmesiydi.
-              Bu ekranda artık müfredat eksikliği ve dış sistem kodu hazırlığı doğrudan görünüyor.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/40 px-4 py-2">
-          <div className="relative shrink-0">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Ad, kod veya dış sistem kodu ara..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-8 w-72 pl-8 text-sm"
-            />
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 shrink-0"
-            onClick={() => setFiltersOpen(true)}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filtreler
-            {activeFilterCount > 0 && (
-              <Badge className="ml-0.5 h-4 bg-primary px-1.5 text-[10px] text-primary-foreground">
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-
-          {hasAnyConstraint && (
-            <button
-              type="button"
-              className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              onClick={clearAll}
-            >
-              Temizle
-            </button>
-          )}
-
-          <div className="flex-1" />
-
-          {successMessage && <span className="shrink-0 text-xs font-medium text-emerald-600">{successMessage}</span>}
-
-          <Button size="sm" className="h-8 shrink-0" onClick={openCreate} disabled={allDepartments.length === 0}>
-            <Plus className="mr-1 h-4 w-4" />
-            Program Ekle
-          </Button>
-        </div>
-
-        <div className="overflow-x-auto">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50">
+            <thead className="border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-slate-600">
-                  <SortHeader label="Ad" active={sortKey === 'name'} dir={sortDir} onClick={() => toggleSort('name')} />
+                  <SortHeader label="Ad" active={list.sortKey ==='name'} dir={list.sortDir} onClick={() => list.toggleSort('name')} />
                 </th>
-                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">
-                  <SortHeader label="Kod" active={sortKey === 'code'} dir={sortDir} onClick={() => toggleSort('code')} />
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">
+                  <SortHeader label="Kod" active={list.sortKey ==='code'} dir={list.sortDir} onClick={() => list.toggleSort('code')} />
                 </th>
-                <th className="w-40 px-4 py-3 text-left font-semibold text-slate-600">Dış Kod</th>
-                <th className="w-60 px-4 py-3 text-left font-semibold text-slate-600">Fakülte / Bölüm</th>
-                <th className="w-36 px-4 py-3 text-left font-semibold text-slate-600">
-                  <SortHeader label="Derece" active={sortKey === 'degreeLevel'} dir={sortDir} onClick={() => toggleSort('degreeLevel')} />
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">Dış Kod</th>
+                <th className="w-56 px-4 py-3 text-left font-semibold text-slate-600">Fakülte / Bölüm</th>
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">
+                  <SortHeader label="Derece" active={list.sortKey ==='degreeLevel'} dir={list.sortDir} onClick={() => list.toggleSort('degreeLevel')} />
                 </th>
-                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">Öğretim</th>
-                <th className="w-28 px-4 py-3 text-left font-semibold text-slate-600">Azami Süre</th>
-                <th className="w-24 px-4 py-3 text-left font-semibold text-slate-600">
-                  <SortHeader label="AKTS" active={sortKey === 'totalRequiredEcts'} dir={sortDir} onClick={() => toggleSort('totalRequiredEcts')} />
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">Öğretim</th>
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">Azami Süre</th>
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">
+                  <SortHeader label="AKTS" active={list.sortKey ==='totalRequiredEcts'} dir={list.sortDir} onClick={() => list.toggleSort('totalRequiredEcts')} />
                 </th>
-                <th className="w-36 px-4 py-3 text-left font-semibold text-slate-600">
-                  <SortHeader label="Müfredat" active={sortKey === 'curriculumCount'} dir={sortDir} onClick={() => toggleSort('curriculumCount')} />
+                <th className="w-32 px-4 py-3 text-center font-semibold text-slate-600">
+                  <SortHeader label="Müfredat" active={list.sortKey ==='curriculumCount'} dir={list.sortDir} onClick={() => list.toggleSort('curriculumCount')} />
                 </th>
-                <th className="w-44 px-4 py-3" />
+                <th className="w-32 px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {isLoading ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
                     Yükleniyor...
                   </td>
                 </tr>
-              ) : visiblePrograms.length === 0 ? (
+              ) : isError ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-14">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <AlertTriangle className="h-6 w-6 text-destructive" />
+                      <div>
+                        <p className="font-medium text-foreground">Program listesi yüklenemedi.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Bağlantı veya sunucu hatası olabilir.</p>
+                      </div>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => refetch()}>
+                        Tekrar dene
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ) : list.visible.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-14">
                     <div className="flex flex-col items-center gap-3 text-center">
                       <div>
                         <p className="font-medium text-foreground">
-                          {hasAnyConstraint ? 'Kriterle eşleşen program bulunamadı.' : 'Henüz program tanımlı değil.'}
+                          {list.hasAnyConstraint ? 'Kriterle eşleşen program bulunamadı.' : 'Henüz program tanımlı değil.'}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {hasAnyConstraint
+                          {list.hasAnyConstraint
                             ? 'Arama veya filtre kriterini değiştirerek yeniden deneyebilirsiniz.'
                             : 'İlk programı ekleyerek akademik yapıyı oluşturmaya başlayın.'}
                         </p>
                       </div>
-                      {!hasAnyConstraint && (
+                      {!list.hasAnyConstraint && (
                         <Button size="sm" className="h-8" onClick={openCreate} disabled={allDepartments.length === 0}>
                           <Plus className="mr-1 h-4 w-4" />
                           İlk Programı Ekle
@@ -501,7 +329,7 @@ export default function ProgramDefinitionsPage() {
                   </td>
                 </tr>
               ) : (
-                visiblePrograms.map(program => {
+                list.paged.map(program => {
                   const department = departmentMap.get(program.departmentId);
                   const facultyName = department?.facultyName ?? '—';
                   const hasCurriculum = program.curriculumCount > 0;
@@ -512,7 +340,7 @@ export default function ProgramDefinitionsPage() {
                       role="button"
                       tabIndex={0}
                       title={`${program.name} - detayları göster`}
-                      className={`group cursor-pointer border-l-2 transition-colors focus:bg-slate-50/80 focus:outline-none ${
+                      className={`group cursor-pointer border-b border-slate-200 border-l-2 transition-colors focus:bg-slate-50/80 focus:outline-none ${
                         hasCurriculum
                           ? 'border-l-transparent hover:bg-slate-50/60'
                           : 'border-l-amber-300/70 bg-amber-50/20 hover:bg-amber-50/40'
@@ -530,38 +358,38 @@ export default function ProgramDefinitionsPage() {
                           {program.name}
                           {!hasCurriculum && (
                             <span title="Bu program için henüz müfredat tanımlı değil.">
-                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500 animate-pulse" />
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-center">
                         <Badge variant="outline" className="font-mono text-xs uppercase tracking-wide">
                           {program.code}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-center">
                         <ExternalCodeBadge code={program.externalSystemCode} />
                       </td>
                       <td className="truncate px-4 py-3 text-xs text-muted-foreground">
                         {facultyName} / {program.departmentName}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{degreeLabel(program.degreeLevel)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{educationLabel(program.educationType)}</td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">{program.maxStudyDurationSemesters} dönem</td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">{program.totalRequiredEcts}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-center text-muted-foreground">{degreeLabel(program.degreeLevel)}</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">{educationLabel(program.educationType)}</td>
+                      <td className="px-4 py-3 text-center tabular-nums text-muted-foreground">{program.maxStudyDurationSemesters} dönem</td>
+                      <td className="px-4 py-3 text-center tabular-nums text-muted-foreground">{program.totalRequiredEcts}</td>
+                      <td className="px-4 py-3 text-center">
                         <CurriculumCountBadge count={program.curriculumCount} />
                       </td>
                       <td className="px-4 py-3">
                         <div
-                          className="flex items-center justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                          className="flex items-center justify-end gap-2"
                           onClick={e => e.stopPropagation()}
                         >
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 w-8 p-0 hover:bg-slate-200/60"
+                            className="h-8 w-8 p-0 transition-colors hover:bg-blue-50 hover:text-blue-600"
                             title="Düzenle"
                             onClick={() => openEdit(program)}
                           >
@@ -571,13 +399,13 @@ export default function ProgramDefinitionsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 w-8 p-0 hover:bg-destructive/10"
+                            className="h-8 w-8 p-0 transition-colors hover:bg-red-50 hover:text-red-600"
                             title="Sil"
                             onClick={() => setDeleteItem(program)}
                           >
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
-                          <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground/60" />
+                          <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground/60 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" />
                         </div>
                       </td>
                     </tr>
@@ -588,168 +416,19 @@ export default function ProgramDefinitionsPage() {
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-3">
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {isLoading
-              ? 'Yükleniyor...'
-              : hasAnyConstraint
-                ? `${programs.length} programdan ${visiblePrograms.length} kayıt gösteriliyor`
-                : `${programs.length} program`}
-          </span>
-          <p className="text-sm italic text-muted-foreground">
-            Program sonrası zorunlu adım:
-            {' '}
-            <Link to={ROUTES.CURRICULUM_MANAGEMENT} className="not-italic text-blue-600 underline">
-              Müfredat İşlemleri
-            </Link>
-          </p>
-        </div>
+        {!isLoading && list.visible.length > 0 && (
+          <TablePagination
+            totalCount={list.visible.length}
+            page={list.safePage}
+            pageSize={list.pageSize}
+            onPageChange={list.setPage}
+            onPageSizeChange={list.changePageSize}
+            itemLabel="program"
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            size="md"
+          />
+        )}
       </div>
-
-      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Filtreler</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fakülte</label>
-              <select
-                className={`${SELECT_CLS} w-full`}
-                value={facultyFilter ?? ''}
-                onChange={e => {
-                  setFacultyFilter(e.target.value ? Number(e.target.value) : undefined);
-                  setDepartmentFilter(undefined);
-                }}
-              >
-                <option value="">Tüm Fakülteler</option>
-                {faculties.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bölüm</label>
-              <select
-                className={`${SELECT_CLS} w-full`}
-                value={departmentFilter ?? ''}
-                onChange={e => setDepartmentFilter(e.target.value ? Number(e.target.value) : undefined)}
-              >
-                <option value="">Tüm Bölümler</option>
-                {visibleDepartments.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Derece Düzeyi</label>
-              <div className="flex flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50/40 p-1.5">
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
-                  <input
-                    type="radio"
-                    name="degree-filter"
-                    checked={filters.degreeLevel === 'all'}
-                    onChange={() => setFilters({ ...filters, degreeLevel: 'all' })}
-                    className="accent-primary"
-                  />
-                  <span>Tümü</span>
-                </label>
-                {DEGREE_LEVELS.map(item => (
-                  <label key={item.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
-                    <input
-                      type="radio"
-                      name="degree-filter"
-                      checked={filters.degreeLevel === item.value}
-                      onChange={() => setFilters({ ...filters, degreeLevel: item.value })}
-                      className="accent-primary"
-                    />
-                    <span>{item.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Eğitim Türü</label>
-              <div className="flex flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50/40 p-1.5">
-                <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
-                  <input
-                    type="radio"
-                    name="education-filter"
-                    checked={filters.educationType === 'all'}
-                    onChange={() => setFilters({ ...filters, educationType: 'all' })}
-                    className="accent-primary"
-                  />
-                  <span>Tümü</span>
-                </label>
-                {EDUCATION_TYPES.map(item => (
-                  <label key={item.value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white">
-                    <input
-                      type="radio"
-                      name="education-filter"
-                      checked={filters.educationType === item.value}
-                      onChange={() => setFilters({ ...filters, educationType: item.value })}
-                      className="accent-primary"
-                    />
-                    <span>{item.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Müfredat Durumu</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {([
-                  { value: 'all', label: 'Tümü' },
-                  { value: 'has', label: 'Müfredatı olan' },
-                  { value: 'none', label: 'Müfredatı olmayan' },
-                ] as { value: CurriculumFilter; label: string }[]).map(option => (
-                  <label
-                    key={option.value}
-                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
-                      filters.curriculumStatus === option.value
-                        ? 'border-primary bg-primary/5'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="curriculum-filter"
-                      checked={filters.curriculumStatus === option.value}
-                      onChange={() => setFilters({ ...filters, curriculumStatus: option.value })}
-                      className="accent-primary"
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="mt-2 gap-2 border-t border-slate-200 pt-4 sm:justify-between">
-            <Button
-              variant="ghost"
-              disabled={activeFilterCount === 0}
-              onClick={() => {
-                setFilters(EMPTY_FILTERS);
-                setFacultyFilter(undefined);
-                setDepartmentFilter(undefined);
-              }}
-            >
-              Sıfırla
-            </Button>
-            <Button onClick={() => setFiltersOpen(false)}>Kapat</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={open => !open && closeDialog()}>
         <DialogContent className="max-w-lg">
@@ -762,7 +441,7 @@ export default function ProgramDefinitionsPage() {
               setForm(nextForm);
               setFormError('');
             }}
-            departments={editItem ? allDepartments : (visibleDepartments.length > 0 ? visibleDepartments : allDepartments)}
+            departments={allDepartments}
           />
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
@@ -776,11 +455,10 @@ export default function ProgramDefinitionsPage() {
         </DialogContent>
       </Dialog>
 
-      <DeleteConfirmDialog
-        open={!!deleteItem}
+      <ProgramDeleteDialog
+        program={deleteItem}
         onClose={() => setDeleteItem(null)}
         onConfirm={handleDelete}
-        name={deleteItem?.name ?? ''}
         isPending={deleteProgram.isPending}
       />
 
@@ -854,6 +532,8 @@ function ProgramDetailPanel({ program, faculty, onEdit, onDelete }: ProgramDetai
               <DetailRow label="Derece Düzeyi" value={degreeLabel(program.degreeLevel)} />
               <DetailRow label="Eğitim Türü" value={educationLabel(program.educationType)} />
               <DetailRow label="ID" value={<span className="font-mono text-muted-foreground">#{program.id}</span>} />
+              <DetailRow label="Oluşturulma" value={<span className="text-muted-foreground">{formatDateTime(program.createdAt)}</span>} />
+              <DetailRow label="Son Güncelleme" value={<span className="text-muted-foreground">{formatDateTime(program.updatedAt)}</span>} />
             </dl>
           </div>
         </section>
@@ -986,17 +666,3 @@ function ReadinessRow({
   );
 }
 
-function SortHeader({ label, active, dir, onClick }: SortHeaderProps) {
-  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 transition-colors hover:text-foreground ${active ? 'text-foreground' : ''}`}
-    >
-      {label}
-      <Icon className="h-3.5 w-3.5" />
-    </button>
-  );
-}

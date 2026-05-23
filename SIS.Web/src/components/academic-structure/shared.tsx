@@ -1,6 +1,5 @@
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import type { FacultyDto, DepartmentDto } from '../../hooks/useAdminAcademicStructure';
 import {
   SELECT_CLS,
@@ -225,54 +224,30 @@ export function ProgramFormFields({
   );
 }
 
-export function DeleteConfirmDialog({
-  open,
-  onClose,
-  onConfirm,
-  name,
-  isPending,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  name: string;
-  isPending: boolean;
-}) {
+// ── Sortable table header button (3 liste sayfası ortak) ─────────────────────
+
+export interface SortHeaderProps {
+  label: string;
+  active: boolean;
+  dir: 'asc' | 'desc';
+  onClick: () => void;
+}
+
+export function SortHeader({ label, active, dir, onClick }: SortHeaderProps) {
+  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
-    <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Silme Onayı</DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          <strong className="text-foreground">{name}</strong> silinecek. Bu işlem geri alınamaz.
-        </p>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            İptal
-          </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
-            {isPending ? 'Siliniyor...' : 'Sil'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group/sort inline-flex items-center gap-1 transition-colors hover:text-foreground ${active ? 'text-foreground' : ''}`}
+    >
+      {label}
+      <Icon
+        className={`h-3.5 w-3.5 transition-opacity ${
+          active ? 'text-primary opacity-100' : 'opacity-40 group-hover/sort:opacity-100'
+        }`}
+      />
+    </button>
   );
 }
 
-export function DataTable({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-border bg-white">
-      <table className="w-full text-sm">{children}</table>
-    </div>
-  );
-}
-
-export function PageHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-6">
-      <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-      <p className="mt-1 text-slate-600">{description}</p>
-    </div>
-  );
-}

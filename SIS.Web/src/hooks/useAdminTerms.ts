@@ -1,19 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '../lib/constants';
+import type { TermTypeValue } from '../lib/termTypes';
 import apiClient from '../api/axios';
 
 const API = '/admin/terms';
 
-export type TermTypeValue =
-  | 'Fall'
-  | 'Spring'
-  | 'Summer'
-  | 'FallResit'
-  | 'SpringResit'
-  | 'SummerResit'
-  | 'SpringOther'
-  | 'SummerOther'
-  | 'Exemption';
+export type { TermTypeValue };
 
 export type TermStatusValue = 'Inactive' | 'Active' | 'Cancelled';
 export type YoksisStatusValue = 'Inactive' | 'Active';
@@ -60,8 +52,6 @@ export interface CreateTermDto {
   yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
-  overrideStart: string | null;
-  overrideEnd: string | null;
 }
 
 export interface UpdateTermDto {
@@ -74,8 +64,6 @@ export interface UpdateTermDto {
   yoksisStatus: YoksisStatusValue;
   termStart: string;
   termEnd: string;
-  overrideStart: string | null;
-  overrideEnd: string | null;
 }
 
 function invalidateTerms(qc: ReturnType<typeof useQueryClient>) {

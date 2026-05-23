@@ -248,7 +248,7 @@ Phase 2 ile RBAC sistemi yalnızca "permission var/yok" değil, "hangi veri üze
 Şu an sadece `Dean` scope-bound roldür ve kullanıcıya `UserScopes` tablosu üzerinden tek fakülte atanır.
 
 - Read tarafı: `AppDbContext` query filter'ları `Faculty`, `Department`, `AcademicProgram`, `Curriculum`,
-  `Course`, `CourseSection`, `Student`, `Instructor`, `ProgramQuota`, `ElectiveGroup`,
+  `Course`, `CourseSection`, `Student`, `Instructor`, `ElectiveGroup`,
   `CurriculumElectivePool` için faculty kısıtı uygular.
 - Write tarafı: `IScopeGuard` create/cross-faculty update akışlarında 403 üretir.
 - Bypass: `SystemAdministrator` için scope pasiftir; admin operasyonlarında gerektiğinde `WithoutScope()`

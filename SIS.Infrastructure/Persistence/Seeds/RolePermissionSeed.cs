@@ -425,8 +425,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // Dean — 144 permission (27 view + 117 action)
-            // DepartmentManager + faculty-level program onayı + program kontenjan + AdminStaff CRUD
+            // Dean — DepartmentManager + faculty-level program onayı + AdminStaff CRUD
             // ═══════════════════════════════════════════════════════════════════════════
             ["Dean"] = new[]
             {
@@ -436,7 +435,6 @@ public static class RolePermissionSeed
                 // Patch: duyurular admin'lerden kaldırıldı.
                 "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
-                "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
                 "menu.secmeli-yapilandirma.view",
@@ -464,12 +462,9 @@ public static class RolePermissionSeed
                 "menu.sifre-degistir.view",
                 "menu.sinif-atlatma-islemleri.view",
 
-                // ── Program Kontenjan ──
+                // ── Toplu Atama ──
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
-                "menu.program-kontenjan.create",
-                "menu.program-kontenjan.edit",
-                "menu.program-kontenjan.delete",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",

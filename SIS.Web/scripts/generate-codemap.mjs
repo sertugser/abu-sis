@@ -5,11 +5,14 @@
 // Çalıştırma: pnpm codemap:generate  (veya)  node scripts/generate-codemap.mjs
 //
 // Taranan kaynaklar:
-//   - src/lib/constants.ts           → ROUTES tablosu
 //   - src/App.tsx                    → Route → Component eşlemesi + import'lar
-//   - src/components/layout/SidebarMenuGroups.ts → roller → gruplar → sayfalar
+//   - SIS.Infrastructure/Persistence/Seeds/MenuStructureSeed.cs → modüller (gruplar) → sayfalar
+//   - SIS.Infrastructure/Persistence/Seeds/RolePermissionSeed.cs → permission → roller
 //   - src/pages/*.tsx                → sekmeler, dialog/sheet sayısı, hook kullanımı
 //   - src/hooks/*.ts & src/api/*.ts  → API endpoint'leri
+//
+// Not: Menü artık DB-driven (MenuModules/MenuItems). Eski SidebarMenuGroups.ts kaldırıldığı
+// için sidebar yapısı doğrudan seed dosyalarından okunur — tek gerçek kaynak budur.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,23 +22,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(__dirname, '..');
 const WEB_SRC = path.join(WEB_ROOT, 'src');
 const REPO_ROOT = path.resolve(WEB_ROOT, '..');
+const SEEDS_DIR = path.join(REPO_ROOT, 'SIS.Infrastructure', 'Persistence', 'Seeds');
 const OUTPUT = path.join(REPO_ROOT, 'docs', 'CODEMAPS', 'admin-pages-inventory.md');
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 
-// ─── 1) ROUTES tablosu ─────────────────────────────────────────
-function parseRoutes() {
-  const content = read(path.join(WEB_SRC, 'lib', 'constants.ts'));
-  const map = {};
-  const regex = /^\s*([A-Z_][A-Z0-9_]*):\s*['"]([^'"]+)['"]/gm;
-  let m;
-  while ((m = regex.exec(content)) !== null) {
-    map[m[1]] = m[2];
-  }
-  return map;
-}
+// RolePermissionSeed rol adı → codemap kısa adı
+const ROLE_DISPLAY = {
+  SystemAdministrator: 'systemAdmin',
+  Dean: 'dean',
+  DepartmentManager: 'departmentManager',
+  Instructor: 'instructor',
+  AcademicAdvisor: 'advisor',
+  AdministrativeStaff: 'administrativeStaff',
+  Student: 'student',
+};
 
-// ─── 2) App.tsx: import + Route eşlemesi ────────────────────────
+// ─── 1) App.tsx: import + Route eşlemesi ────────────────────────
 function parseApp() {
   const content = read(path.join(WEB_SRC, 'App.tsx'));
   const componentToFile = {};
@@ -74,60 +77,92 @@ function findMatchingBracket(text, startIdx, openCh, closeCh) {
   return i - 1; // index of matching close bracket
 }
 
-function parseSidebar() {
-  const content = read(path.join(WEB_SRC, 'components', 'layout', 'SidebarMenuGroups.ts'));
-  const roleArrays = [
-    'studentMenuGroups',
-    'advisorMenuGroups',
-    'instructorMenuGroups',
-    'departmentManagerMenuGroups',
-    'deanMenuGroups',
-    'systemAdminMenuGroups',
-  ];
-  const byRoute = new Map(); // route → { label, groupLabels: Set, roles: Set }
-  for (const role of roleArrays) {
-    const startRe = new RegExp(`export const ${role}[^=]*=\\s*\\[`);
-    const start = startRe.exec(content);
-    if (!start) continue;
-    const openIdx = start.index + start[0].length;
-    const closeIdx = findMatchingBracket(content, openIdx, '[', ']');
+// RolePermissionSeed.cs: rol → sahip olduğu permission key kümesi
+function parseRolePermissions() {
+  const content = read(path.join(SEEDS_DIR, 'RolePermissionSeed.cs'));
+  const roleToKeys = new Map(); // "Dean" → Set("menu.x.view", ...)
+  const roleRe = /\["([A-Za-z]+)"\]\s*=\s*new\[\]\s*\{/g;
+  let rm;
+  while ((rm = roleRe.exec(content)) !== null) {
+    const role = rm[1];
+    const openIdx = rm.index + rm[0].length;
+    const closeIdx = findMatchingBracket(content, openIdx, '{', '}');
+    const block = content.slice(openIdx, closeIdx);
+    const keys = new Set();
+    for (const km of block.matchAll(/"(menu\.[^"]+|system\.[^"]+|lookup\.[^"]+)"/g)) {
+      keys.add(km[1]);
+    }
+    roleToKeys.set(role, keys);
+  }
+  return roleToKeys;
+}
+
+// Bir permission key'e sahip rolleri çöz (SystemAdministrator her şeye sahiptir).
+// Modülde AllowedRolesCsv varsa görünürlük o role listesiyle kesişir (sysadmin shortcut'ı bypass eder).
+function resolveRoles(permKey, allowedRolesCsv, roleToKeys) {
+  const granted = new Set();
+  for (const [role, keys] of roleToKeys) {
+    if (keys.has(permKey)) granted.add(role);
+  }
+  if (allowedRolesCsv) {
+    const allowed = new Set(allowedRolesCsv.split(',').map(s => s.trim()).filter(Boolean));
+    // AllowedRolesCsv modül görünürlüğünü kısar; sysadmin yalnızca CSV'de varsa görür.
+    if (allowed.has('SystemAdministrator')) granted.add('SystemAdministrator');
+    const intersected = new Set([...granted].filter(r => allowed.has(r)));
+    return [...intersected].map(r => ROLE_DISPLAY[r] ?? r).sort();
+  }
+  // CSV yoksa: permission'a sahip roller + her zaman sysadmin
+  granted.add('SystemAdministrator');
+  return [...granted].map(r => ROLE_DISPLAY[r] ?? r).sort();
+}
+
+// MenuStructureSeed.cs: modüller (gruplar) → sayfalar (route + label + permission)
+function parseMenuStructure(roleToKeys) {
+  const content = read(path.join(SEEDS_DIR, 'MenuStructureSeed.cs'));
+
+  // 1) Modül tanımları: var <name> = new MenuModule { Label = "...", AllowedRolesCsv = "...", SortOrder = N }
+  const modules = new Map(); // varName → { label, allowedRolesCsv, sortOrder }
+  const moduleRe = /var\s+(\w+)\s*=\s*new\s+MenuModule\s*\{/g;
+  let mm;
+  while ((mm = moduleRe.exec(content)) !== null) {
+    const varName = mm[1];
+    const openIdx = mm.index + mm[0].length;
+    const closeIdx = findMatchingBracket(content, openIdx, '{', '}');
+    const body = content.slice(openIdx, closeIdx);
+    const label = (body.match(/Label\s*=\s*"([^"]+)"/) ?? [])[1] ?? varName;
+    const allowedRolesCsv = (body.match(/AllowedRolesCsv\s*=\s*"([^"]+)"/) ?? [])[1] ?? null;
+    const sortOrder = parseInt((body.match(/SortOrder\s*=\s*(\d+)/) ?? [])[1] ?? '999', 10);
+    modules.set(varName, { label, allowedRolesCsv, sortOrder });
+  }
+
+  // 2) Item atamaları: <name>.Items = new List<MenuItem> { BuildItem(...), ... }
+  const byRoute = new Map(); // route → { label, groupLabels:Set, roles:Set, sortOrder }
+  const itemsRe = /(\w+)\.Items\s*=\s*new\s+List<MenuItem>\s*\{/g;
+  let im;
+  while ((im = itemsRe.exec(content)) !== null) {
+    const varName = im[1];
+    const mod = modules.get(varName);
+    if (!mod) continue;
+    const openIdx = im.index + im[0].length;
+    const closeIdx = findMatchingBracket(content, openIdx, '{', '}');
     const block = content.slice(openIdx, closeIdx);
 
-    // Bulduğumuz her { ... } grup bloğunu ayrı ayrı ele al
-    // Grubun yapısı: { id: '...', label: '...', icon: X, children: [ ... ] }
-    let cursor = 0;
-    while (cursor < block.length) {
-      const labelRe = /label:\s*['"]([^'"]+)['"]/g;
-      labelRe.lastIndex = cursor;
-      const lm = labelRe.exec(block);
-      if (!lm) break;
-      const groupLabel = lm[1];
-
-      // children: [ ... ] — bu grup için
-      const childrenRe = /children:\s*\[/g;
-      childrenRe.lastIndex = lm.index;
-      const cm = childrenRe.exec(block);
-      if (!cm) { cursor = lm.index + lm[0].length; continue; }
-      const childStart = cm.index + cm[0].length;
-      const childEnd = findMatchingBracket(block, childStart, '[', ']');
-      const childrenBlock = block.slice(childStart, childEnd);
-
-      // Her { to: ROUTES.X, label: 'Y' } öğesi
-      const pageRe = /to:\s*ROUTES\.(\w+)\s*,\s*label:\s*['"]([^'"]+)['"]/g;
-      let pm;
-      while ((pm = pageRe.exec(childrenBlock)) !== null) {
-        const routeKey = pm[1];
-        const pageLabel = pm[2];
-        const info = byRoute.get(routeKey) ?? {
-          label: pageLabel,
-          groupLabels: new Set(),
-          roles: new Set(),
-        };
-        info.groupLabels.add(groupLabel);
-        info.roles.add(role.replace('MenuGroups', ''));
-        byRoute.set(routeKey, info);
-      }
-      cursor = childEnd + 1;
+    // BuildItem(permissions, "label", "/route", "slug", N, "permKey"[, openInNewTab: true])
+    const biRe = /BuildItem\(\s*permissions\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*\d+\s*,\s*"([^"]+)"/g;
+    let bm;
+    while ((bm = biRe.exec(block)) !== null) {
+      const [, label, route, , permKey] = bm;
+      const roles = resolveRoles(permKey, mod.allowedRolesCsv, roleToKeys);
+      const info = byRoute.get(route) ?? {
+        label,
+        groupLabels: new Set(),
+        roles: new Set(),
+        sortOrder: mod.sortOrder,
+      };
+      info.groupLabels.add(mod.label);
+      for (const r of roles) info.roles.add(r);
+      info.sortOrder = Math.min(info.sortOrder, mod.sortOrder);
+      byRoute.set(route, info);
     }
   }
   return byRoute;
@@ -216,37 +251,27 @@ function endpointsForPage(scan) {
 
 // ─── 6) Çıktıyı oluştur ────────────────────────────────────────
 function buildMarkdown() {
-  const routes = parseRoutes();
   const { componentToFile, pathToComponent } = parseApp();
-  const byRoute = parseSidebar();
+  const roleToKeys = parseRolePermissions();
+  const byRoute = parseMenuStructure(roleToKeys); // route path → info
 
   // Sidebar grubu bazında gruplandır (birden fazla grupta olabilir — ilkini kullan)
   const byGroup = new Map();
-  for (const [routeKey, info] of byRoute) {
+  const groupSort = new Map(); // groupLabel → min sortOrder (modül SortOrder'ından)
+  for (const [routePath, info] of byRoute) {
     const primaryGroup = [...info.groupLabels][0] ?? 'Diğer';
     if (!byGroup.has(primaryGroup)) byGroup.set(primaryGroup, []);
-    byGroup.get(primaryGroup).push({ routeKey, ...info });
+    byGroup.get(primaryGroup).push({ routePath, ...info });
+    const prev = groupSort.get(primaryGroup) ?? Infinity;
+    groupSort.set(primaryGroup, Math.min(prev, info.sortOrder));
   }
 
-  // Grupları workflow sırasına göre dizme
-  const groupOrder = [
-    'Sık Kullanılanlar',
-    'Dönem Yönetimi',
-    'Ders İşlemleri',
-    'Anketler',
-    'Kaynak Yönetimi',
-    'Kullanıcı Yönetimi',
-    'Akademik Yapı',
-    'Duyurular',
-    'Sistem Ayarları',
-  ];
+  // Grupları modül SortOrder'ına göre dizme (seed'deki menü sırası)
   const sortedGroups = [...byGroup.keys()].sort((a, b) => {
-    const ai = groupOrder.indexOf(a);
-    const bi = groupOrder.indexOf(b);
-    if (ai === -1 && bi === -1) return a.localeCompare(b, 'tr');
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
+    const ai = groupSort.get(a) ?? 999;
+    const bi = groupSort.get(b) ?? 999;
+    if (ai !== bi) return ai - bi;
+    return a.localeCompare(b, 'tr');
   });
 
   let md = `# Admin / Kullanıcı Sayfa Envanteri\n\n`;
@@ -272,7 +297,7 @@ function buildMarkdown() {
     pages.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
 
     for (const p of pages) {
-      const routePath = routes[p.routeKey] ?? '';
+      const routePath = p.routePath ?? '';
       const componentName = pathToComponent[routePath];
       const componentFile = componentName ? componentToFile[componentName] : null;
       md += `### ${p.label}\n\n`;

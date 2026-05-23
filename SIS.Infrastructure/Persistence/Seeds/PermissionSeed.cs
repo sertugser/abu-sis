@@ -74,18 +74,6 @@ public static class PermissionSeed
         ("menu.akademik-takvim-olusturma.apply",         PermissionCategory.Menu, "Üretilen takvimi uygula"),
         ("menu.akademik-takvim-olusturma.rollback",      PermissionCategory.Menu, "Uygulanan takvimi geri al"),
 
-        // ÖSYM Kayıt Takvimi
-        ("menu.osym-kayit-takvimi.view",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi listesi"),
-        ("menu.osym-kayit-takvimi.create",               PermissionCategory.Menu, "Yeni ÖSYM kayıt takvimi"),
-        ("menu.osym-kayit-takvimi.edit",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi düzenleme"),
-        ("menu.osym-kayit-takvimi.delete",               PermissionCategory.Menu, "ÖSYM kayıt takvimi silme"),
-
-        // Program Kontenjan Bilgileri
-        ("menu.program-kontenjan.view",                  PermissionCategory.Menu, "Program kontenjan listesi"),
-        ("menu.program-kontenjan.create",                PermissionCategory.Menu, "Yeni program kontenjan"),
-        ("menu.program-kontenjan.edit",                  PermissionCategory.Menu, "Program kontenjan düzenleme"),
-        ("menu.program-kontenjan.delete",                PermissionCategory.Menu, "Program kontenjan silme"),
-
         // Sınıf Atlatma Kuralları
         ("menu.sinif-atlatma-kurallari.view",            PermissionCategory.Menu, "Sınıf atlatma kuralları listesi"),
         ("menu.sinif-atlatma-kurallari.create",          PermissionCategory.Menu, "Yeni promotion rule"),

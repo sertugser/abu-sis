@@ -1,3 +1,26 @@
+// ─── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * API hata cevabından kullanıcıya gösterilecek mesajı çıkarır.
+ * Backend `{ message }` / `{ error }` / `{ title }` döndürebilir.
+ * Faculty/Department/Program sayfaları ortak kullanır.
+ */
+export function extractErrorMessage(e: unknown, fallback: string): string {
+  const resp = (e as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data;
+  return resp?.error ?? resp?.message ?? resp?.title ?? (e instanceof Error ? e.message : fallback);
+}
+
+/**
+ * Audit tarihlerini gösterim için biçimler. Eski kayıtlarda timestamp set
+ * edilmemiş olabilir (0001-01-01) — bu durumda "—" döner.
+ */
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return '—';
+  return d.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 // ─── Constants ───────────────────────────────────────────────────
 
 export const DEGREE_LEVELS = [

@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Plus, Edit2, MoreHorizontal, Power, PowerOff, RotateCcw, Trash2 } from 'lucide-react';
+import { Plus, Edit2, MoreHorizontal, Power, PowerOff, RotateCcw, Trash2, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +16,12 @@ import {
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { DelayedConfirmDialog } from '@/components/ui/delayed-confirm-dialog';
+import { ListToolbar } from '../components/academic-structure/ListToolbar';
+import { SortHeader } from '../components/academic-structure/shared';
+import { useListController } from '../hooks/useListController';
+import { TermForm, type TermFormState } from '@/components/term-management/TermForm';
+import { TermDetailView } from '@/components/term-management/TermDetailView';
+import { toDateInput, toIsoString, fmt } from '@/components/term-management/termDate';
 import {
   useAdminTerms,
   useCreateTerm,
@@ -32,23 +37,6 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const TERM_TYPE_OPTIONS = [
-  { value: 'Fall', label: 'Güz' },
-  { value: 'Spring', label: 'Bahar' },
-  { value: 'Summer', label: 'Yaz' },
-  { value: 'FallResit', label: 'Güz Tekders' },
-  { value: 'SpringResit', label: 'Bahar Tekders' },
-  { value: 'SummerResit', label: 'Yaz Tekders' },
-  { value: 'SpringOther', label: 'Bahar Diğer' },
-  { value: 'SummerOther', label: 'Yaz Diğer' },
-  { value: 'Exemption', label: 'Muafiyet' },
-] as const;
-
-const YOKSIS_STATUS_OPTIONS = [
-  { value: 'Inactive', label: 'Pasif' },
-  { value: 'Active', label: 'Aktif' },
-] as const;
-
 const TERM_STATUS_LABELS: Record<string, string> = {
   Inactive:  'Pasif',
   Active:    'Aktif',
@@ -63,40 +51,32 @@ const TERM_STATUS_COLORS: Record<string, string> = {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Sayfa başına varsayılan 15 dönem; sonrası pagination ile.
+const DEFAULT_PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [15, 30, 50];
 
-function toDateInput(isoString: string) {
-  if (!isoString) return '';
-  return isoString.substring(0, 10);
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type SortKey = 'name' | 'status' | 'yoksis' | 'termStart' | 'calendar';
+
+// ── Liste mantığı (useListController'a verilen saf fonksiyonlar) ──────────────
+
+function matchesSearch(t: AdminTermDto, q: string): boolean {
+  return t.name.toLowerCase().includes(q)
+    || t.shortName.toLowerCase().includes(q)
+    || String(t.year).includes(q)
+    || t.termTypeLabel.toLowerCase().includes(q);
 }
 
-function toIsoString(dateInput: string) {
-  if (!dateInput) return '';
-  return new Date(dateInput).toISOString();
+function compareTerm(a: AdminTermDto, b: AdminTermDto, key: SortKey): number {
+  if (key === 'name') return a.name.localeCompare(b.name, 'tr');
+  if (key === 'status') return a.status.localeCompare(b.status, 'tr');
+  if (key === 'yoksis') return a.yoksisStatus.localeCompare(b.yoksisStatus, 'tr');
+  if (key === 'calendar') return Number(a.hasAcademicCalendar) - Number(b.hasAcademicCalendar);
+  return new Date(a.termStart).getTime() - new Date(b.termStart).getTime();
 }
-
-function fmt(iso: string) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 
 // ── Form State ───────────────────────────────────────────────────────────────
-
-interface TermFormState {
-  name: string;
-  shortName: string;
-  englishName: string;
-  shortEnglishName: string;
-  otherName: string;
-  year: number;
-  termType: string;
-  yoksisStatus: 'Inactive' | 'Active';
-  termStart: string;
-  termEnd: string;
-  overrideStart: string;
-  overrideEnd: string;
-}
 
 function emptyForm(): TermFormState {
   return {
@@ -110,8 +90,6 @@ function emptyForm(): TermFormState {
     yoksisStatus: 'Inactive',
     termStart: '',
     termEnd: '',
-    overrideStart: '',
-    overrideEnd: '',
   };
 }
 
@@ -127,8 +105,6 @@ function termFromDto(term: AdminTermDto): TermFormState {
     yoksisStatus: term.yoksisStatus,
     termStart: toDateInput(term.termStart),
     termEnd: toDateInput(term.termEnd),
-    overrideStart: toDateInput(term.overrideStart ?? ''),
-    overrideEnd: toDateInput(term.overrideEnd ?? ''),
   };
 }
 
@@ -147,7 +123,7 @@ export default function TermManagementPage() {
   // Hafif (geri-dönüşlü) durum aksiyonları için onay: kullanıma aç/kapat, iptali geri al.
   const [confirmAction, setConfirmAction] = useState<{ term: AdminTermDto; kind: 'activate' | 'deactivate' | 'uncancel' } | null>(null);
 
-  const { data: terms = [], isLoading } = useAdminTerms();
+  const { data: terms = [], isLoading, isError, refetch } = useAdminTerms();
   const createTerm = useCreateTerm();
   const updateTerm = useUpdateTerm();
   const cancelTerm = useCancelTerm();
@@ -155,14 +131,14 @@ export default function TermManagementPage() {
   const activateTerm = useActivateTerm();
   const deactivateTerm = useDeactivateTerm();
 
-  const sortedTerms = [...terms].sort((a, b) => b.year - a.year || a.termType.localeCompare(b.termType));
-
-  // Sayfalama — varsayılan 15 dönem/sayfa.
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
-  const totalPages = Math.max(1, Math.ceil(sortedTerms.length / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const pagedTerms = sortedTerms.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const list = useListController<AdminTermDto, SortKey>({
+    items: terms,
+    initialSortKey: 'termStart',
+    initialSortDir: 'desc',
+    defaultPageSize: DEFAULT_PAGE_SIZE,
+    matchesSearch,
+    compare: compareTerm,
+  });
 
   function openCreate() { setForm(emptyForm()); setFormError(''); setCreateModalOpen(true); }
   function openEdit(term: AdminTermDto) { setForm(termFromDto(term)); setFormError(''); setEditingTerm(term); }
@@ -209,8 +185,6 @@ export default function TermManagementPage() {
       yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
-      overrideStart: form.overrideStart ? toIsoString(form.overrideStart) : null,
-      overrideEnd: form.overrideEnd ? toIsoString(form.overrideEnd) : null,
     };
     try {
       await createTerm.mutateAsync(dto);
@@ -235,8 +209,6 @@ export default function TermManagementPage() {
       yoksisStatus: form.yoksisStatus,
       termStart: toIsoString(form.termStart),
       termEnd: toIsoString(form.termEnd),
-      overrideStart: form.overrideStart ? toIsoString(form.overrideStart) : null,
-      overrideEnd: form.overrideEnd ? toIsoString(form.overrideEnd) : null,
     };
     try {
       await updateTerm.mutateAsync({ id: editingTerm.id, dto });
@@ -255,12 +227,7 @@ export default function TermManagementPage() {
       await cancelTerm.mutateAsync(termId);
       showSuccess('Dönem iptal edildi.');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
-      const msg = axiosErr?.response?.data?.error
-        ?? axiosErr?.response?.data?.message
-        ?? axiosErr?.response?.data?.title
-        ?? (err instanceof Error ? err.message : 'İptal işlemi başarısız.');
-      setActionError(msg);
+      setActionError(extractApiError(err, 'İptal işlemi başarısız.'));
     }
   }
 
@@ -269,12 +236,7 @@ export default function TermManagementPage() {
       await uncancelTerm.mutateAsync(termId);
       showSuccess('Dönem iptali geri alındı.');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string; title?: string } } };
-      const msg = axiosErr?.response?.data?.error
-        ?? axiosErr?.response?.data?.message
-        ?? axiosErr?.response?.data?.title
-        ?? (err instanceof Error ? err.message : 'İptal geri alma başarısız.');
-      setActionError(msg);
+      setActionError(extractApiError(err, 'İptal geri alma başarısız.'));
     }
   }
 
@@ -302,156 +264,218 @@ export default function TermManagementPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 space-y-5">
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
-        {/* Toolbar */}
-        <div className="flex items-center justify-end px-4 py-3 border-b border-border bg-card">
-          <div className="flex items-center gap-3">
-            {successMessage && (
-              <span className="text-sm font-medium text-success">{successMessage}</span>
-            )}
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-1" />
-              Yeni Dönem Oluştur
-            </Button>
-          </div>
+    <div className="flex flex-1 flex-col gap-3 min-h-0">
+      {actionError && (
+        <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
+          <span className="shrink-0 font-semibold">Hata:</span>
+          <span className="flex-1">{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError('')}
+            className="shrink-0 text-destructive hover:text-destructive/80 font-bold"
+            aria-label="Hatayı kapat"
+          >
+            &times;
+          </button>
         </div>
+      )}
 
-        {actionError && (
-          <div className="mx-4 mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive flex items-start gap-2">
-            <span className="shrink-0 font-semibold">Hata:</span>
-            <span>{actionError}</span>
-            <button onClick={() => setActionError('')} className="ml-auto shrink-0 text-destructive hover:text-destructive/80 font-bold">&times;</button>
-          </div>
-        )}
+      {/* ── Merged card: toolbar + table + footer ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-1 flex-col min-h-0">
+        <ListToolbar
+          searchPlaceholder="Dönem adı, yıl veya tür ara..."
+          search={list.search}
+          onSearchChange={list.setSearch}
+          hasAnyConstraint={list.hasAnyConstraint}
+          onClear={list.clearAll}
+          successMessage={successMessage}
+          actions={
+            <Button size="sm" className="h-8 shrink-0" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-1" /> Yeni Dönem Oluştur
+            </Button>
+          }
+        />
 
         <div className="flex-1 min-h-0 overflow-auto">
-        <table className="w-full min-w-[820px] text-sm">
-          <thead className="bg-card border-b border-border">
-            <tr>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[28%]">Dönem</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[13%]">Durum</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[12%]">YÖKSİS</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[16%]">Dönem Tarihi</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-[17%]">Akademik Takvim</th>
-              <th className="px-4 py-3 text-right font-semibold text-muted-foreground">İşlemler</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {isLoading ? (
+          <table className="w-full min-w-[820px] text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
+                <th className="text-left px-4 py-3 font-semibold text-slate-600">
+                  <SortHeader label="Dönem" active={list.sortKey === 'name'} dir={list.sortDir} onClick={() => list.toggleSort('name')} />
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-40">
+                  <SortHeader label="Durum" active={list.sortKey === 'status'} dir={list.sortDir} onClick={() => list.toggleSort('status')} />
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-40">
+                  <SortHeader label="YÖKSİS" active={list.sortKey === 'yoksis'} dir={list.sortDir} onClick={() => list.toggleSort('yoksis')} />
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-40">
+                  <SortHeader label="Dönem Tarihi" active={list.sortKey === 'termStart'} dir={list.sortDir} onClick={() => list.toggleSort('termStart')} />
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-slate-600 w-40">
+                  <SortHeader label="Akademik Takvim" active={list.sortKey === 'calendar'} dir={list.sortDir} onClick={() => list.toggleSort('calendar')} />
+                </th>
+                <th className="px-4 py-3 w-40" />
               </tr>
-            ) : sortedTerms.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Henüz dönem oluşturulmamış.</td>
-              </tr>
-            ) : pagedTerms.map(term => (
-              <tr
-                key={term.id}
-                onDoubleClick={() => setViewingTerm(term)}
-                title="Detayları görmek için çift tıklayın"
-                className={`transition-colors duration-150 cursor-pointer select-none border-l-4 ${
-                  term.isActive
-                    ? 'bg-emerald-50/60 border-l-emerald-500 hover:bg-emerald-100/70'
-                    : 'border-l-transparent hover:bg-slate-50'
-                }`}
-              >
-                  {/* Ad */}
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-foreground">{term.name}</p>
-                  </td>
-
-                  {/* Durum */}
-                  <td className="px-4 py-3">
-                    <Badge className={`text-sm ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
-                      {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
-                    </Badge>
-                  </td>
-
-                  {/* YÖKSİS */}
-                  <td className="px-4 py-3">
-                    <Badge className={`text-sm ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                      {term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'}
-                    </Badge>
-                  </td>
-
-                  {/* Dönem Tarihi */}
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{fmt(term.termStart)}</p>
-                      <p className="text-xs text-muted-foreground">{fmt(term.termEnd)}</p>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Yükleniyor...</td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-14">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <AlertTriangle className="h-6 w-6 text-destructive" />
+                      <div>
+                        <p className="font-medium text-foreground">Dönem listesi yüklenemedi.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Bağlantı veya sunucu hatası olabilir.</p>
+                      </div>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => refetch()}>
+                        Tekrar dene
+                      </Button>
                     </div>
                   </td>
-
-                  {/* Akademik Takvim */}
-                  <td className="px-4 py-3">
-                    {term.hasAcademicCalendar
-                      ? <Badge className="text-sm bg-emerald-100 text-emerald-700 border-emerald-300">Takvim Tanımlı</Badge>
-                      : <Badge className="text-sm bg-amber-100 text-amber-700 border-amber-300">Takvim Eksik</Badge>}
+                </tr>
+              ) : list.visible.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-14">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {list.hasAnyConstraint ? 'Kriterle eşleşen dönem bulunamadı.' : 'Henüz dönem oluşturulmamış.'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {list.hasAnyConstraint
+                            ? 'Arama kriterini değiştirebilirsiniz.'
+                            : 'İlk dönemi oluşturarak akademik takvime başlayın.'}
+                        </p>
+                      </div>
+                      {!list.hasAnyConstraint && (
+                        <Button size="sm" className="h-8" onClick={openCreate}>
+                          <Plus className="h-4 w-4 mr-1" /> İlk Dönemi Oluştur
+                        </Button>
+                      )}
+                    </div>
                   </td>
+                </tr>
+              ) : (
+                list.paged.map(term => (
+                  <tr
+                    key={term.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setViewingTerm(term)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setViewingTerm(term);
+                      }
+                    }}
+                    title={`${term.name} — detayları göster`}
+                    className={`group cursor-pointer transition-colors border-b border-slate-200 border-l-2 focus:outline-none focus:bg-slate-50/80 ${
+                      term.isActive
+                        ? 'border-l-emerald-500 bg-emerald-50/50 hover:bg-emerald-50/80'
+                        : 'border-l-transparent hover:bg-slate-50/60'
+                    }`}
+                  >
+                    {/* Ad */}
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-foreground">{term.name}</span>
+                    </td>
 
-                  {/* İşlemler */}
-                  <td className="px-4 py-3" onDoubleClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Düzenle" onClick={() => openEdit(term)}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="İşlemler">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          {!term.isCancelled && (
-                            term.isActivated ? (
-                              <DropdownMenuItem disabled={deactivateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'deactivate' })}>
-                                <PowerOff className="h-4 w-4 mr-2" /> Kullanıma Kapat
+                    {/* Durum */}
+                    <td className="px-4 py-3 text-center">
+                      <Badge className={`text-sm ${TERM_STATUS_COLORS[term.status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+                        {term.statusLabel || TERM_STATUS_LABELS[term.status] || term.status}
+                      </Badge>
+                    </td>
+
+                    {/* YÖKSİS */}
+                    <td className="px-4 py-3 text-center">
+                      <Badge className={`text-sm ${term.yoksisStatus === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                        {term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'}
+                      </Badge>
+                    </td>
+
+                    {/* Dönem Tarihi */}
+                    <td className="px-4 py-3 text-center">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{fmt(term.termStart)}</p>
+                        <p className="text-xs text-muted-foreground">{fmt(term.termEnd)}</p>
+                      </div>
+                    </td>
+
+                    {/* Akademik Takvim */}
+                    <td className="px-4 py-3 text-center">
+                      {term.hasAcademicCalendar
+                        ? <Badge className="text-sm bg-emerald-100 text-emerald-700 border-emerald-300">Takvim Tanımlı</Badge>
+                        : <Badge className="text-sm bg-amber-100 text-amber-700 border-amber-300">Takvim Eksik</Badge>}
+                    </td>
+
+                    {/* İşlemler */}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 justify-end">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 transition-colors hover:bg-blue-50 hover:text-blue-600" title="Düzenle" onClick={() => openEdit(term)}>
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <div className="w-px h-5 bg-slate-200" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 transition-colors hover:bg-slate-200/60" title="İşlemler">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            {!term.isCancelled && (
+                              term.isActivated ? (
+                                <DropdownMenuItem disabled={deactivateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'deactivate' })}>
+                                  <PowerOff className="h-4 w-4 mr-2" /> Kullanıma Kapat
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem disabled={activateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'activate' })}>
+                                  <Power className="h-4 w-4 mr-2" /> Kullanıma Aç
+                                </DropdownMenuItem>
+                              )
+                            )}
+                            {term.status === 'Cancelled' ? (
+                              <DropdownMenuItem disabled={uncancelTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'uncancel' })}>
+                                <RotateCcw className="h-4 w-4 mr-2" /> İptali Geri Al
                               </DropdownMenuItem>
                             ) : (
-                              <DropdownMenuItem disabled={activateTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'activate' })}>
-                                <Power className="h-4 w-4 mr-2" /> Kullanıma Aç
+                              <DropdownMenuItem
+                                disabled={cancelTerm.isPending}
+                                onClick={() => setConfirmCancelTarget(term)}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" /> İptal Et
                               </DropdownMenuItem>
-                            )
-                          )}
-                          {term.status === 'Cancelled' ? (
-                            <DropdownMenuItem disabled={uncancelTerm.isPending} onClick={() => setConfirmAction({ term, kind: 'uncancel' })}>
-                              <RotateCcw className="h-4 w-4 mr-2" /> İptali Geri Al
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              disabled={cancelTerm.isPending}
-                              onClick={() => setConfirmCancelTarget(term)}
-                              className="text-red-600 focus:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> İptal Et
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <ChevronRight className="h-4 w-4 ml-1 shrink-0 text-muted-foreground/60 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
-        {!isLoading && sortedTerms.length > 0 && (
+        {!isLoading && list.visible.length > 0 && (
           <TablePagination
-            totalCount={sortedTerms.length}
-            page={safePage}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            totalCount={list.visible.length}
+            page={list.safePage}
+            pageSize={list.pageSize}
+            onPageChange={list.setPage}
+            onPageSizeChange={list.changePageSize}
             itemLabel="dönem"
-            pageSizeOptions={[15, 30, 50]}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
             size="md"
           />
         )}
-
       </div>
 
       {/* Cancel Confirmation Dialog — yıkıcı (cascade: section'lar Cancelled olur), 5sn delay. */}
@@ -552,7 +576,7 @@ export default function TermManagementPage() {
         </ResizableDialogContent>
       </Dialog>
 
-      {/* Detay Modal (çift tık ile açılır) */}
+      {/* Detay Modal (satıra tıkla ile açılır) */}
       <Dialog open={!!viewingTerm} onOpenChange={open => !open && setViewingTerm(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -582,209 +606,6 @@ export default function TermManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// ── Term Detail View ─────────────────────────────────────────────────────────
-
-function TermDetailView({ term, onEdit }: { term: AdminTermDto; onEdit: () => void }) {
-  const today = new Date();
-  const effectiveStart = new Date(term.effectiveStart);
-  const effectiveEnd = new Date(term.effectiveEnd);
-  const withinEffectiveDates = today >= effectiveStart && today <= effectiveEnd;
-
-  const hasOverrideStart = !!term.overrideStart;
-  const hasOverrideEnd = !!term.overrideEnd;
-
-  // "Neden Aktif değil?" açıklaması — kullanıcı sık karşılaştığı için görünür yap
-  const inactiveReason =
-    term.status === 'Active' ? null
-    : term.isCancelled ? 'Bu dönem iptal edilmiş. Aktif olabilmesi için önce iptal geri alınmalı.'
-    : !term.isActivated ? 'Bu dönem kullanıma kapalı. Aktif dönem olarak kullanılabilmesi için önce kullanıma açılmalı.'
-    : !withinEffectiveDates ? `Bugün (${fmt(today.toISOString())}) dönem tarih aralığında değil. Aktif olabilmesi için bugünün ${fmt(term.effectiveStart)} ve ${fmt(term.effectiveEnd)} arasında olması gerekir.`
-    : null;
-
-  return (
-    <div className="space-y-3 py-2 text-sm">
-      <DetailRow label="Ad" value={term.name} />
-      <DetailRow label="Kısa Ad" value={term.shortName || '—'} />
-      <DetailRow label="İngilizce Ad" value={term.englishName || '—'} />
-      <DetailRow label="Kısa İngilizce Ad" value={term.shortEnglishName || '—'} />
-      <DetailRow label="Diğer Ad" value={term.otherName || '—'} />
-      <DetailRow label="Yıl" value={String(term.year)} />
-      <DetailRow label="Tür" value={term.termTypeLabel} />
-      <DetailRow label="Kullanım" value={term.isActivated ? 'Kullanıma açık' : 'Kullanıma kapalı'} />
-      <DetailRow label="YÖKSİS Durumu" value={term.yoksisStatus === 'Active' ? 'Aktif' : 'Pasif'} />
-      <DetailRow
-        label="Durum"
-        value={
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
-            term.status === 'Active' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
-            term.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300' :
-            'bg-slate-100 text-slate-700 border-slate-300'
-          }`}>
-            {term.statusLabel || term.status}
-          </span>
-        }
-      />
-      <DetailRow label="Başlangıç" value={fmt(term.termStart)} />
-      <DetailRow label="Bitiş" value={fmt(term.termEnd)} />
-
-      {(hasOverrideStart || hasOverrideEnd) && (
-        <>
-          {hasOverrideStart && (
-            <DetailRow
-              label="Erken Aktivasyon"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-sky-100 text-sky-700 border-sky-300">
-                    🔵 {fmt(term.overrideStart!)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">(dönem başlamadan aktif edildi)</span>
-                </span>
-              }
-            />
-          )}
-          {hasOverrideEnd && (
-            <DetailRow
-              label="Uzatma"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-amber-100 text-amber-700 border-amber-300">
-                    🟡 {fmt(term.overrideEnd!)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">(dönem sonrası uzatıldı)</span>
-                </span>
-              }
-            />
-          )}
-        </>
-      )}
-
-      <DetailRow
-        label="Akademik Takvim"
-        value={term.hasAcademicCalendar ? 'Tanımlı' : 'Eksik'}
-      />
-
-      {inactiveReason && (
-        <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
-          <p className="font-semibold mb-1">Neden Aktif değil?</p>
-          <p className="mb-2">{inactiveReason}</p>
-          {!term.isCancelled && (
-            <div className="flex items-center gap-2 pt-1 border-t border-amber-200/60">
-              <Button size="sm" variant="outline" onClick={onEdit} className="h-7 text-xs">
-                Tarihleri Düzenle
-              </Button>
-              <span className="text-[11px] text-amber-800/80">
-                veya Erken Aktivasyon / Uzatma alanını doldurarak override ekleyin.
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground">{value}</span>
-    </div>
-  );
-}
-
-// ── Term Form ─────────────────────────────────────────────────────────────────
-
-function TermForm({
-  form, setForm, showYearTermType, formError,
-}: {
-  form: TermFormState;
-  setForm: React.Dispatch<React.SetStateAction<TermFormState>>;
-  showYearTermType: boolean;
-  formError: string;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Dönem Adı *</label>
-        <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="örn. 2024-2025 Güz Dönemi" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Kısa Ad</label>
-          <Input value={form.shortName} onChange={e => setForm(f => ({ ...f, shortName: e.target.value }))} placeholder="örn. 24-25 Güz" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">İngilizce Ad</label>
-          <Input value={form.englishName} onChange={e => setForm(f => ({ ...f, englishName: e.target.value }))} placeholder="örn. Fall 2024-2025" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Kısa İngilizce Ad *</label>
-          <Input value={form.shortEnglishName} onChange={e => setForm(f => ({ ...f, shortEnglishName: e.target.value }))} placeholder="örn. Fall 24-25" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Diğer Ad</label>
-          <Input value={form.otherName} onChange={e => setForm(f => ({ ...f, otherName: e.target.value }))} placeholder="Opsiyonel" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Yıl *</label>
-          <Input
-            type="number"
-            value={form.year}
-            disabled={!showYearTermType}
-            title={!showYearTermType ? 'Yıl dönem oluşturulduktan sonra değiştirilemez' : undefined}
-            onChange={e => setForm(f => ({ ...f, year: Number(e.target.value) }))}
-            min={2000}
-            max={2100}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Tür *</label>
-          <select
-            value={form.termType}
-            onChange={e => setForm(f => ({ ...f, termType: e.target.value }))}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-          >
-            {TERM_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">YÖKSİS Durumu</label>
-          <select
-            value={form.yoksisStatus}
-            onChange={e => setForm(f => ({ ...f, yoksisStatus: e.target.value as 'Inactive' | 'Active' }))}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
-          >
-            {YOKSIS_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="border-t border-border pt-3 space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dönem Tarihleri</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Başlangıç *</label>
-            <Input type="date" value={form.termStart} onChange={e => setForm(f => ({ ...f, termStart: e.target.value }))} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Bitiş *</label>
-            <Input type="date" value={form.termEnd} onChange={e => setForm(f => ({ ...f, termEnd: e.target.value }))} />
-          </div>
-        </div>
-      </div>
-
-      {formError && <p className="text-sm text-destructive">{formError}</p>}
     </div>
   );
 }

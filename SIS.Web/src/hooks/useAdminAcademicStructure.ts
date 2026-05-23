@@ -3,7 +3,11 @@ import apiClient from '../api/axios';
 
 const BASE = '/admin/academic-structure';
 
-export interface FacultyDto { id: number; name: string; code: string; departmentCount: number; }
+export interface FacultyDto {
+  id: number; name: string; code: string;
+  departmentCount: number; programCount: number; studentCount: number;
+  createdAt: string; updatedAt: string | null;
+}
 export interface DepartmentDto {
   id: number;
   name: string;
@@ -14,6 +18,8 @@ export interface DepartmentDto {
   studentCount: number;
   instructorCount: number;
   isServiceUnit: boolean;
+  createdAt: string;
+  updatedAt: string | null;
 }
 export interface ProgramDto {
   id: number; name: string; code: string;
@@ -22,6 +28,7 @@ export interface ProgramDto {
   degreeLevel: string; educationType: string;
   maxStudyDurationSemesters: number; totalRequiredEcts: number;
   curriculumCount: number;
+  createdAt: string; updatedAt: string | null;
 }
 
 export interface ProgramUpsertDto {
@@ -33,6 +40,155 @@ export interface ProgramUpsertDto {
   educationType: string;
   maxStudyDurationSemesters: number;
   totalRequiredEcts: number;
+}
+
+export interface FacultyDeletionSummary {
+  facultyId: number;
+  facultyName: string;
+  departmentCount: number;
+  programCount: number;
+  curriculumCount: number;
+  studentCount: number;
+  instructorCount: number;
+  canDelete: boolean;
+}
+
+export function useFacultyDeletionSummary(facultyId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'structure', 'faculty-deletion-summary', facultyId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FacultyDeletionSummary>(`${BASE}/faculties/${facultyId}/deletion-summary`);
+      return data;
+    },
+    enabled: facultyId !== null,
+    staleTime: 0,
+  });
+}
+
+export interface FacultyDepartmentStat {
+  id: number;
+  name: string;
+  code: string;
+  isServiceUnit: boolean;
+  studentCount: number;
+  instructorCount: number;
+  programCount: number;
+}
+export interface DegreeLevelCount { degreeLevel: string; count: number; }
+export interface FacultyOverview {
+  id: number;
+  name: string;
+  code: string;
+  createdAt: string;
+  updatedAt: string | null;
+  departmentCount: number;
+  programCount: number;
+  curriculumCount: number;
+  studentCount: number;
+  instructorCount: number;
+  programsWithoutCurriculum: number;
+  programsWithoutExternalCode: number;
+  departments: FacultyDepartmentStat[];
+  programsByDegree: DegreeLevelCount[];
+}
+
+export function useFacultyOverview(facultyId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'structure', 'faculty-overview', facultyId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FacultyOverview>(`${BASE}/faculties/${facultyId}/overview`);
+      return data;
+    },
+    enabled: facultyId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export interface DepartmentProgramStat {
+  id: number;
+  name: string;
+  code: string;
+  degreeLevel: string;
+  educationType: string;
+  totalRequiredEcts: number;
+  maxStudyDurationSemesters: number;
+  curriculumCount: number;
+  hasExternalCode: boolean;
+  studentCount: number;
+}
+export interface DepartmentInstructor { id: number; name: string; title: string; }
+export interface DepartmentOverview {
+  id: number;
+  name: string;
+  code: string;
+  facultyId: number;
+  facultyName: string;
+  isServiceUnit: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+  studentCount: number;
+  instructorCount: number;
+  programCount: number;
+  curriculumCount: number;
+  programsWithoutCurriculum: number;
+  programsWithoutExternalCode: number;
+  programs: DepartmentProgramStat[];
+  instructors: DepartmentInstructor[];
+  programsByDegree: DegreeLevelCount[];
+}
+
+export function useDepartmentOverview(departmentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'structure', 'department-overview', departmentId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DepartmentOverview>(`${BASE}/departments/${departmentId}/overview`);
+      return data;
+    },
+    enabled: departmentId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
+export interface DepartmentDeletionSummary {
+  departmentId: number;
+  departmentName: string;
+  programCount: number;
+  curriculumCount: number;
+  studentCount: number;
+  instructorCount: number;
+  canDelete: boolean;
+}
+
+export function useDepartmentDeletionSummary(departmentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'structure', 'department-deletion-summary', departmentId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DepartmentDeletionSummary>(`${BASE}/departments/${departmentId}/deletion-summary`);
+      return data;
+    },
+    enabled: departmentId !== null,
+    staleTime: 0,
+  });
+}
+
+export interface ProgramDeletionSummary {
+  programId: number;
+  programName: string;
+  curriculumCount: number;
+  studentCount: number;
+  canDelete: boolean;
+}
+
+export function useProgramDeletionSummary(programId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'structure', 'program-deletion-summary', programId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ProgramDeletionSummary>(`${BASE}/programs/${programId}/deletion-summary`);
+      return data;
+    },
+    enabled: programId !== null,
+    staleTime: 0,
+  });
 }
 
 export function useAdminFaculties() {
@@ -96,6 +252,31 @@ export function useDeleteFaculty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await apiClient.delete(`${BASE}/faculties/${id}`); },
+    onSuccess: () => invalidateStructure(qc),
+  });
+}
+
+export interface BulkRowResult { index: number; label: string; status: string; message: string | null; }
+export interface BulkImportResult { createdCount: number; failedCount: number; rows: BulkRowResult[]; }
+
+export function useBulkCreateFaculties() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: { name: string; code: string }[]) => {
+      const { data } = await apiClient.post<BulkImportResult>(`${BASE}/faculties/bulk`, items);
+      return data;
+    },
+    onSuccess: () => invalidateStructure(qc),
+  });
+}
+
+export function useBulkCreateDepartments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: { name: string; code: string; facultyId: number }[]) => {
+      const { data } = await apiClient.post<BulkImportResult>(`${BASE}/departments/bulk`, items);
+      return data;
+    },
     onSuccess: () => invalidateStructure(qc),
   });
 }

@@ -180,15 +180,11 @@ public static partial class SeedData
                         _ => 2025
                     };
 
-                    // GPA category: 60% successful, 25% borderline, 15% low
-                    decimal cgpa;
-                    if (i < groupCount * 0.60)
-                        cgpa = 2.50m + (decimal)(rng.NextDouble() * 1.30); // 2.50-3.80
-                    else if (i < groupCount * 0.85)
-                        cgpa = 2.00m + (decimal)(rng.NextDouble() * 0.49); // 2.00-2.49
-                    else
-                        cgpa = 0.80m + (decimal)(rng.NextDouble() * 1.19); // 0.80-1.99
-                    cgpa = Math.Round(cgpa, 2);
+                    // Bell-curve CGPA from latent ability (θ ~ N(0,1)); see SeedData.GradeDistribution.
+                    // This provisional value seeds the student's ability — SeedRegistrationsAsync
+                    // recomputes the real CGPA from generated grades. It is also the display
+                    // fallback for students who have no completed terms yet.
+                    var cgpa = AbilityToCgpa(NextNormal(rng));
 
                     string firstName, lastName, email, studentNum, nationalId;
                     bool isScholar;

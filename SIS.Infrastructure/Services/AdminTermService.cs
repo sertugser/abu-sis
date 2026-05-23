@@ -54,7 +54,7 @@ public class AdminTermService : IAdminTermService
             .AnyAsync(t => t.Year == dto.Year && t.TermType == termType);
         if (exists)
             throw new InvalidOperationException(
-                $"{dto.Year} yılı için {GetTermTypeLabel(termType)} dönemi zaten mevcut.");
+                $"{dto.Year} yılı için {TermLabels.Get(termType)} dönemi zaten mevcut.");
 
         var termStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
         var termEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
@@ -240,7 +240,7 @@ public class AdminTermService : IAdminTermService
             t.Id, t.Name, t.ShortName, t.EnglishName, t.ShortEnglishName, t.OtherName,
             t.Year,
             t.TermType.ToString(),
-            GetTermTypeLabel(t.TermType),
+            TermLabels.Get(t.TermType),
             status.ToString(),
             GetStatusLabel(status),
             t.IsActivated,
@@ -264,20 +264,6 @@ public class AdminTermService : IAdminTermService
         TermStatus.Active    => "Aktif",
         TermStatus.Cancelled => "İptal",
         _                    => s.ToString()
-    };
-
-    public static string GetTermTypeLabel(TermType t) => t switch
-    {
-        TermType.Fall         => "Güz",
-        TermType.Spring       => "Bahar",
-        TermType.Summer       => "Yaz",
-        TermType.FallResit    => "Güz Tekders",
-        TermType.SpringResit  => "Bahar Tekders",
-        TermType.SummerResit  => "Yaz Tekders",
-        TermType.SpringOther  => "Bahar Diğer",
-        TermType.SummerOther  => "Yaz Diğer",
-        TermType.Exemption    => "Muafiyet",
-        _                     => t.ToString()
     };
 
     private static TermType ParseTermType(string s) => s switch

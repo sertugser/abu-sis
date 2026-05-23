@@ -31,13 +31,15 @@ All thresholds below are configurable via SystemConfig (admin panel), values sho
 - Instructor cannot be assigned to overlapping sections
 - Registration plan: soft hold on capacity, cleared at midnight if unconfirmed
 
-## Term Lifecycle (Faz 1 revize — otomatik model)
+## Term Lifecycle (Faz 4 — IsActivated + tarih bazlı hibrit model)
 Inactive → Active → Cancelled
 
-- 3 durum, **gösterim** için enum (stored değil). Durum `term.GetStatus(now)` ile hesaplanır.
-- Stored alan: sadece `IsCancelled: bool` — admin'in tek manuel aksiyonu.
-- Active: `!IsCancelled && TermStart ≤ now ≤ TermEnd` (otomatik, tarih bazlı)
-- Inactive: tarih aralığı dışı (otomatik)
+- `TermStatus` enum **gösterim** için (stored değil). Durum `term.GetStatus(now)` ile hesaplanır.
+- Stored manuel alanlar: `IsActivated: bool` (default true), `IsCancelled: bool`, `OverrideStart?`, `OverrideEnd?`.
+- `GetStatus(now)`: `IsCancelled` → Cancelled; `!IsActivated` → Inactive; `EffectiveStart ≤ now ≤ EffectiveEnd` → Active; aksi halde Inactive.
+- `EffectiveStart = OverrideStart ?? TermStart`, `EffectiveEnd = OverrideEnd ?? TermEnd` (admin erken aktivasyon / uzatma override'ları).
+- Active: `IsActivated && EffectiveStart ≤ now ≤ EffectiveEnd`.
+- IsActivated: admin "Kullanıma Aç/Kapat" ile değiştirir (activate/deactivate endpoint'leri).
 - Cancelled: admin iptal etmiş (manuel). Cascade: tüm section'lar Cancelled olur.
 - Unique constraint: `(Year, TermType)` — aynı yıl/tip kombinasyonu tek kayıt.
 
@@ -76,9 +78,12 @@ Draft ↔ Active ↔ Cancelled
 - `GET /api/admin/terms/{id}` — tek dönem
 - `POST /api/admin/terms` — yeni dönem (TimeSlot grid'i otomatik oluşturulur, AcademicCalendar null kalır)
 - `PUT /api/admin/terms/{id}` — düzenleme (Cancelled dönem düzenlenemez)
+- `POST /api/admin/terms/{id}/activate` — kullanıma aç (IsActivated = true)
+- `POST /api/admin/terms/{id}/deactivate` — kullanıma kapat (IsActivated = false)
 - `POST /api/admin/terms/{id}/cancel` — iptal + section cascade
 - `POST /api/admin/terms/{id}/uncancel` — iptali geri al
-- Silinmiş endpoint'ler: `/activate`, `/deactivate`, `/transition`, `/override` (override Akademik Takvim API'ye taşındı)
+- Silinmiş endpoint'ler: `/transition`, `/override` (faz override Akademik Takvim API'ye taşındı)
+- Not: OverrideStart/OverrideEnd (erken aktivasyon/uzatma) backend Create/Update DTO'larında var ama TermManagementPage formu bu alanları yönetmez (UI'dan girilmez).
 
 ## Academic Calendar API (Faz 2 — yeni)
 Admin endpoints:
@@ -94,23 +99,13 @@ Public endpoints (any authenticated):
 
 Cancelled dönem: upsert ve override `InvalidOperationException` fırlatır (400).
 
-## ÖSYM + Kontenjan API (Faz 4 — stub CRUD)
+## ÖSYM + Kontenjan placeholder sayfaları (SİLİNDİ — 2026-05-23)
 
-`/api/admin/osym-registration-calendars` — systemAdmin only
-- `GET` (query: year?)
-- `POST` (CreateOsymRegistrationCalendarDto)
-- `PUT /{id}` (UpdateOsymRegistrationCalendarDto)
-- `DELETE /{id}`
-
-`/api/admin/program-quotas` — systemAdmin + dean
-- `GET` (query: programId?, year?)
-- `POST` (CreateProgramQuotaDto — ProgramId dahil)
-- `PUT /{id}` (UpdateProgramQuotaDto — ProgramId değiştirilemez)
-- `DELETE /{id}`
-
-Unique constraint: `ProgramQuota (ProgramId, Year, Type)` — aynı program×yıl×tip kombinasyonu tek kayıt.
-
-**Operasyonel entegrasyon YOK.** Bu iki özellik sadece veri tabanı — öğrenci kayıt akışı, `CourseSection.Capacity`, veya başka bir kısıt mantığı ile bağlı değil. İleride entegrasyon eklenebilir.
+"ÖSYM Kayıt Takvimi" ve "Program Kontenjan Bilgileri" stub sayfaları backend + frontend
+tamamen kaldırıldı (entity, DTO, service, controller, page, hook, route, menu, permission).
+Tablolar `OsymRegistrationCalendars` + `ProgramQuotas` migration ile düşürüldü
+(`DropOsymRegistrationAndProgramQuota`); mevcut DB satırları
+`scripts/2026-05-23-remove-osym-program-kontenjan.sql` ile temizlendi.
 
 ## AcademicTerm Yeni Alanlar (Faz 1)
 - `ShortEnglishName: string` — kısa İngilizce ad (zorunlu, default empty)
@@ -125,11 +120,7 @@ Unique constraint: `ProgramQuota (ProgramId, Year, Type)` — aynı program×yı
 - Akademik Takvim Yönetimi (`/akademik-takvim-yonetimi` — AcademicCalendarAdminPage) **Faz 2**
 - Akademik Takvim (Görünüm) (`/akademik-takvim` — AcademicCalendarPage, tabs: Liste + Takvim) **Faz 2**
 - Takvim Oluşturucu (`/akademik-takvim-olusturma` — AcademicCalendarGeneratorPage)
-- ÖSYM Kayıt Takvimi (`/osym-kayit-takvimi` — OsymRegistrationCalendarPage) **Faz 4 YENİ**
-- Program Kontenjan Bilgileri (`/program-kontenjan` — ProgramQuotaPage) **Faz 4 YENİ**
 - Sınıf Atlatma Kuralları (`/sinif-atlatma-kurallari` — PromotionRulesPage)
-
-Dean grubunda akademik-islemler: sadece Program Kontenjan Bilgileri (dean endpoint'e erişiyor).
 
 Eski gruplar ("Dönem Yönetimi", "Akademik Yapı", "Fakülte / Bölüm / Program" tek sayfa) silindi.
 
