@@ -106,6 +106,22 @@ export function useActivateCurriculum() {
   });
 }
 
+export function usePublishCurriculum() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => curriculumApi.publish(id),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useArchiveCurriculum() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => curriculumApi.archive(id),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
 export function useCopyCurriculum() {
   const qc = useQueryClient();
   return useMutation({

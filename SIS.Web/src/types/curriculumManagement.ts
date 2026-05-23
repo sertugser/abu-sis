@@ -1,6 +1,7 @@
 // Backend: SIS.Domain.Enums.CurriculumStatus
-// 0 = Draft (Düzenlenebilir), 1 = Published (Yayında, kilitli), 2 = Archived (Geçmiş)
-export type CurriculumStatusValue = 0 | 1 | 2;
+// API JsonStringEnumConverter ile string olarak gönderir (sayı DEĞİL):
+// "Draft" = Düzenlenebilir, "Published" = Yayında (kilitli), "Archived" = Geçmiş
+export type CurriculumStatusValue = 'Draft' | 'Published' | 'Archived';
 
 export interface CurriculumListDto {
   id: number;

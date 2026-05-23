@@ -58,6 +58,12 @@ export const curriculumApi = {
   activate: (id: number) =>
     apiClient.post(`${BASE}/${id}/activate`).then(r => r.data),
 
+  publish: (id: number) =>
+    apiClient.post(`${BASE}/${id}/publish`).then(r => r.data),
+
+  archive: (id: number) =>
+    apiClient.post(`${BASE}/${id}/archive`).then(r => r.data),
+
   copy: (id: number, req: CopyCurriculumRequest) =>
     apiClient.post<CurriculumDetailDto>(`${BASE}/${id}/copy`, req).then(r => r.data),
 
