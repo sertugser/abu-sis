@@ -975,8 +975,10 @@ export default function AcademicCalendarGeneratorPage() {
   const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
   const [includeSummer, setIncludeSummer] = useState(true);
   const [forceOverwrite, setForceOverwrite] = useState(false);
-  // Uygula adımında hangi yarıyılların uygulanacağı (boş → henüz hesaplanmadı; effect varsayılanı doldurur).
+  // Uygula adımında hangi yarıyılların uygulanacağı (boş → henüz hesaplanmadı; varsayılan render sırasında dolar).
   const [applySemesters, setApplySemesters] = useState<SemesterType[]>([]);
+  // Hangi yarıyıl seti için varsayılanın uygulandığını izler; set değişince (yeni taslak) sıfırlanır.
+  const [appliedSemesterKey, setAppliedSemesterKey] = useState('');
   const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
   const [durationEventKey, setDurationEventKey] = useState('');
   const [durationDays, setDurationDays] = useState('');
@@ -1077,10 +1079,15 @@ export default function AcademicCalendarGeneratorPage() {
         : null,
     };
   }, [adminTerms.data, calendar]);
-  useEffect(() => {
-    // Yeni taslak/yarıyıl seti geldiğinde varsayılan olarak tüm yarıyılları seç.
+  // Yarıyıl SETİ (değer) değiştiğinde Uygula panelini varsayılana sıfırla. expectedSemesters
+  // her render'da yeni dizi referansı ürettiği için effect+referans bağımlılığı kullanıcının
+  // seçimini gereksiz re-render'larda (ör. taslak event düzenleme refetch'i) ezerdi. React'in
+  // önerdiği "değişimde state sıfırla" desenini render sırasında prev-key ile uyguluyoruz.
+  const expectedSemesterKey = termAlignment.expectedSemesters.join('|');
+  if (expectedSemesterKey !== appliedSemesterKey) {
+    setAppliedSemesterKey(expectedSemesterKey);
     setApplySemesters(termAlignment.expectedSemesters);
-  }, [termAlignment.expectedSemesters]);
+  }
   const durationOptions = useMemo(() => {
     const options: CalendarProcessOption[] = [];
 

@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,11 @@ public partial class CalendarGeneratorService : ICalendarGeneratorService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new JsonStringEnumConverter() },
+        // Türkçe karakterleri (ş, ğ, ü, ç, ı, ö) \uXXXX yerine ham UTF-8 olarak yaz;
+        // SQL_ASCII encoding'li PostgreSQL bazı \u escape'lerini reddediyor (hata 22P05).
+        // CalendarTemplateService ile tutarlı — taslak EventsJson yazımını DB encoding'inden bağımsız kılar.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public CalendarGeneratorService(

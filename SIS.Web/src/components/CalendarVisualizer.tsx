@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
+import { CAT_STYLE, calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
 import { cn } from '@/lib/utils';
 
 const TODAY = new Date();
@@ -28,16 +28,6 @@ const MONTH_NAMES = [
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
 const MAX_LANES = 4;
-
-const CAT_STYLE: Record<CalendarEventCategory, { bg: string; border: string; text: string; label: string }> = {
-  exam:         { bg: 'bg-red-100',    border: 'border-l-red-500',    text: 'text-red-800',    label: 'SINAV' },
-  registration: { bg: 'bg-blue-100',   border: 'border-l-blue-500',   text: 'text-blue-800',   label: 'KAYIT' },
-  holiday:      { bg: 'bg-green-100',  border: 'border-l-green-500',  text: 'text-green-800',  label: 'TATIL' },
-  deadline:     { bg: 'bg-amber-100',  border: 'border-l-amber-500',  text: 'text-amber-800',  label: 'SON GUN' },
-  result:       { bg: 'bg-gray-100',   border: 'border-l-gray-400',   text: 'text-gray-700',   label: 'SONUC' },
-  application:  { bg: 'bg-teal-100',   border: 'border-l-teal-500',   text: 'text-teal-800',   label: 'BASVURU' },
-  academic:     { bg: 'bg-indigo-100', border: 'border-l-indigo-500', text: 'text-indigo-800', label: 'AKADEMIK' },
-};
 
 export interface VisualizerEvent {
   id: string | number;
@@ -267,6 +257,11 @@ function monthFromDateValue(value?: string | null): ViewMonth | null {
 
   const [year, month] = input.split('-').map(Number);
   if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12)
+    return null;
+
+  // Makul olmayan yıllar (örn. set edilmemiş DateTime.MinValue → 0001) akademik yıl
+  // ay aralığını on binlerce aya açar ve takvimi dondurur — bu tarihleri yok say.
+  if (year < 1900 || year > 3000)
     return null;
 
   return { y: year, m: month - 1 };
@@ -885,9 +880,9 @@ export function CalendarVisualizer({
 
         {weeks.map((week, wi) => {
           const { bars, maxLane } = weekData[wi];
-          const eventTopBase = 17;
-          const eventH = maxLane * 12;
-          const cellMinHeight = Math.max(36, eventTopBase + eventH);
+          const eventTopBase = 18;
+          const eventH = maxLane * 17;
+          const cellMinHeight = Math.max(38, eventTopBase + eventH);
 
           return (
             <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
@@ -904,8 +899,8 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 px-1 pt-1 text-[10px] leading-none last:border-r-0 transition-colors duration-75',
-                        isWeekend && day.isMonth && 'bg-rose-50/70',
-                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        isWeekend && day.isMonth && 'bg-slate-50',
+                        isWeekend && !day.isMonth && 'bg-slate-50/50',
                         !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
@@ -915,8 +910,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex h-4 w-4 items-center justify-center rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
-                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-slate-400 font-medium' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-slate-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}
@@ -938,7 +933,7 @@ export function CalendarVisualizer({
                         event={b.event}
                         disabled={!isDraggable}
                         className={cn(
-                          'absolute flex h-3.5 items-center overflow-hidden rounded border-l-[3px] px-1 text-[9px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
+                          'absolute flex h-4 items-center overflow-hidden rounded border-l-4 px-1.5 text-[10px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
                           s.bg,
                           s.border,
                           s.text,
@@ -947,7 +942,7 @@ export function CalendarVisualizer({
                           dragState && 'pointer-events-none',
                         )}
                         style={{
-                          top: `${eventTopBase + b.lane * 12}px`,
+                          top: `${eventTopBase + b.lane * 17}px`,
                           left: `calc(${(b.col / 7) * 100}% + 2px)`,
                           width: `calc(${(b.span / 7) * 100}% - 4px)`,
                         }}
@@ -1024,8 +1019,8 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 last:border-r-0 px-1 pt-1 transition-colors duration-75 sm:px-2 sm:pt-2',
-                        isWeekend && day.isMonth && 'bg-rose-50/70',
-                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        isWeekend && day.isMonth && 'bg-slate-50',
+                        isWeekend && !day.isMonth && 'bg-slate-50/50',
                         !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
@@ -1035,8 +1030,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 text-xs sm:text-sm rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
-                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-slate-400 font-medium' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-slate-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}
@@ -1111,14 +1106,14 @@ export function CalendarVisualizer({
     );
   }
 
-  function renderLegend(prefix: string, iconClass = 'h-3 w-4', textClass = 'text-[10px] font-semibold text-gray-500') {
+  function renderLegend(prefix: string, iconClass = 'h-3.5 w-5', textClass = 'text-[11px] font-semibold text-gray-600') {
     return (
       <>
         {(Object.entries(CAT_STYLE) as [CalendarEventCategory, typeof CAT_STYLE[CalendarEventCategory]][]).map(([category, s]) => {
           const selected = activeCategory === category;
           const content = (
             <>
-              <div className={cn(iconClass, 'rounded-sm border-l-[3px]', s.bg, s.border)} />
+              <div className={cn(iconClass, 'rounded border-l-4', s.bg, s.border)} />
               <span className={cn(textClass, selected && 'text-[#003366]')}>{s.label}</span>
             </>
           );
@@ -1170,7 +1165,7 @@ export function CalendarVisualizer({
     return (
       <>
         <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Akademik yıl</p>
               <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
@@ -1178,15 +1173,17 @@ export function CalendarVisualizer({
                 {' - '}
                 {lastMonth && MONTH_NAMES[lastMonth.m]} {lastMonth?.y}
               </h2>
-              <div className="mt-2 flex flex-wrap gap-2">
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="flex flex-wrap gap-2 sm:justify-end">
                 {renderLegend('inline-year-legend')}
               </div>
+              {headerActions && (
+                <div className="flex shrink-0">
+                  {headerActions}
+                </div>
+              )}
             </div>
-            {headerActions && (
-              <div className="flex shrink-0 self-end sm:self-center">
-                {headerActions}
-              </div>
-            )}
           </div>
           <div className="bg-slate-50 p-2">
             <div className="grid min-h-0 gap-2 lg:grid-cols-4">
