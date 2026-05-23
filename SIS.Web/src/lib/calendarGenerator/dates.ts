@@ -120,3 +120,58 @@ export function fixedDayMonth(day?: number | null, month?: number | null) {
   const date = new Date(2026, month - 1, day);
   return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
 }
+
+export function diffWeeks(start: string, end: string) {
+  const startDate = parseUtcDisplayDate(start);
+  const endDate = parseUtcDisplayDate(end);
+  if (!startDate || !endDate) return null;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+}
+
+export function parseDateOnly(value?: string | null) {
+  const input = dateInput(value);
+  if (!input) return null;
+  const [year, month, day] = input.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+export function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+export function dayDifference(target: string, source: string) {
+  const targetDate = parseUtcDisplayDate(target);
+  const sourceDate = parseUtcDisplayDate(source);
+  if (!targetDate || !sourceDate) return null;
+
+  return Math.round((targetDate.getTime() - sourceDate.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+export function shiftDateValue(value: string, days: number) {
+  const date = parseUtcDisplayDate(value);
+  if (!date) return null;
+
+  return formatUtcDateValue(addDays(date, days));
+}
+
+export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return aStart.getTime() <= bEnd.getTime() && bStart.getTime() <= aEnd.getTime();
+}
+
+export function isWeekend(date: Date) {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+export function fmtDateOnly(date: Date) {
+  return date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+export function holidayRangeText(start: Date, end: Date) {
+  const startText = fmtDateOnly(start);
+  const endText = fmtDateOnly(end);
+  return startText === endText ? startText : `${startText} - ${endText}`;
+}
