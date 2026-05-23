@@ -26,6 +26,31 @@ import {
 } from '@/lib/calendarEventTypes';
 import { countWeekdayOnlyEventDays, formatWeekdayOnlyDateRanges, getWeekdayOnlyDateRanges } from '@/lib/calendarWeekdaySegments';
 import { displayTurkishText } from '@/lib/turkishText';
+import {
+  academicYearStart,
+  buildAcademicYearSelectionRange,
+  buildSemesterSelectionRange,
+  dateInput,
+  defaultAcademicYear,
+  fixedDayMonth,
+  fmt,
+  fmtLong,
+  formatUtcDateValue,
+  isDateValueWithinRange,
+  maxDateValue,
+  nearestMondayDateValue,
+  parseUtcDisplayDate,
+  shiftAcademicYear,
+  utcDate,
+} from '@/lib/calendarGenerator/dates';
+import {
+  SEMESTERS,
+  isSemesterType,
+  normalizeSemesters,
+  semesterLabel,
+  semesterListText,
+  termTypeToSemester,
+} from '@/lib/calendarGenerator/semesters';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import {
   type CalendarConstraintInputDto,
@@ -94,12 +119,6 @@ type CalendarProcessOption = {
   chainCode: string;
 };
 
-type DateSelectionRange = {
-  min: string;
-  max: string;
-  label: string;
-};
-
 type ActiveGeneratorSetting = {
   key: string;
   badgeLabel: string;
@@ -124,12 +143,6 @@ type SemesterWeekAnalysis = {
   weeksAfterMidterm: number | null;
   finalWeek: number | null;
 };
-
-const SEMESTERS: { value: SemesterType; label: string }[] = [
-  { value: 'Fall', label: 'Güz' },
-  { value: 'Spring', label: 'Bahar' },
-  { value: 'Summer', label: 'Yaz' },
-];
 
 function displayText(value?: string | null) {
   return displayTurkishText(value);
@@ -166,121 +179,6 @@ const MONDAY_START_EVENT_TYPES = new Set([
   'SummerSchoolExam',
 ]);
 const FLEXIBLE_HOLIDAY_OVERLAP_MIN_DAYS = 15;
-
-function defaultAcademicYear() {
-  const now = new Date();
-  const start = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  return `${start}-${start + 1}`;
-}
-
-function academicYearStart(academicYear: string) {
-  const parsed = Number(academicYear.split('-')[0]);
-  return Number.isFinite(parsed) ? parsed : new Date().getFullYear();
-}
-
-function formatAcademicYear(startYear: number) {
-  return `${startYear}-${startYear + 1}`;
-}
-
-function shiftAcademicYear(academicYear: string, offset: number) {
-  return formatAcademicYear(academicYearStart(academicYear) + offset);
-}
-
-function dateValue(year: number, month: number, day: number) {
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-function formatUtcDateValue(date: Date) {
-  return dateValue(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
-}
-
-function nearestMondayDateValue(year: number, month: number, day: number) {
-  const base = new Date(Date.UTC(year, month - 1, day));
-  const weekday = base.getUTCDay();
-  const previousOffset = weekday === 0 ? -6 : 1 - weekday;
-  const nextOffset = weekday === 0 ? 1 : 8 - weekday;
-  const chosenOffset = Math.abs(previousOffset) <= Math.abs(nextOffset) ? previousOffset : nextOffset;
-  const adjusted = new Date(base);
-  adjusted.setUTCDate(base.getUTCDate() + chosenOffset);
-  return dateValue(adjusted.getUTCFullYear(), adjusted.getUTCMonth() + 1, adjusted.getUTCDate());
-}
-
-function dateInput(value?: string | null) {
-  return value ? value.substring(0, 10) : '';
-}
-
-function utcDate(value: string | null) {
-  return value ? `${value}T00:00:00.000Z` : null;
-}
-
-function parseUtcDisplayDate(value?: string | null) {
-  const input = dateInput(value);
-  if (!input) return null;
-  const [year, month, day] = input.split('-').map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function fmt(value?: string | null) {
-  if (!value) return '-';
-  const date = parseUtcDisplayDate(value);
-  return date
-    ? date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
-    : '-';
-}
-
-function fmtLong(value?: string | null) {
-  if (!value) return '-';
-  const date = parseUtcDisplayDate(value);
-  return date
-    ? date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-    : '-';
-}
-
-function buildDateSelectionRange(minYear: number, minMonth: number, minDay: number, maxYear: number, maxMonth: number, maxDay: number): DateSelectionRange {
-  const min = dateValue(minYear, minMonth, minDay);
-  const max = dateValue(maxYear, maxMonth, maxDay);
-  return {
-    min,
-    max,
-    label: `${fmtLong(utcDate(min))} - ${fmtLong(utcDate(max))}`,
-  };
-}
-
-function buildAcademicYearSelectionRange(academicYear: string, includeSummer: boolean) {
-  const startYear = academicYearStart(academicYear);
-  return includeSummer
-    ? buildDateSelectionRange(startYear, 7, 1, startYear + 1, 9, 30)
-    : buildDateSelectionRange(startYear, 7, 1, startYear + 1, 6, 30);
-}
-
-function buildSemesterSelectionRange(academicYear: string, semester: SemesterType) {
-  const startYear = academicYearStart(academicYear);
-  switch (semester) {
-    case 'Fall':
-      return buildDateSelectionRange(startYear, 7, 1, startYear + 1, 1, 31);
-    case 'Spring':
-      return buildDateSelectionRange(startYear + 1, 1, 1, startYear + 1, 6, 30);
-    case 'Summer':
-      return buildDateSelectionRange(startYear + 1, 6, 1, startYear + 1, 9, 30);
-    default:
-      return buildAcademicYearSelectionRange(academicYear, true);
-  }
-}
-
-function isDateValueWithinRange(value: string, range: DateSelectionRange) {
-  return !value || (value >= range.min && value <= range.max);
-}
-
-function maxDateValue(left: string, right: string) {
-  return left > right ? left : right;
-}
-
-function fixedDayMonth(day?: number | null, month?: number | null) {
-  if (!day || !month) return '-';
-  const date = new Date(2026, month - 1, day);
-  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
-}
 
 function holidayDateText(holiday: HolidayDefinitionDto) {
   if (holiday.fixedDay && holiday.fixedMonth)
@@ -578,33 +476,6 @@ function eventCategoryLabel(eventType: string, isHoliday: boolean, title?: strin
 
 function eventCategoryValue(event: Pick<GeneratedCalendarEventDto, 'eventType' | 'title' | 'templateItemKey'>) {
   return calendarEventCategory(event.eventType, event.title, event.templateItemKey);
-}
-
-function semesterLabel(semester?: SemesterType | string | null) {
-  return SEMESTERS.find(s => s.value === semester)?.label ?? semester ?? 'Genel';
-}
-
-function compareSemesters(a: SemesterType, b: SemesterType) {
-  return SEMESTERS.findIndex(option => option.value === a) - SEMESTERS.findIndex(option => option.value === b);
-}
-
-function normalizeSemesters(semesters: SemesterType[]) {
-  return Array.from(new Set(semesters)).sort(compareSemesters);
-}
-
-function isSemesterType(value: string): value is SemesterType {
-  return SEMESTERS.some(option => option.value === value);
-}
-
-function termTypeToSemester(termType: string): SemesterType | null {
-  if (termType === 'Fall' || termType === 'FallResit') return 'Fall';
-  if (termType === 'Spring' || termType === 'SpringResit' || termType === 'SpringOther') return 'Spring';
-  if (termType === 'Summer' || termType === 'SummerResit' || termType === 'SummerOther') return 'Summer';
-  return null;
-}
-
-function semesterListText(semesters: SemesterType[]) {
-  return semesters.length > 0 ? semesters.map(semester => semesterLabel(semester)).join(', ') : 'yok';
 }
 
 function parseConstraintParameters(parameterJson: string) {
