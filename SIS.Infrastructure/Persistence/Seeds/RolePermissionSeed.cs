@@ -198,6 +198,14 @@ public static class RolePermissionSeed
                 "menu.akademik-takvim-olusturma.generate",
                 "menu.akademik-takvim-olusturma.simulate",
 
+                // ── Ders Kataloğu (CRUD — Öğr. İşleri kataloğu yönetir) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
+
                 // ── Müfredat (publish/archive HARİÇ — DepMgr+) ──
                 "menu.mufredat-islemleri.create",
                 "menu.mufredat-islemleri.edit",
@@ -320,6 +328,21 @@ public static class RolePermissionSeed
                 "menu.sinif-atlatma-islemleri.view",
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
+                "menu.mufredat-sinif-donem.view",
+
+                // ── Ders Kataloğu (CRUD) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
+
+                // ── Sınıf Atlatma Kuralları (promotion rules — görüntüle + düzenle) ──
+                "menu.sinif-atlatma-kurallari.view",
+                "menu.sinif-atlatma-kurallari.create",
+                "menu.sinif-atlatma-kurallari.edit",
+                "menu.sinif-atlatma-kurallari.delete",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
@@ -461,6 +484,21 @@ public static class RolePermissionSeed
                 // ── Toplu Atama ──
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
+                "menu.mufredat-sinif-donem.view",
+
+                // ── Ders Kataloğu (CRUD) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
+
+                // ── Sınıf Atlatma Kuralları (promotion rules — görüntüle + düzenle) ──
+                "menu.sinif-atlatma-kurallari.view",
+                "menu.sinif-atlatma-kurallari.create",
+                "menu.sinif-atlatma-kurallari.edit",
+                "menu.sinif-atlatma-kurallari.delete",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
