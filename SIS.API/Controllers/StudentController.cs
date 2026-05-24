@@ -146,23 +146,15 @@ public class StudentController : ControllerBase
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
 
-        var student = await _context.Students
-            .Include(s => s.StudentPrograms)
-                .ThenInclude(sp => sp.Program)
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+        var studentId = await _context.Students
+            .Where(s => s.UserId == userId)
+            .Select(s => (int?)s.Id)
+            .FirstOrDefaultAsync();
 
-        if (student == null)
+        if (studentId == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
-        var user = await _context.Users.FindAsync(userId);
-        if (user == null)
-            return NotFound(new { error = "Kullanici bilgisi bulunamadi." });
-
-        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
-        if (activeProgram == null)
-            return NotFound(new { error = "Aktif program bulunamadi." });
-
-        var dto = await _curriculumStatusService.GetCurriculumStatusAsync(student.Id);
+        var dto = await _curriculumStatusService.GetCurriculumStatusAsync(studentId.Value);
         return dto == null
             ? NotFound(new { error = "Aktif program bulunamadi." })
             : Ok(dto);

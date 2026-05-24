@@ -34,11 +34,8 @@ public class CurriculumStatusService : ICurriculumStatusService
                 .ThenInclude(sp => sp.Program)
             .FirstOrDefaultAsync(s => s.Id == studentId, ct);
 
-        if (student == null)
-            return null;
-
-        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
-        if (activeProgram?.CurriculumId == null)
+        var activeProgram = student?.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        if (student == null || activeProgram == null)
             return null;
 
         var user = await _context.Users.FindAsync(new object?[] { student.UserId }, ct);
