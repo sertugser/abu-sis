@@ -215,8 +215,8 @@ public class AdminStudentService : IAdminStudentService
             activeProgram?.Program?.Department?.Name ?? "-",
             advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : null,
             student.AdvisorId,
-            mainProgram?.ProgramId ?? 0,
-            mainProgram?.CurriculumId ?? 0,
+            mainProgram?.ProgramId,
+            mainProgram?.CurriculumId,
             (mainProgram?.Type ?? StudentProgramType.Main).ToString()
         );
     }
@@ -371,7 +371,7 @@ public class AdminStudentService : IAdminStudentService
                 throw new InvalidOperationException("Bu öğretim üyesi danışmanlık görevi almak istemediğini belirtmiştir.");
 
             if (instructor.DepartmentId != program.DepartmentId)
-                throw new InvalidOperationException("Danışman, öğrencinin programının bölümünde olmalıdır.");
+                throw new InvalidOperationException("Öğrenciye yalnızca kendi bölümündeki öğretim üyesi danışman atanabilir.");
         }
 
         var mainProgram = student.StudentPrograms

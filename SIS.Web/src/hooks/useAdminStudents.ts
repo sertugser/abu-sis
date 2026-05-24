@@ -28,8 +28,8 @@ export interface AdminStudentDetail extends AdminStudentListItem {
   isScholarshipStudent: boolean;
   hasFinancialBlock: boolean;
   advisorId?: number;
-  programId: number;
-  curriculumId: number;
+  programId: number | null;
+  curriculumId: number | null;
   programType: string;
 }
 

@@ -34,8 +34,8 @@ public record AdminStudentDetailDto(
     string DepartmentName,
     string? AdvisorName,
     int? AdvisorId,
-    int ProgramId,
-    int CurriculumId,
+    int? ProgramId,
+    int? CurriculumId,
     string ProgramType
 );
 

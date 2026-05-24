@@ -361,7 +361,7 @@ public class AdminStudentServiceTests
         result!.UserId.Should().Be(userId);
     }
 
-    private static (AppDbContext context, AdminStudentService service, int studentId) SeedAcademicEditScenario(int advisorDepartmentId = 1)
+    private static async Task<(AppDbContext context, AdminStudentService service, int studentId)> SeedAcademicEditScenario(int advisorDepartmentId = 1)
     {
         var context = CreateContext();
         context.Departments.Add(new Department { Id = 1, Name = "Bilgisayar", Code = "CENG", FacultyId = 1 });
@@ -421,7 +421,7 @@ public class AdminStudentServiceTests
             EnrollmentDate = DateTime.UtcNow,
             IsActive = true
         });
-        context.SaveChanges();
+        await context.SaveChangesAsync();
 
         var config = new Mock<ISystemConfigProvider>();
         config.Setup(x => x.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true, It.IsAny<CancellationToken>()))
@@ -434,7 +434,7 @@ public class AdminStudentServiceTests
     [Fact]
     public async Task UpdateAcademicAsync_UpdatesStatusProgramCurriculumAndFlags()
     {
-        var (context, service, studentId) = SeedAcademicEditScenario();
+        var (context, service, studentId) = await SeedAcademicEditScenario();
         await using var _ = context;
 
         await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
@@ -452,12 +452,65 @@ public class AdminStudentServiceTests
     [Fact]
     public async Task UpdateAcademicAsync_Throws_WhenAdvisorNotInProgramDepartment()
     {
-        var (context, service, studentId) = SeedAcademicEditScenario(advisorDepartmentId: 2);
+        var (context, service, studentId) = await SeedAcademicEditScenario(advisorDepartmentId: 2);
         await using var _ = context;
 
         await FluentActions
             .Invoking(() => service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
                 "Active", 5, 2, 20, "Main", false, false)))
             .Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_RemovesOldProgramRow_OnProgramChange()
+    {
+        var (context, service, studentId) = await SeedAcademicEditScenario();
+        await using var _ = context;
+
+        // Program 1 -> 2 (advisor in dept 1; program 2 also in dept 1, so advisor stays valid).
+        await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+            "Active", 5, 2, 20, "Main", false, false));
+
+        var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
+        s.StudentPrograms.Count(p => p.IsActive && p.Type == StudentProgramType.Main).Should().Be(1);
+        s.StudentPrograms.Should().NotContain(p => p.ProgramId == 1);
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_Throws_WhenCurriculumNotInProgram()
+    {
+        var (context, service, studentId) = await SeedAcademicEditScenario();
+        await using var _ = context;
+
+        // Curriculum 10 belongs to program 1, but we target program 2 -> mismatch.
+        await FluentActions
+            .Invoking(() => service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+                "Active", null, 2, 10, "Main", false, false)))
+            .Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_UpdatesCurriculumInPlace_WhenProgramUnchanged()
+    {
+        var (context, service, studentId) = await SeedAcademicEditScenario();
+        await using var _ = context;
+
+        // Add a second curriculum (id 11) for the SAME program 1 so we can switch in place.
+        context.Curricula.Add(new Curriculum { Id = 11, ProgramId = 1, Version = "2024b", IsActive = true, CreatedAt = DateTime.UtcNow });
+        await context.SaveChangesAsync();
+
+        var before = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
+        var rowCountBefore = before.StudentPrograms.Count;
+
+        // Keep program 1, change only curriculum (10 -> 11) and type.
+        await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+            "Active", null, 1, 11, "DoubleMajor", false, false));
+
+        var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
+        s.StudentPrograms.Count.Should().Be(rowCountBefore);
+        var mp = s.StudentPrograms.Single(p => p.IsActive);
+        mp.ProgramId.Should().Be(1);
+        mp.CurriculumId.Should().Be(11);
+        mp.Type.Should().Be(StudentProgramType.DoubleMajor);
     }
 }
