@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import type { StudentRegistrationDto, CourseHistoryTermDto, StudentAttendanceStatusDto } from '../types/registration';
@@ -84,6 +85,93 @@ export function useUpdateStudentPersonalInfo() {
       qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'personal-info', studentId] });
       qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
     },
+  });
+}
+
+/**
+ * Fetch the student's profile photo as a blob and expose it as an object URL.
+ * The `<img src>` must NOT point at the raw API URL because that request would
+ * not carry the bearer token; we fetch via apiClient (which injects the token)
+ * and wrap the blob in an object URL instead. The previous object URL is revoked
+ * whenever the query produces a new one and on unmount, to avoid leaks.
+ */
+export function useStudentPhoto(studentId: number | null, hasPhoto: boolean) {
+  const query = useQuery({
+    queryKey: ['admin', 'student-card', 'photo', studentId],
+    queryFn: async () => {
+      try {
+        const { data } = await apiClient.get<Blob>(`${BASE}/${studentId}/photo`, {
+          responseType: 'blob',
+        });
+        return URL.createObjectURL(data);
+      } catch (err) {
+        // No photo on the server (404) → treat as "no photo" rather than an error state.
+        if (
+          typeof err === 'object' &&
+          err !== null &&
+          'response' in err &&
+          (err as { response?: { status?: number } }).response?.status === 404
+        ) {
+          return null;
+        }
+        throw err;
+      }
+    },
+    enabled: studentId != null && hasPhoto,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+
+  const objectUrl = query.data ?? null;
+
+  // Revoke the object URL when it changes (new fetch) or on unmount.
+  useEffect(() => {
+    if (!objectUrl) return;
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [objectUrl]);
+
+  return objectUrl;
+}
+
+function invalidatePhotoQueries(qc: ReturnType<typeof useQueryClient>, studentId: number) {
+  qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'photo', studentId] });
+  qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'personal-info', studentId] });
+  qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+}
+
+export function useUploadStudentPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId, file }: { studentId: number; file: File }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        // Pass Content-Type undefined so axios sets the multipart boundary itself
+        // (the client default is application/json, which would break the upload).
+        await apiClient.put(`${BASE}/${studentId}/photo`, formData, {
+          headers: { 'Content-Type': undefined },
+        });
+      } catch (err) {
+        throw asBackendError(err, 'Fotoğraf yüklenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) => invalidatePhotoQueries(qc, studentId),
+  });
+}
+
+export function useDeleteStudentPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        await apiClient.delete(`${BASE}/${studentId}/photo`);
+      } catch (err) {
+        throw asBackendError(err, 'Fotoğraf kaldırılamadı.');
+      }
+    },
+    onSuccess: (_d, { studentId }) => invalidatePhotoQueries(qc, studentId),
   });
 }
 

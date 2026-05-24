@@ -1,14 +1,114 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { type StudentCardOutletContext } from '../StudentCardPage';
 import { usePermissions } from '../../../context/PermissionContext';
 import {
   useStudentPersonalInfo,
   useUpdateStudentPersonalInfo,
+  useStudentPhoto,
+  useUploadStudentPhoto,
+  useDeleteStudentPhoto,
   type StudentPersonalInfo,
   type UpdateStudentPersonalInfo,
 } from '../../../hooks/useStudentCard';
 import { Button } from '@/components/ui/button';
+
+const MAX_PHOTO_BYTES = 2_000_000;
+const ACCEPTED_PHOTO_TYPES = ['image/png', 'image/jpeg'];
+
+interface PhotoSectionProps {
+  studentId: number;
+  hasPhoto: boolean;
+  canEdit: boolean;
+}
+
+function PhotoSection({ studentId, hasPhoto, canEdit }: PhotoSectionProps) {
+  const photoUrl = useStudentPhoto(studentId, hasPhoto);
+  const upload = useUploadStudentPhoto();
+  const remove = useDeleteStudentPhoto();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const pending = upload.isPending || remove.isPending;
+
+  const handleSelect = async (file: File | undefined) => {
+    setError(null);
+    setSuccess(null);
+    if (!file) return;
+    if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+      setError('Yalnızca JPEG/PNG.');
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setError("Dosya 2MB'tan büyük olamaz.");
+      return;
+    }
+    try {
+      await upload.mutateAsync({ studentId, file });
+      setSuccess('Fotoğraf yüklendi.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fotoğraf yüklenemedi.');
+    } finally {
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const handleRemove = async () => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await remove.mutateAsync({ studentId });
+      setSuccess('Fotoğraf kaldırıldı.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fotoğraf kaldırılamadı.');
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <p className={FIELD_LABEL}>Fotoğraf</p>
+      <div className="flex items-center gap-4">
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="h-20 w-20 rounded-full object-cover" />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="h-20 w-20 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground"
+          >
+            Fotoğraf yok
+          </div>
+        )}
+        {canEdit && (
+          <div className="flex flex-col gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              disabled={pending}
+              className="text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-sm file:font-medium disabled:cursor-not-allowed disabled:opacity-60"
+              onChange={(e) => void handleSelect(e.target.files?.[0])}
+            />
+            {hasPhoto && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                disabled={pending}
+                onClick={() => void handleRemove()}
+              >
+                {remove.isPending ? 'Kaldırılıyor...' : 'Kaldır'}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {upload.isPending && <p className="text-sm text-muted-foreground">Yükleniyor...</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {success && <p className="text-sm text-emerald-600">{success}</p>}
+    </section>
+  );
+}
 
 const FIELD_LABEL = 'text-xs text-muted-foreground font-medium uppercase tracking-wide';
 const INPUT_CLASS =
@@ -123,6 +223,12 @@ export default function GeneralInfoPanel() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <PhotoSection
+        studentId={student.id}
+        hasPhoto={loaded?.photoExtension != null}
+        canEdit={canEdit}
+      />
+
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         <div>
           <label className={FIELD_LABEL} htmlFor="field-birthDate">
