@@ -231,6 +231,7 @@ builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>(
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
 builder.Services.AddScoped<ICurriculumStatusService, CurriculumStatusService>();
+builder.Services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
 builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
