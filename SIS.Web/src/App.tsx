@@ -44,6 +44,7 @@ import OverviewPanel from './pages/student-hub/panels/OverviewPanel';
 import AcademicInfoPanel from './pages/student-hub/panels/AcademicInfoPanel';
 import AdvisorPanel from './pages/student-hub/panels/AdvisorPanel';
 import PasswordPanel from './pages/student-hub/panels/PasswordPanel';
+import PromotionPanel from './pages/student-hub/panels/PromotionPanel';
 import StudentNumberPanel from './pages/student-hub/panels/StudentNumberPanel';
 import RegistrationsPanel from './pages/student-hub/panels/RegistrationsPanel';
 import GradesPanel from './pages/student-hub/panels/GradesPanel';
@@ -244,6 +245,7 @@ export default function App() {
                       <Route path="devamsizlik" element={<AttendancePanel />} />
                       <Route path="danisman" element={<AdvisorPanel />} />
                       <Route path="no-degistir" element={<StudentNumberPanel />} />
+                      <Route path="sinif-atlatma" element={<PromotionPanel />} />
                       <Route path="sifre" element={<PasswordPanel />} />
                     </Route>
                   </Route>
