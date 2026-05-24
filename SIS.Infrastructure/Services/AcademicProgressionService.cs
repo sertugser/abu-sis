@@ -454,9 +454,21 @@ public class AcademicProgressionService : IAcademicProgressionService
 
     public async Task SetStudentLevelAsync(int studentId, int targetLevel, CancellationToken ct = default)
     {
-        var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId, ct)
+        var student = await _context.Students
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct)
             ?? throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
         if (targetLevel < 1) throw new InvalidOperationException("Sınıf seviyesi 1'den küçük olamaz.");
+
+        // Üst sınır: programın normal süresi (DegreeLevel'dan türetilir; aktif ana program
+        // yoksa GetNormalDurationYears(null) güvenli varsayılan 4 yıl döner).
+        var mainProgram = student.StudentPrograms
+            .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        var normalDurationYears = GetNormalDurationYears(mainProgram?.Program);
+        if (targetLevel > normalDurationYears)
+            throw new InvalidOperationException($"Sınıf seviyesi programın normal süresini ({normalDurationYears} yıl) aşamaz.");
+
         // Clean inverse of level = CompletedSemesters/2 + 1
         student.CompletedSemesters = (targetLevel - 1) * 2;
         student.UpdatedAt = DateTime.UtcNow;

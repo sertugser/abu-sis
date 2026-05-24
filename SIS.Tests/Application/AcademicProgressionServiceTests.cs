@@ -118,6 +118,20 @@ public class AcademicProgressionServiceTests : IDisposable
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
+    [Fact]
+    public async Task SetStudentLevelAsync_Throws_WhenTargetExceedsProgramDuration()
+    {
+        // Arrange: Bachelor programı → normal süre 4 yıl. 4+5 = 9 üst sınırı aşar.
+        SeedStudent(completedSemesters: 0);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var act = async () => await _service.SetStudentLevelAsync(StudentId, targetLevel: 9);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     // ══════════════════════════════════════════════════════════
     //  Seed helpers
     // ══════════════════════════════════════════════════════════
