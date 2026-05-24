@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.StudentCard.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -19,17 +20,23 @@ public class StudentCardController : ControllerBase
     private readonly IGpaCalculationService _gpaService;
     private readonly AppDbContext _context;
     private readonly IAcademicScopeGuard _scopeGuard;
+    private readonly IStudentTranscriptService _transcriptService;
+    private readonly ICurriculumStatusService _curriculumStatusService;
 
     public StudentCardController(
         ICourseRegistrationService registrationService,
         IGpaCalculationService gpaService,
         AppDbContext context,
-        IAcademicScopeGuard scopeGuard)
+        IAcademicScopeGuard scopeGuard,
+        IStudentTranscriptService transcriptService,
+        ICurriculumStatusService curriculumStatusService)
     {
         _registrationService = registrationService;
         _gpaService = gpaService;
         _context = context;
         _scopeGuard = scopeGuard;
+        _transcriptService = transcriptService;
+        _curriculumStatusService = curriculumStatusService;
     }
 
     [HttpGet("registrations")]
@@ -67,6 +74,26 @@ public class StudentCardController : ControllerBase
         if (guard != null) return guard;
         var status = await _registrationService.GetStudentAttendanceStatusAsync(studentId, termId);
         return status == null ? NotFound(new { message = "Devamsızlık verisi bulunamadı." }) : Ok(status);
+    }
+
+    [HttpGet("transcript")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    public async Task<IActionResult> GetTranscript(int studentId)
+    {
+        var guard = await EnsureAccessAsync(studentId);
+        if (guard != null) return guard;
+        var dto = await _transcriptService.GetTranscriptAsync(studentId);
+        return dto == null ? NotFound(new { message = "Transkript bulunamadı." }) : Ok(dto);
+    }
+
+    [HttpGet("curriculum-status")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    public async Task<IActionResult> GetCurriculumStatus(int studentId)
+    {
+        var guard = await EnsureAccessAsync(studentId);
+        if (guard != null) return guard;
+        var dto = await _curriculumStatusService.GetCurriculumStatusAsync(studentId);
+        return dto == null ? NotFound(new { message = "Müfredat bilgisi bulunamadı." }) : Ok(dto);
     }
 
     private async Task<IActionResult?> EnsureAccessAsync(int studentId)

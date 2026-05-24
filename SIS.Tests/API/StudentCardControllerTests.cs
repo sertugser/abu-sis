@@ -6,10 +6,12 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Authorization;
 using SIS.API.Controllers;
+using SIS.Application.Common.DTOs;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.DTOs;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.StudentCard.Services;
 using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
@@ -33,7 +35,7 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetRegistrations(5);
 
@@ -75,7 +77,7 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetRegistrations(5);
 
@@ -103,7 +105,7 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetAttendance(5, null);
 
@@ -132,7 +134,7 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetAttendance(5, null);
 
@@ -156,7 +158,7 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetCourseHistory(5);
 
@@ -200,9 +202,69 @@ public class StudentCardControllerTests
 
         var controller = CreateController(
             context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
-            userId: 42, "DepartmentManager");
+            userId: 42, roles: new[] { "DepartmentManager" });
 
         var result = await controller.GetTermGpa(5);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task GetTranscript_ReturnsForbid_WhenCallerCannotAccessDepartment()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var registrationMock = new Mock<ICourseRegistrationService>();
+        var gpaMock = new Mock<IGpaCalculationService>();
+        var transcriptMock = new Mock<IStudentTranscriptService>();
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreateController(
+            context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
+            userId: 42, roles: new[] { "DepartmentManager" },
+            transcriptService: transcriptMock.Object);
+
+        var result = await controller.GetTranscript(5);
+
+        result.Should().BeOfType<ForbidResult>();
+        transcriptMock.Verify(
+            s => s.GetTranscriptAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetTranscript_ReturnsData_WhenAccessAllowed()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var expected = new StudentTranscriptDto();
+
+        var registrationMock = new Mock<ICourseRegistrationService>();
+        var gpaMock = new Mock<IGpaCalculationService>();
+        var transcriptMock = new Mock<IStudentTranscriptService>();
+        transcriptMock
+            .Setup(x => x.GetTranscriptAsync(5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var controller = CreateController(
+            context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
+            userId: 42, roles: new[] { "DepartmentManager" },
+            transcriptService: transcriptMock.Object);
+
+        var result = await controller.GetTranscript(5);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeSameAs(expected);
@@ -256,9 +318,17 @@ public class StudentCardControllerTests
         IGpaCalculationService gpaService,
         IAcademicScopeGuard scopeGuard,
         int userId,
-        params string[] roles)
+        string[] roles,
+        IStudentTranscriptService? transcriptService = null,
+        ICurriculumStatusService? curriculumStatusService = null)
     {
-        var controller = new StudentCardController(registrationService, gpaService, context, scopeGuard);
+        var controller = new StudentCardController(
+            registrationService,
+            gpaService,
+            context,
+            scopeGuard,
+            transcriptService ?? new Mock<IStudentTranscriptService>().Object,
+            curriculumStatusService ?? new Mock<ICurriculumStatusService>().Object);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
