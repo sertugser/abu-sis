@@ -410,6 +410,22 @@ public class AdminStudentService : IAdminStudentService
         await _context.SaveChangesAsync();
     }
 
+    public async Task ChangeStudentNumberAsync(int studentId, string newStudentNumber)
+    {
+        var trimmed = (newStudentNumber ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new InvalidOperationException("Öğrenci numarası boş olamaz.");
+        var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId)
+            ?? throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
+        if (student.StudentNumber == trimmed) return;
+        var taken = await _context.Students.AnyAsync(s => s.Id != studentId && s.StudentNumber == trimmed);
+        if (taken)
+            throw new InvalidOperationException($"Bu öğrenci numarası başka bir öğrenci tarafından kullanılıyor: {trimmed}");
+        student.StudentNumber = trimmed;
+        student.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
+
     private async Task<string> GenerateStudentNumberAsync(int entryYear, AcademicProgram program)
     {
         var yy = entryYear % 100;

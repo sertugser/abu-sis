@@ -236,6 +236,23 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
+    [HttpPut("{id:int}/student-number")]
+    [RequirePermission("menu.ogrenci-no-degistirme.change")]
+    public async Task<IActionResult> ChangeStudentNumber(int id, [FromBody] ChangeStudentNumberDto dto)
+    {
+        try
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+            var deptId = await GetStudentMainDepartmentIdAsync(id);
+            if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+            await _service.ChangeStudentNumberAsync(id, dto.NewStudentNumber);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     private bool TryGetUserId(out int userId)
     {
         userId = 0;

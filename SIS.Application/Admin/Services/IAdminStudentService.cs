@@ -9,4 +9,5 @@ public interface IAdminStudentService
     Task<AdminStudentDetailDto> CreateStudentAsync(CreateStudentDto dto);
     Task AssignAdvisorAsync(int studentId, int advisorId);
     Task UpdateAcademicAsync(int studentId, UpdateStudentAcademicDto dto);
+    Task ChangeStudentNumberAsync(int studentId, string newStudentNumber);
 }

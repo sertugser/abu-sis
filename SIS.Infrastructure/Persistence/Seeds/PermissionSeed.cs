@@ -287,6 +287,7 @@ public static class PermissionSeed
 
         // Sidebar placeholder sayfaları (Faz 4 — backend stub)
         ("menu.ogrenci-no-degistirme.view",              PermissionCategory.Menu, "Öğrenci no değiştirme sayfası"),
+        ("menu.ogrenci-no-degistirme.change",            PermissionCategory.Menu, "Öğrenci numarası değiştirme"),
         ("menu.sinif-atlatma-islemleri.view",            PermissionCategory.Menu, "Sınıf atlatma işlemleri sayfası"),
         ("menu.sinif-atlatma-islemleri.promote",         PermissionCategory.Menu, "Sınıf atlatma uygulama"),
         ("menu.sinif-atlatma-islemleri.rollback",        PermissionCategory.Menu, "Sınıf atlatmayı geri alma"),

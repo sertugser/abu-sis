@@ -361,6 +361,61 @@ public class AdminStudentServiceTests
         result!.UserId.Should().Be(userId);
     }
 
+    private static async Task<(AppDbContext context, AdminStudentService service)> SeedStudentNumberScenario()
+    {
+        var context = CreateContext();
+        context.Students.Add(new Student
+        {
+            Id = 20,
+            UserId = 200,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.5m,
+            Sgpa = 2.5m,
+            CompletedSemesters = 2,
+        });
+        context.Students.Add(new Student
+        {
+            Id = 21,
+            UserId = 201,
+            StudentNumber = "2024002",
+            NationalId = "22222222222",
+            Status = StudentStatus.Active,
+            Cgpa = 3.0m,
+            Sgpa = 3.0m,
+            CompletedSemesters = 2,
+        });
+        await context.SaveChangesAsync();
+
+        var config = new Mock<ISystemConfigProvider>();
+        var service = new AdminStudentService(context, CreateUserManagerMock().Object, config.Object);
+        return (context, service);
+    }
+
+    [Fact]
+    public async Task ChangeStudentNumberAsync_UpdatesNumber_WhenUnique()
+    {
+        var (context, service) = await SeedStudentNumberScenario();
+        await using var _ = context;
+
+        await service.ChangeStudentNumberAsync(20, "2024999");
+
+        var student = await context.Students.SingleAsync(x => x.Id == 20);
+        student.StudentNumber.Should().Be("2024999");
+    }
+
+    [Fact]
+    public async Task ChangeStudentNumberAsync_Throws_WhenNumberAlreadyUsed()
+    {
+        var (context, service) = await SeedStudentNumberScenario();
+        await using var _ = context;
+
+        await FluentActions
+            .Invoking(() => service.ChangeStudentNumberAsync(20, "2024002"))
+            .Should().ThrowAsync<InvalidOperationException>();
+    }
+
     private static async Task<(AppDbContext context, AdminStudentService service, int studentId)> SeedAcademicEditScenario(int advisorDepartmentId = 1)
     {
         var context = CreateContext();

@@ -70,6 +70,8 @@ public record UpdateStudentAcademicDto(
     bool HasFinancialBlock
 );
 
+public record ChangeStudentNumberDto(string NewStudentNumber);
+
 public record CreateStudentDto(
     string FirstName,
     string LastName,

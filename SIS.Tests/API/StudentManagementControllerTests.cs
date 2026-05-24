@@ -83,6 +83,30 @@ public class StudentManagementControllerTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ChangeStudentNumber_ReturnsForbid_WhenCallerCannotAccessDepartment()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var serviceMock = new Mock<IAdminStudentService>();
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreateControllerWithScopeGuard(
+            context, serviceMock.Object, scopeGuardMock.Object, userId: 42, "DepartmentManager");
+
+        var result = await controller.ChangeStudentNumber(5, new ChangeStudentNumberDto("2024999"));
+
+        result.Should().BeOfType<ForbidResult>();
+        serviceMock.Verify(
+            s => s.ChangeStudentNumberAsync(It.IsAny<int>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
     private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
     {
         context.Faculties.Add(new Faculty
