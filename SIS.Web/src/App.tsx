@@ -42,6 +42,10 @@ import StudentSearchPage from './pages/student-hub/StudentSearchPage';
 import StudentCardPage from './pages/student-hub/StudentCardPage';
 import OverviewPanel from './pages/student-hub/panels/OverviewPanel';
 import AcademicInfoPanel from './pages/student-hub/panels/AcademicInfoPanel';
+import RegistrationsPanel from './pages/student-hub/panels/RegistrationsPanel';
+import GradesPanel from './pages/student-hub/panels/GradesPanel';
+import TermGpaPanel from './pages/student-hub/panels/TermGpaPanel';
+import AttendancePanel from './pages/student-hub/panels/AttendancePanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -227,6 +231,10 @@ export default function App() {
                     <Route path="ogrenci-rehberi/:studentId" element={<StudentCardPage />}>
                       <Route index element={<OverviewPanel />} />
                       <Route path="akademik" element={<AcademicInfoPanel />} />
+                      <Route path="ders-kaydi" element={<RegistrationsPanel />} />
+                      <Route path="notlar" element={<GradesPanel />} />
+                      <Route path="donem-ortalamalari" element={<TermGpaPanel />} />
+                      <Route path="devamsizlik" element={<AttendancePanel />} />
                     </Route>
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.personel-listesi.view" />}>
