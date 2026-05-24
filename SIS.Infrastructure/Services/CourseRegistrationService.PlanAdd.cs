@@ -257,9 +257,21 @@ public partial class CourseRegistrationService
                 .GroupBy(e => e.CourseId)
                 .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
 
+            // İntibak: öğrencinin müfredatındaki (yeni→eski) ders haritası.
+            // Önkoşul yeni bir dersse ve öğrenci o dersin eski karşılığını (PreviousCourse) geçtiyse önkoşul sağlanır.
+            var studentCurriculumId = await _context.StudentPrograms
+                .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
+                .Select(sp => (int?)sp.CurriculumId)
+                .FirstOrDefaultAsync();
+            var previousMap = studentCurriculumId is null
+                ? new Dictionary<int, int>()
+                : PreviousCourseResolver.BuildMap(await _context.CurriculumCourses
+                    .Where(cc => cc.CurriculumId == studentCurriculumId && cc.PreviousCourseId != null)
+                    .ToListAsync());
+
             foreach (var reqId in prereqs)
             {
-                var met = passedSet.Contains(reqId);
+                var met = PreviousCourseResolver.IsCovered(reqId, passedSet, previousMap);
                 if (!met && equivMap.TryGetValue(reqId, out var equivIds))
                     met = equivIds.Any(eid => passedSet.Contains(eid));
 

@@ -78,6 +78,7 @@ import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
+import IntibakManagementPage from './pages/IntibakManagementPage';
 import ElectiveConfigurationPage from './pages/ElectiveConfigurationPage';
 import InstructorCoursesReportPage from './pages/InstructorCoursesReportPage';
 import TermProgramTransferPage from './pages/term-program-transfer';
@@ -208,7 +209,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
-              <Route path="sinav-mufredati" element={<ExamCurriculumPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.sinav-mufredati.view" />}>
+                    <Route path="sinav-mufredati" element={<ExamCurriculumPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ogretim-elemani-atama.view" />}>
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
@@ -330,6 +333,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.mufredat-islemleri.view" />}>
                     <Route path="mufredat-islemleri" element={<CurriculumManagementPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.mufredat-ders-intibak.view" />}>
+                    <Route path="mufredat-ders-intibak" element={<IntibakManagementPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.secmeli-yapilandirma.view" />}>
                     <Route path="secmeli-yapilandirma" element={<Navigate to="/secmeli-yapilandirma/gruplar" replace />} />

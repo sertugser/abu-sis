@@ -11,6 +11,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -294,6 +295,9 @@ public class StudentController : ControllerBase
             .GroupBy(e => e.CourseId)
             .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
 
+        // 6b. İntibak: (yeni CourseId → eski PreviousCourseId) — eski ders geçildiyse yeni ders karşılanmış sayılır
+        var previousCourseMap = PreviousCourseResolver.BuildMap(curriculumCourses);
+
         // 7. Build semester groups — curriculum dersleri + pool slot'ları aynı dönemde
         var allSemesterNumbers = curriculumCourses.Select(cc => cc.SuggestedSemester)
             .Concat(curriculumPools.Select(p => p.SuggestedSemesterStart))
@@ -334,7 +338,9 @@ public class StudentController : ControllerBase
                     string? grade = null;
                     string? gradeStatus = null;
 
-                    if (courseRegMap.TryGetValue(cid, out var regInfo))
+                    // Doğrudan ders kaydı VEYA intibak: eski (PreviousCourse) ders kaydı bu satırı karşılar
+                    if (courseRegMap.TryGetValue(cid, out var regInfo)
+                        || (cc.PreviousCourseId.HasValue && courseRegMap.TryGetValue(cc.PreviousCourseId.Value, out regInfo)))
                     {
                         var reg = regInfo.reg;
                         var section = reg.CourseSection;
@@ -364,9 +370,9 @@ public class StudentController : ControllerBase
                         foreach (var p in prereqs)
                         {
                             prereqCodes.Add(p.RequiredCourse.Code);
-                            if (!passedCourseIds.Contains(cid))
+                            if (!PreviousCourseResolver.IsCovered(cid, passedCourseIds, previousCourseMap))
                             {
-                                var met = passedCourseIds.Contains(p.RequiredCourseId);
+                                var met = PreviousCourseResolver.IsCovered(p.RequiredCourseId, passedCourseIds, previousCourseMap);
                                 if (!met && equivMap.TryGetValue(p.RequiredCourseId, out var eqIds))
                                     met = eqIds.Any(eid => passedCourseIds.Contains(eid));
                                 if (!met) prereqsMet = false;

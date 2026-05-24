@@ -21,7 +21,7 @@ public class ExamCurriculumController : ControllerBase
     }
 
     [HttpGet("terms")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
+    [RequirePermission("menu.sinav-mufredati.view")]
     public async Task<IActionResult> GetTerms(CancellationToken ct)
     {
         var terms = await _context.AcademicTerms
@@ -40,7 +40,7 @@ public class ExamCurriculumController : ControllerBase
     }
 
     [HttpGet("curricula")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
+    [RequirePermission("menu.sinav-mufredati.view")]
     public async Task<IActionResult> GetCurricula([FromQuery] int departmentId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId))
@@ -73,7 +73,7 @@ public class ExamCurriculumController : ControllerBase
     }
 
     [HttpGet("curriculum-courses")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
+    [RequirePermission("menu.sinav-mufredati.view")]
     public async Task<IActionResult> GetCurriculumCourses([FromQuery] int curriculumId, CancellationToken ct)
     {
         if (!TryGetUserId(out var userId))
@@ -111,7 +111,7 @@ public class ExamCurriculumController : ControllerBase
     }
 
     [HttpGet("template")]
-    [RequirePermission("menu.ders-acma-islemleri.view")]
+    [RequirePermission("menu.sinav-mufredati.view")]
     public async Task<IActionResult> GetTemplate(
         [FromQuery] int curriculumId,
         [FromQuery] int courseId,
@@ -141,7 +141,7 @@ public class ExamCurriculumController : ControllerBase
     }
 
     [HttpPut("template")]
-    [RequirePermission("menu.ders-acma-islemleri.edit")]
+    [RequirePermission("menu.sinav-mufredati.edit")]
     public async Task<IActionResult> SaveTemplate(
         [FromBody] SaveExamCurriculumTemplateRequest request,
         CancellationToken ct)

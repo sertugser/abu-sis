@@ -160,15 +160,22 @@ public class StudentEligibilityService : IStudentEligibilityService
         result.IsCompulsory = curriculumCourse?.IsCompulsory ?? false;
         result.SuggestedSemester = curriculumCourse?.SuggestedSemester ?? 0;
 
-        // 1. Already passed?
-        if (snapshot.PassedCourseIds.Contains(course.Id))
+        // İntibak: öğrencinin müfredatındaki (yeni→eski) ders haritası
+        var previousMap = context.PreviousCourseMapByCurriculumId.GetValueOrDefault(snapshot.CurriculumId)
+            ?? new Dictionary<int, int>();
+
+        // 1. Already passed? (doğrudan VEYA intibak ile — eski dersi geçmişse)
+        if (PreviousCourseResolver.IsCovered(course.Id, snapshot.PassedCourseIds, previousMap))
         {
+            var viaIntibak = !snapshot.PassedCourseIds.Contains(course.Id);
             result.IsEligible = false;
             result.TakeType = "AlreadyPassed";
             result.Reasons.Add(new IneligibilityReasonDto
             {
                 Reason = IneligibilityReason.AlreadyPassed,
-                Message = "Ders daha once basariyla tamamlanmis."
+                Message = viaIntibak
+                    ? "Ders intibak ile karsilanmis (onceki/eski ders basariyla tamamlanmis)."
+                    : "Ders daha once basariyla tamamlanmis."
             });
             return result;
         }
@@ -204,7 +211,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         {
             foreach (var prereqId in prereqIds)
             {
-                var met = snapshot.PassedCourseIds.Contains(prereqId);
+                var met = PreviousCourseResolver.IsCovered(prereqId, snapshot.PassedCourseIds, previousMap);
                 if (!met && context.EquivalentCourseIdsByCourseId.TryGetValue(prereqId, out var equivIds))
                     met = equivIds.Any(snapshot.PassedCourseIds.Contains);
 
@@ -410,6 +417,10 @@ public class StudentEligibilityService : IStudentEligibilityService
             .GroupBy(cc => cc.CurriculumId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // İntibak: her müfredat için (yeni CourseId → eski PreviousCourseId) haritası
+        var previousCourseMapByCurriculumId = curriculumCoursesByCurriculumId
+            .ToDictionary(kv => kv.Key, kv => PreviousCourseResolver.BuildMap(kv.Value));
+
         var snapshots = new List<EligibilityStudentSnapshot>();
         var cgpaCache = new Dictionary<int, decimal>();
 
@@ -493,6 +504,7 @@ public class StudentEligibilityService : IStudentEligibilityService
             PrerequisitesByCourseId = prerequisitesByCourseId,
             EquivalentCourseIdsByCourseId = equivalentCourseIdsByCourseId,
             CurriculumCoursesByCurriculumId = curriculumCoursesByCurriculumId,
+            PreviousCourseMapByCurriculumId = previousCourseMapByCurriculumId,
             UsersByStudentId = usersByStudentId,
             RetentionThreshold = retentionThreshold
         };
@@ -536,6 +548,7 @@ public class StudentEligibilityService : IStudentEligibilityService
         public required Dictionary<int, HashSet<int>> PrerequisitesByCourseId { get; init; }
         public required Dictionary<int, HashSet<int>> EquivalentCourseIdsByCourseId { get; init; }
         public required Dictionary<int, List<CurriculumCourse>> CurriculumCoursesByCurriculumId { get; init; }
+        public required Dictionary<int, Dictionary<int, int>> PreviousCourseMapByCurriculumId { get; init; }
         public required Dictionary<int, ApplicationUser> UsersByStudentId { get; init; }
         public decimal RetentionThreshold { get; init; }
     }

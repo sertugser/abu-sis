@@ -142,6 +142,10 @@ public static class PermissionSeed
         ("menu.mufredat-islemleri.publish",              PermissionCategory.Menu, "Müfredat yayınlama"),
         ("menu.mufredat-islemleri.archive",              PermissionCategory.Menu, "Müfredat arşivleme"),
 
+        // Müfredat Ders İntibak İşlemleri (standalone toplu intibak — PreviousCourse eşleştirmesi)
+        ("menu.mufredat-ders-intibak.view",              PermissionCategory.Menu, "Müfredat ders intibak (önceki ders eşleştirmesi) görüntüleme"),
+        ("menu.mufredat-ders-intibak.edit",              PermissionCategory.Menu, "Müfredat ders intibak toplu kaydetme"),
+
         // Müfredat Sınıf Dönem Tanımları
         ("menu.mufredat-sinif-donem.view",               PermissionCategory.Menu, "Müfredat term-rules listesi"),
         ("menu.mufredat-sinif-donem.create",             PermissionCategory.Menu, "Yeni term-rule oluşturma"),
@@ -173,6 +177,10 @@ public static class PermissionSeed
         ("menu.ders-acma-islemleri.close-section",       PermissionCategory.Menu, "Section kapatma"),
         ("menu.ders-acma-islemleri.close-all",           PermissionCategory.Menu, "Tüm dersi kapatma"),
         ("menu.ders-acma-islemleri.reactivate",          PermissionCategory.Menu, "Section yeniden aktifleştirme"),
+
+        // Sınav Müfredatı (kendi izni — Ders Aç'tan ayrıldı, ExamCurriculumController)
+        ("menu.sinav-mufredati.view",                    PermissionCategory.Menu, "Sınav müfredatı (sınav bileşen şablonu) görüntüleme"),
+        ("menu.sinav-mufredati.edit",                    PermissionCategory.Menu, "Sınav müfredatı şablonu kaydetme"),
 
         // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
         ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
@@ -287,7 +295,7 @@ public static class PermissionSeed
         ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
         ("menu.toplu-staj-danisman-atama.view",          PermissionCategory.Menu, "Toplu staj danışman atama sayfası"),
         ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
-        ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Tek/toplu müfredat ataması"),
+        ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Toplu müfredat ataması"),
         ("menu.toplu-ders-kaydi.view",                   PermissionCategory.Menu, "Toplu ders kaydı sayfası"),
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),

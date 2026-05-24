@@ -139,7 +139,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Müfredat Sınıf Dönem Tanımları", "/mufredat-sinif-donem-tanimlari",      "mufredat-sinif-donem",           3,  "menu.mufredat-sinif-donem.view"),
             BuildItem(permissions, "Seçmeli Ders Yapılandırması",       "/secmeli-yapilandirma",                "secmeli-yapilandirma",           4,  "menu.secmeli-yapilandirma.view"),
             BuildItem(permissions, "Ders Aç (Müfredat)",             "/ders-acma-islemleri",                 "ders-acma-islemleri",            5,  "menu.ders-acma-islemleri.view"),
-            BuildItem(permissions, "Sınav Müfredatı",                  "/sinav-mufredati",                    "sinav-mufredati",                 6,  "menu.ders-acma-islemleri.view"),
             BuildItem(permissions, "Ders Aç (Hareket)",              "/donem-programi-aktarim",              "donem-programi-aktarim",         6,  "menu.donem-programi-aktarim.view"),
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",              "subelendirme-islemleri",         7,  "menu.subelendirme-islemleri.view"),
             BuildItem(permissions, "Ders Kontenjan İşlemleri",       "/ders-kontenjan-islemleri",            "ders-kontenjan-islemleri",       8,  "menu.ders-kontenjan-islemleri.view"),
@@ -147,9 +146,10 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Program Kısıtlamaları",          "/ders-programi-kisitlamalari",         "ders-programi-kisitlamalari",    10, "menu.ders-programi-kisitlamalari.view"),
             BuildItem(permissions, "Ders Programı Oluşturma",        "/ders-programi-olusturma",             "ders-programi-olusturma",        11, "menu.ders-programi-olusturma.view"),
             BuildItem(permissions, "Öğretim Elemanı Atama",          "/ogretim-elemani-atama",               "ogretim-elemani-atama",          12, "menu.ogretim-elemani-atama.view"),
-            BuildItem(permissions, "Derslik Doluluk Tablosu",        "/derslik-doluluk-tablosu",             "derslik-doluluk",                13, "menu.derslik-doluluk.view"),
-            BuildItem(permissions, "Ders Veren Öğretim Üyeleri",     "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
-            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  15, "menu.program-onayi.view"),
+            BuildItem(permissions, "Müfredat Ders İntibak İşlemleri","/mufredat-ders-intibak",               "mufredat-ders-intibak",          13, "menu.mufredat-ders-intibak.view"),
+            BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
+            BuildItem(permissions, "Sınav Müfredatı",                "/sinav-mufredati",                     "sinav-mufredati",                15, "menu.sinav-mufredati.view"),
+            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  16, "menu.program-onayi.view"),
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────
@@ -230,6 +230,7 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Derslik Yönetimi",               "/derslik-yonetimi",                    "derslik-yonetimi",               1, "menu.derslik-yonetimi.view"),
             BuildItem(permissions, "Derslik-Fakülte Ataması",        "/derslik-fakulte-atamasi",             "derslik-fakulte-atamasi",        2, "menu.derslik-fakulte-atamasi.view"),
+            BuildItem(permissions, "Derslik Doluluk Tablosu",        "/derslik-doluluk-tablosu",             "derslik-doluluk",                3, "menu.derslik-doluluk.view"),
         };
 
         // ─── Modül 10.5: Raporlar (tüm roller — son kullanıcı raporları) ─────────
