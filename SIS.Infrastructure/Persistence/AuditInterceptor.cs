@@ -28,6 +28,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         nameof(CourseRegistration),
         nameof(Student),
         nameof(StudentPersonalInfo),  // iletisim/demografik/askerlik bilgisi degisiklikleri
+        nameof(StudentDocument),      // ogrenci belge yukleme/silme degisiklikleri
         nameof(SystemConfig),
         nameof(WebModuleSetting),
         nameof(FacultyScheduleApproval),

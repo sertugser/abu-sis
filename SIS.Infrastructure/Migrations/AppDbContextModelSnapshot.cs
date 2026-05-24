@@ -1905,6 +1905,38 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("DistributionConstraintCourses");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.DocumentType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("DocumentTypes");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -3054,6 +3086,45 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Students");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DocumentTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileExtension")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UploadedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentTypeId");
+
+                    b.HasIndex("StudentId", "DocumentTypeId")
+                        .IsUnique();
+
+                    b.ToTable("StudentDocuments");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
@@ -5063,6 +5134,21 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Advisor");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentDocument", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.DocumentType", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("Documents")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.CourseRegistration", "CourseRegistration")
@@ -5420,6 +5506,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
                 {
+                    b.Navigation("Documents");
+
                     b.Navigation("PersonalInfo");
 
                     b.Navigation("Registrations");

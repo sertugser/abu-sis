@@ -26,6 +26,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     // DbSets
     public DbSet<Student> Students => Set<Student>();
     public DbSet<StudentPersonalInfo> StudentPersonalInfos => Set<StudentPersonalInfo>();
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+    public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -171,6 +173,34 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
 
             // Photo
             e.Property(p => p.PhotoExtension).HasMaxLength(10);
+        });
+
+        // ── DocumentType (seeded reference catalog) ──────────────
+        builder.Entity<DocumentType>(e =>
+        {
+            e.HasIndex(d => d.Code).IsUnique();
+            e.Property(d => d.Code).HasMaxLength(40);
+            e.Property(d => d.Name).HasMaxLength(160);
+        });
+
+        // ── StudentDocument (per-student uploaded docs, ≤1 per type) ──
+        builder.Entity<StudentDocument>(e =>
+        {
+            e.HasOne<Student>()
+             .WithMany(s => s.Documents)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<DocumentType>()
+             .WithMany()
+             .HasForeignKey(d => d.DocumentTypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // At most one document per (student, type).
+            e.HasIndex(d => new { d.StudentId, d.DocumentTypeId }).IsUnique();
+
+            e.Property(d => d.FileExtension).HasMaxLength(10);
+            e.Property(d => d.OriginalFileName).HasMaxLength(260);
         });
 
         // ── Instructor ───────────────────────────────────────────
