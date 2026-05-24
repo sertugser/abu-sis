@@ -83,7 +83,7 @@ public class AdminStudentService : IAdminStudentService
             query = query.Where(s => s.StudentPrograms.Any(sp =>
                 sp.IsActive && sp.CurriculumId == filter.CurriculumId.Value));
 
-        if (filter.ClassYear is int cy)
+        if (filter.ClassYear is int cy && cy >= 1)
         {
             query = cy >= 4
                 ? query.Where(s => s.CompletedSemesters >= 6)
@@ -91,6 +91,7 @@ public class AdminStudentService : IAdminStudentService
                                 && s.CompletedSemesters <= cy * 2 - 1);
         }
 
+        // string.Compare: AcademicOperationsService.Students.cs ile aynı (EF Core çevirebiliyor — kanıt: o servis canlı kullanımda).
         if (!string.IsNullOrWhiteSpace(filter.StudentNoFrom))
             query = query.Where(s => string.Compare(s.StudentNumber, filter.StudentNoFrom) >= 0);
 
@@ -107,6 +108,7 @@ public class AdminStudentService : IAdminStudentService
 
         // Ders Başarı Durumu: FF/NA notu olan kayıt = başarısız ders.
         // (AcademicOperationsService.Students.cs satır 96-100 ile birebir aynı predicate.)
+        // HasFailingCourse: AcademicOperationsService ile paritede — geçmişteki HERHANGİ bir FF/NA'yı işaretler (döneme göre daraltılmaz).
         if (filter.HasFailingCourse.HasValue)
         {
             query = filter.HasFailingCourse.Value

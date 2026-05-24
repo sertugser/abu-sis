@@ -289,6 +289,49 @@ public class AdminStudentServiceTests
     }
 
     [Fact]
+    public async Task GetStudentsAsync_ClassYearZero_SkipsFilterAndReturnsAllStudents()
+    {
+        await using var context = CreateContext();
+        context.Set<ApplicationUser>().Add(new ApplicationUser { Id = 200, FirstName = "Ayse", LastName = "Ogrenci" });
+        context.Set<ApplicationUser>().Add(new ApplicationUser { Id = 201, FirstName = "Veli", LastName = "Ogrenci" });
+
+        context.Students.Add(new Student
+        {
+            Id = 20,
+            UserId = 200,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.5m,
+            Sgpa = 2.5m,
+            CompletedSemesters = 2,
+        });
+        context.Students.Add(new Student
+        {
+            Id = 21,
+            UserId = 201,
+            StudentNumber = "2024002",
+            NationalId = "22222222222",
+            Status = StudentStatus.Active,
+            Cgpa = 3.0m,
+            Sgpa = 3.0m,
+            CompletedSemesters = 4,
+        });
+        await context.SaveChangesAsync();
+
+        var config = new Mock<ISystemConfigProvider>();
+        var service = new AdminStudentService(context, CreateUserManagerMock().Object, config.Object);
+
+        var result = await service.GetStudentsAsync(
+            new SIS.Application.Admin.DTOs.AdminStudentFilterDto(
+                null, null, null, null, null, null, ClassYear: 0));
+
+        result.TotalCount.Should().Be(2);
+        result.Items.Should().Contain(i => i.StudentNumber == "2024001");
+        result.Items.Should().Contain(i => i.StudentNumber == "2024002");
+    }
+
+    [Fact]
     public async Task GetStudentByIdAsync_ReturnsUserId()
     {
         await using var context = CreateContext();
