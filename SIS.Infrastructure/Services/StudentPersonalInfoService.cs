@@ -51,9 +51,9 @@ public class StudentPersonalInfoService : IStudentPersonalInfoService
             .FirstOrDefaultAsync(p => p.StudentId == studentId, cancellationToken);
 
         var now = DateTime.UtcNow;
-        var isNew = info is null;
         if (info is null)
         {
+            // New row: stamp CreatedAt on insert, leave UpdatedAt null.
             info = new StudentPersonalInfo
             {
                 StudentId = studentId,
@@ -94,8 +94,6 @@ public class StudentPersonalInfoService : IStudentPersonalInfoService
 
         // Photo
         info.PhotoExtension = dto.PhotoExtension;
-
-        _ = isNew; // CreatedAt set on insert; UpdatedAt left null for new rows.
 
         await _context.SaveChangesAsync(cancellationToken);
     }

@@ -259,13 +259,20 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
 
     [HttpGet("{id:int}/personal-info")]
     [RequirePermission("menu.ogrenci-rehberi.view")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GetPersonalInfo(int id)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        var deptId = await GetStudentMainDepartmentIdAsync(id);
-        if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
-        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+        // Dean/DepartmentManager erişim kontrolü (admin rolleri bypass eder)
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (!roles.Contains("SystemAdministrator") && !roles.Contains("AdministrativeStaff"))
+        {
+            var deptId = await GetStudentMainDepartmentIdAsync(id);
+            if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+        }
 
         var result = await _personalInfoService.GetAsync(id);
         if (result == null) return NotFound(new { message = "Öğrenci bulunamadı." });
@@ -275,15 +282,22 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
 
     [HttpPut("{id:int}/personal-info")]
     [RequirePermission("menu.ogrenci-rehberi.edit-personal")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> UpdatePersonalInfo(int id, [FromBody] UpdateStudentPersonalInfoDto dto)
     {
         try
         {
             if (!TryGetUserId(out var userId)) return Unauthorized();
 
-            var deptId = await GetStudentMainDepartmentIdAsync(id);
-            if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
-            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+            // Dean/DepartmentManager erişim kontrolü (admin rolleri bypass eder)
+            var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+            if (!roles.Contains("SystemAdministrator") && !roles.Contains("AdministrativeStaff"))
+            {
+                var deptId = await GetStudentMainDepartmentIdAsync(id);
+                if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+                if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+            }
 
             await _personalInfoService.UpsertAsync(id, dto);
             return NoContent();
