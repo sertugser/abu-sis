@@ -38,7 +38,9 @@ import CourseOpeningPage from './pages/CourseOpeningPage';
 import ExamCurriculumPage from './pages/ExamCurriculumPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
-import StudentDirectoryPage from './pages/StudentDirectoryPage';
+import StudentSearchPage from './pages/student-hub/StudentSearchPage';
+import StudentCardPage from './pages/student-hub/StudentCardPage';
+import OverviewPanel from './pages/student-hub/panels/OverviewPanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -220,7 +222,10 @@ export default function App() {
                     <Route path="kullanici-yonetimi" element={<UserManagementPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ogrenci-rehberi.view" />}>
-                    <Route path="ogrenci-rehberi" element={<StudentDirectoryPage />} />
+                    <Route path="ogrenci-rehberi" element={<StudentSearchPage />} />
+                    <Route path="ogrenci-rehberi/:studentId" element={<StudentCardPage />}>
+                      <Route index element={<OverviewPanel />} />
+                    </Route>
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.personel-listesi.view" />}>
                     <Route path="personel-listesi" element={<InstructorDirectoryPage />} />
