@@ -113,6 +113,26 @@ export function useAssignAdvisor() {
   });
 }
 
+export function useChangeStudentNumber() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      studentId,
+      newStudentNumber,
+    }: {
+      studentId: number;
+      newStudentNumber: string;
+    }) => {
+      await apiClient.put(`${API}/${studentId}/student-number`, { newStudentNumber });
+    },
+    onSuccess: (_d, { studentId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'list'] });
+    },
+  });
+}
+
 export interface UpdateStudentAcademic {
   status: string;
   advisorId?: number;
