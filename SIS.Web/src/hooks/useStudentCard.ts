@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import type { StudentRegistrationDto, CourseHistoryTermDto, StudentAttendanceStatusDto } from '../types/registration';
 import type { StudentTermGpaDto } from '../types/student';
+import type { StudentTranscriptDto } from '../types/transcript';
+import type { CurriculumStatusDto } from '../types/curriculum';
 
 const BASE = '/admin/students';
 
@@ -47,6 +49,22 @@ export function useStudentCardAttendance(studentId: number | null, termId?: numb
       });
       return data;
     },
+    enabled: studentId != null,
+  });
+}
+
+export function useStudentCardTranscript(studentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'student-card', 'transcript', studentId],
+    queryFn: async () => (await apiClient.get<StudentTranscriptDto>(`${BASE}/${studentId}/transcript`)).data,
+    enabled: studentId != null,
+  });
+}
+
+export function useStudentCardCurriculumStatus(studentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'student-card', 'curriculum-status', studentId],
+    queryFn: async () => (await apiClient.get<CurriculumStatusDto>(`${BASE}/${studentId}/curriculum-status`)).data,
     enabled: studentId != null,
   });
 }

@@ -13,11 +13,11 @@ export const CARD_NAV: CardNavGroup[] = [
     { segment: 'genel', label: 'Genel Bilgiler', enabled: false },
   ]},
   { title: 'Ders İşlemleri', items: [
-    { segment: 'transkript', label: 'Transkript', enabled: false },
+    { segment: 'transkript', label: 'Transkript', enabled: true },
     { segment: 'notlar', label: 'Notlar', enabled: true },
     { segment: 'donem-ortalamalari', label: 'Dönem Ortalamaları', enabled: true },
     { segment: 'ders-kaydi', label: 'Ders Kaydı', enabled: true },
-    { segment: 'mufredat-durumu', label: 'Müfredat Durumu', enabled: false },
+    { segment: 'mufredat-durumu', label: 'Müfredat Durumu', enabled: true },
     { segment: 'devamsizlik', label: 'Devamsızlık', enabled: true },
   ]},
   { title: 'İşlemler', items: [

@@ -46,6 +46,8 @@ import RegistrationsPanel from './pages/student-hub/panels/RegistrationsPanel';
 import GradesPanel from './pages/student-hub/panels/GradesPanel';
 import TermGpaPanel from './pages/student-hub/panels/TermGpaPanel';
 import AttendancePanel from './pages/student-hub/panels/AttendancePanel';
+import TranscriptPanel from './pages/student-hub/panels/TranscriptPanel';
+import CurriculumStatusPanel from './pages/student-hub/panels/CurriculumStatusPanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -234,6 +236,8 @@ export default function App() {
                       <Route path="ders-kaydi" element={<RegistrationsPanel />} />
                       <Route path="notlar" element={<GradesPanel />} />
                       <Route path="donem-ortalamalari" element={<TermGpaPanel />} />
+                      <Route path="transkript" element={<TranscriptPanel />} />
+                      <Route path="mufredat-durumu" element={<CurriculumStatusPanel />} />
                       <Route path="devamsizlik" element={<AttendancePanel />} />
                     </Route>
                   </Route>
