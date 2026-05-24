@@ -266,7 +266,7 @@ public static class RolePermissionSeed
 
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
-                "menu.ogrenci-rehberi.edit-academic",
+                "menu.ogrenci-rehberi.edit-academic", // edit-academic: şimdilik yalnızca AdministrativeStaff — akademik-düzenleme planında Dean/DepartmentManager kapsamı tekrar değerlendirilecek
                 "menu.toplu-danisman-atama.assign",
                 "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",

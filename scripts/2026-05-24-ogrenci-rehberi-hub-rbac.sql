@@ -31,6 +31,7 @@ INSERT INTO "Permissions" ("Key", "Category", "Description", "CreatedAt")
 SELECT 'menu.ogrenci-rehberi.edit-academic', 0, 'Öğrenci akademik bilgisi düzenleme', NOW()
 WHERE NOT EXISTS (SELECT 1 FROM "Permissions" WHERE "Key" = 'menu.ogrenci-rehberi.edit-academic');
 
+-- SourceBundleId/GrantedByUserId left NULL (manual grant)
 INSERT INTO "RolePermissions" ("RoleId", "PermissionId", "GrantedAt")
 SELECT r."Id", p."Id", NOW()
 FROM "AspNetRoles" r, "Permissions" p
