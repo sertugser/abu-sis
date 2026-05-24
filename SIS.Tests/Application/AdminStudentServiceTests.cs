@@ -416,6 +416,17 @@ public class AdminStudentServiceTests
             .Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task ChangeStudentNumberAsync_Throws_WhenStudentNotFound()
+    {
+        var (context, service) = await SeedStudentNumberScenario();
+        await using var _ = context;
+
+        await FluentActions
+            .Invoking(() => service.ChangeStudentNumberAsync(999999, "2024999"))
+            .Should().ThrowAsync<KeyNotFoundException>();
+    }
+
     private static async Task<(AppDbContext context, AdminStudentService service, int studentId)> SeedAcademicEditScenario(int advisorDepartmentId = 1)
     {
         var context = CreateContext();

@@ -11,7 +11,6 @@ public class ChangeStudentNumberDtoValidator : AbstractValidator<ChangeStudentNu
             .NotEmpty()
             .WithMessage("Öğrenci numarası boş olamaz.")
             .MaximumLength(50)
-            .Matches("^[0-9]+$")
-            .WithMessage("Öğrenci numarası yalnızca rakam içerebilir.");
+            .WithMessage("Öğrenci numarası en fazla 50 karakter olabilir.");
     }
 }
