@@ -55,6 +55,26 @@ public class AdminLookupController(AppDbContext db, ISystemConfigProvider system
         return Ok(programs);
     }
 
+    [HttpGet("curricula")]
+    [RequirePermission("lookup.curriculum")]
+    public async Task<IActionResult> GetCurricula([FromQuery] int programId)
+    {
+        var curricula = await db.Curricula
+            .AsNoTracking()
+            .Where(c => c.ProgramId == programId)
+            .OrderByDescending(c => c.Id)
+            .Select(c => new
+            {
+                c.Id,
+                c.ProgramId,
+                Name = c.Name ?? c.Version,
+                c.Version,
+                c.Status,
+            })
+            .ToListAsync();
+        return Ok(curricula);
+    }
+
     [HttpGet("advisors")]
     [RequirePermission("lookup.advisor")]
     public async Task<IActionResult> GetAdvisors()
