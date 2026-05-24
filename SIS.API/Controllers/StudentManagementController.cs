@@ -28,19 +28,28 @@ public class StudentManagementController : ControllerBase
     // olmak zorunda olduğu için ayrı tutuldu.
     private const long MaxPhotoRequestBytes = 10_000_000;
 
+    // Config "StudentDocuments:MaxBytes" yoksa kullanılan varsayılan (5 MB).
+    private const long DefaultMaxDocumentBytes = 5_000_000;
+
+    // Pipeline-level hard ceiling for document uploads (config'ten daha gevşek).
+    // Asıl boyut kontrolü StudentDocumentValidator içinde config değeriyle yapılır.
+    private const long MaxDocumentRequestBytes = 20_000_000;
+
     private readonly IAdminStudentService _service;
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _systemConfig;
     private readonly IAcademicScopeGuard _scopeGuard;
     private readonly IStudentPersonalInfoService _personalInfoService;
     private readonly IStudentPhotoStorage _photoStorage;
+    private readonly IStudentDocumentService _documentService;
+    private readonly IStudentDocumentStorage _documentStorage;
     private readonly IConfiguration _configuration;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig)
-        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new ConfigurationBuilder().Build())
+        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
     {
     }
 
@@ -48,7 +57,7 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         IAcademicScopeGuard scopeGuard)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new ConfigurationBuilder().Build())
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
     {
     }
 
@@ -59,7 +68,19 @@ public class StudentManagementController : ControllerBase
         IAcademicScopeGuard scopeGuard,
         IStudentPersonalInfoService personalInfoService,
         IStudentPhotoStorage photoStorage)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage, new ConfigurationBuilder().Build())
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage, new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
+    {
+    }
+
+    // Test kolaylığı: belge servisi + belge depolaması enjekte edilebilir.
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard,
+        IStudentDocumentService documentService,
+        IStudentDocumentStorage documentStorage,
+        IConfiguration configuration)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), documentService, documentStorage, configuration)
     {
     }
 
@@ -73,6 +94,8 @@ public class StudentManagementController : ControllerBase
         IAcademicScopeGuard scopeGuard,
         IStudentPersonalInfoService personalInfoService,
         IStudentPhotoStorage photoStorage,
+        IStudentDocumentService documentService,
+        IStudentDocumentStorage documentStorage,
         IConfiguration configuration)
     {
         _service = service;
@@ -81,6 +104,8 @@ public class StudentManagementController : ControllerBase
         _scopeGuard = scopeGuard;
         _personalInfoService = personalInfoService;
         _photoStorage = photoStorage;
+        _documentService = documentService;
+        _documentStorage = documentStorage;
         _configuration = configuration;
     }
 
@@ -435,6 +460,149 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         }
 
         return NoContent();
+    }
+
+    // ── Belge yükleme / sunma / silme ───────────────────────────────────────
+
+    [HttpGet("{id:int}/documents")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    public async Task<IActionResult> GetDocuments(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var status = await _documentService.GetStatusAsync(id, ct);
+        if (status is null)
+            return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        return Ok(status);
+    }
+
+    [HttpPost("{id:int}/documents/{documentTypeId:int}")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-documents")]
+    [RequestSizeLimit(MaxDocumentRequestBytes)]
+    public async Task<IActionResult> UploadDocument(int id, int documentTypeId, IFormFile? file, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var maxBytes = ResolveMaxDocumentBytes();
+
+        // Ucuz erken red: client'ın bildirdiği boyut zaten sınırı aşıyorsa buffer'lamaya gerek yok.
+        // Asıl/yetkili kontrol aşağıda buffered.Length üzerinden yapılır
+        // (forged düşük Content-Length bypass'ını engellemek için).
+        if (file != null && file.Length > maxBytes)
+            return BadRequest(new { message = $"Dosya boyutu üst sınırı ({maxBytes} byte) aşıyor." });
+
+        // Header'ı okumak için akışı seekable bir buffer'a al.
+        await using var buffered = new MemoryStream();
+        if (file is not null && file.Length > 0)
+        {
+            await using var upload = file.OpenReadStream();
+            await upload.CopyToAsync(buffered, ct);
+        }
+        buffered.Position = 0;
+
+        var header = new byte[StudentDocumentValidator.HeaderSize];
+        var headerLen = await ReadHeaderAsync(buffered, header, ct);
+        buffered.Position = 0;
+
+        // Yetkili boyut kontrolü: client-controlled file.Length değil, gerçekte buffer'a
+        // kopyalanan byte sayısı (buffered.Length) kullanılır.
+        var validationError = StudentDocumentValidator.Validate(
+            hasFile: file is not null,
+            sizeBytes: buffered.Length,
+            maxBytes: maxBytes,
+            contentType: file?.ContentType,
+            header: header.AsSpan(0, headerLen));
+        if (validationError is not null)
+            return BadRequest(new { message = validationError });
+
+        // Dosya adı docId içerdiğinden önce kaydı upsert edip docId'yi al. RecordUploadAsync
+        // öğrenci + belge tipinin varlığını doğrular (KeyNotFound → 404). Content-type'tan
+        // türetilen uzantı placeholder olarak yazılır; SaveAsync aynı uzantıyı döner.
+        var ext = ExtensionFromContentType(file!.ContentType);
+        int docId;
+        try
+        {
+            docId = await _documentService.RecordUploadAsync(id, documentTypeId, ext, file.FileName, userId, ct);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+
+        await _documentStorage.SaveAsync(id, docId, buffered, file.ContentType, ct);
+
+        return NoContent();
+    }
+
+    [HttpGet("{id:int}/documents/{documentId:int}")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
+    public async Task<IActionResult> GetDocument(int id, int documentId, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        // Owner-scoped: belge yalnızca verilen öğrenciye aitse döner (IDOR koruması).
+        var doc = await _documentService.GetDocumentAsync(id, documentId, ct);
+        if (doc is null)
+            return NotFound(new { message = "Belge bulunamadı." });
+
+        var stored = await _documentStorage.GetAsync(id, documentId, doc.FileExtension, ct);
+        if (stored is null)
+            return NotFound(new { message = "Belge bulunamadı." });
+
+        // Belge asla zorla indirme/çalıştırılabilir olarak ele alınmasın diye explicit inline.
+        // (X-Content-Type-Options: nosniff zaten SecurityHeadersMiddleware'de global olarak ekleniyor.)
+        Response.Headers["Content-Disposition"] = "inline";
+        return File(stored.Value.Stream, stored.Value.ContentType);
+    }
+
+    [HttpDelete("{id:int}/documents/{documentId:int}")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-documents")]
+    public async Task<IActionResult> DeleteDocument(int id, int documentId, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        // Owner-scoped: belge yalnızca verilen öğrenciye aitse silinir (IDOR koruması).
+        var doc = await _documentService.GetDocumentAsync(id, documentId, ct);
+        if (doc is null)
+            return NotFound(new { message = "Belge bulunamadı." });
+
+        await _documentStorage.DeleteAsync(id, documentId, doc.FileExtension, ct);
+        await _documentService.RemoveAsync(id, documentId, ct);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Content-type'tan belge uzantısını türetir ("pdf"/"jpg"/"png"). Bu noktaya
+    /// gelindiğinde content-type zaten StudentDocumentValidator tarafından whitelist'lendiği
+    /// için fallback "pdf" pratikte oluşmaz.
+    /// </summary>
+    private static string ExtensionFromContentType(string? contentType) => contentType?.ToLowerInvariant() switch
+    {
+        StudentDocumentValidator.JpegContentType => "jpg",
+        StudentDocumentValidator.PngContentType => "png",
+        _ => "pdf",
+    };
+
+    private long ResolveMaxDocumentBytes()
+    {
+        var raw = _configuration["StudentDocuments:MaxBytes"];
+        return long.TryParse(raw, out var parsed) && parsed > 0 ? parsed : DefaultMaxDocumentBytes;
     }
 
     /// <summary>

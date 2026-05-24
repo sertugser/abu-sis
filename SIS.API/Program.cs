@@ -274,6 +274,7 @@ builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoService>();
 builder.Services.AddScoped<IStudentDocumentService, StudentDocumentService>();
 builder.Services.AddScoped<IStudentPhotoStorage, FileSystemStudentPhotoStorage>();
+builder.Services.AddScoped<IStudentDocumentStorage, FileSystemStudentDocumentStorage>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<SIS.Application.AcademicCalendar.Services.IAcademicCalendarService, AcademicCalendarService>();
