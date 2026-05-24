@@ -64,6 +64,11 @@ public class StudentDocumentService : IStudentDocumentService
         int? uploadedByUserId,
         CancellationToken cancellationToken = default)
     {
+        var studentExists = await _context.Students
+            .AnyAsync(s => s.Id == studentId, cancellationToken);
+        if (!studentExists)
+            throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
+
         var typeExists = await _context.DocumentTypes
             .AnyAsync(d => d.Id == documentTypeId, cancellationToken);
         if (!typeExists)
@@ -85,7 +90,7 @@ public class StudentDocumentService : IStudentDocumentService
             _context.StudentDocuments.Add(doc);
         }
 
-        doc.FileExtension = extension;
+        doc.FileExtension = extension.TrimStart('.').ToLowerInvariant();
         doc.OriginalFileName = originalFileName;
         doc.UploadedAt = now;
         doc.UploadedByUserId = uploadedByUserId;
@@ -94,16 +99,21 @@ public class StudentDocumentService : IStudentDocumentService
         return doc.Id;
     }
 
-    public async Task<StudentDocument?> GetDocumentAsync(
+    public async Task<StudentDocumentFileDto?> GetDocumentAsync(
         int studentId,
         int documentId,
         CancellationToken cancellationToken = default)
     {
         return await _context.StudentDocuments
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                d => d.Id == documentId && d.StudentId == studentId,
-                cancellationToken);
+            .Where(d => d.Id == documentId && d.StudentId == studentId)
+            .Select(d => new StudentDocumentFileDto(
+                d.Id,
+                d.StudentId,
+                d.DocumentTypeId,
+                d.FileExtension,
+                d.OriginalFileName))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task RemoveAsync(

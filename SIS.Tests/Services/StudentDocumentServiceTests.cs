@@ -153,9 +153,38 @@ public class StudentDocumentServiceTests
 
         var owned = await service.GetDocumentAsync(StudentId, docId);
         owned.Should().NotBeNull();
-        owned!.DocumentTypeId.Should().Be(type.Id);
+        owned!.Id.Should().Be(docId);
+        owned.StudentId.Should().Be(StudentId);
+        owned.DocumentTypeId.Should().Be(type.Id);
+        owned.FileExtension.Should().Be("pdf");
+        owned.OriginalFileName.Should().Be("diploma.pdf");
 
         var foreign = await service.GetDocumentAsync(studentId: 777, docId);
         foreign.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecordUploadAsync_Throws_WhenStudentMissing()
+    {
+        await using var context = await CreateSeededContextAsync();
+        var service = new StudentDocumentService(context);
+        var type = await context.DocumentTypes.FirstAsync(d => d.Code == "FOTO");
+
+        var act = () => service.RecordUploadAsync(studentId: 9999, type.Id, "pdf", null, null);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task RecordUploadAsync_NormalizesExtension_StripsDotAndLowercases()
+    {
+        await using var context = await CreateSeededContextAsync();
+        var service = new StudentDocumentService(context);
+        var type = await context.DocumentTypes.FirstAsync(d => d.Code == "NUFUS");
+
+        var docId = await service.RecordUploadAsync(StudentId, type.Id, ".PDF", "n.pdf", null);
+
+        var doc = await service.GetDocumentAsync(StudentId, docId);
+        doc!.FileExtension.Should().Be("pdf");
     }
 }

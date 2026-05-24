@@ -16,3 +16,17 @@ public record StudentDocumentStatusDto(
     string? OriginalFileName,
     DateTime? UploadedAt
 );
+
+/// <summary>
+/// Minimal file-locating projection of a single uploaded student document.
+/// Used by the serve endpoint to locate and stream the stored file without
+/// leaking the <c>SIS.Domain.Entities.StudentDocument</c> entity through the
+/// Application boundary.
+/// </summary>
+public record StudentDocumentFileDto(
+    int Id,
+    int StudentId,
+    int DocumentTypeId,
+    string FileExtension,
+    string? OriginalFileName
+);

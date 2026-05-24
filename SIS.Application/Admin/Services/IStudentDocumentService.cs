@@ -1,5 +1,4 @@
 using SIS.Application.Admin.DTOs;
-using SIS.Domain.Entities;
 
 namespace SIS.Application.Admin.Services;
 
@@ -26,9 +25,10 @@ public interface IStudentDocumentService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the document if it belongs to the given student, otherwise null.
+    /// Returns the file-locating projection of the document if it belongs to the
+    /// given student, otherwise null.
     /// </summary>
-    Task<StudentDocument?> GetDocumentAsync(int studentId, int documentId, CancellationToken cancellationToken = default);
+    Task<StudentDocumentFileDto?> GetDocumentAsync(int studentId, int documentId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes the document if it belongs to the given student; no-op otherwise.
