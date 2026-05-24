@@ -28,6 +28,9 @@ export interface AdminStudentDetail extends AdminStudentListItem {
   isScholarshipStudent: boolean;
   hasFinancialBlock: boolean;
   advisorId?: number;
+  programId: number;
+  curriculumId: number;
+  programType: string;
 }
 
 export interface AdminStudentFilter {

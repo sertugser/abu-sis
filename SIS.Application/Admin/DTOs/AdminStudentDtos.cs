@@ -33,7 +33,10 @@ public record AdminStudentDetailDto(
     string ProgramCode,
     string DepartmentName,
     string? AdvisorName,
-    int? AdvisorId
+    int? AdvisorId,
+    int ProgramId,
+    int CurriculumId,
+    string ProgramType
 );
 
 public record AdminStudentFilterDto(
@@ -55,6 +58,16 @@ public record AdminStudentFilterDto(
     DateTime? EnrollmentFrom = null,
     DateTime? EnrollmentTo = null,
     bool? HasFailingCourse = null
+);
+
+public record UpdateStudentAcademicDto(
+    string Status,
+    int? AdvisorId,
+    int ProgramId,
+    int CurriculumId,
+    string ProgramType,
+    bool IsScholarshipStudent,
+    bool HasFinancialBlock
 );
 
 public record CreateStudentDto(

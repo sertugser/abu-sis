@@ -148,6 +148,9 @@ public class StudentManagementController : ControllerBase
             result.DepartmentName,
             result.AdvisorName,
             result.AdvisorId,
+            result.ProgramId,
+            result.CurriculumId,
+            result.ProgramType,
             TranscriptAccessible = false,
             TranscriptAccessMessage = "Akademisyen transkript erisimi sistem ayari nedeniyle kapali."
         });

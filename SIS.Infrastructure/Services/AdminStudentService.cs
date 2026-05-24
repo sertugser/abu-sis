@@ -187,6 +187,7 @@ public class AdminStudentService : IAdminStudentService
             .FirstOrDefaultAsync(u => u.Id == student.UserId);
 
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive && sp.Type == StudentProgramType.Main);
 
         ApplicationUser? advisorUser = null;
         if (student.Advisor != null)
@@ -213,7 +214,10 @@ public class AdminStudentService : IAdminStudentService
             activeProgram?.Program?.Code ?? "-",
             activeProgram?.Program?.Department?.Name ?? "-",
             advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : null,
-            student.AdvisorId
+            student.AdvisorId,
+            mainProgram?.ProgramId ?? 0,
+            mainProgram?.CurriculumId ?? 0,
+            (mainProgram?.Type ?? StudentProgramType.Main).ToString()
         );
     }
 
@@ -332,6 +336,77 @@ public class AdminStudentService : IAdminStudentService
         }
 
         student.AdvisorId = instructor.Id;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdateAcademicAsync(int studentId, UpdateStudentAcademicDto dto)
+    {
+        var student = await _context.Students.Include(s => s.StudentPrograms)
+            .FirstOrDefaultAsync(s => s.Id == studentId)
+            ?? throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
+
+        if (!Enum.TryParse<StudentStatus>(dto.Status, out var status))
+            throw new InvalidOperationException($"Geçersiz durum: {dto.Status}");
+
+        if (!Enum.TryParse<StudentProgramType>(dto.ProgramType, out var programType))
+            throw new InvalidOperationException($"Geçersiz program tipi: {dto.ProgramType}");
+
+        var program = await _context.AcademicPrograms.Include(p => p.Department)
+            .FirstOrDefaultAsync(p => p.Id == dto.ProgramId)
+            ?? throw new KeyNotFoundException($"Program bulunamadı: {dto.ProgramId}");
+
+        var curriculumValid = await _context.Curricula
+            .AnyAsync(c => c.Id == dto.CurriculumId && c.ProgramId == dto.ProgramId);
+        if (!curriculumValid)
+            throw new InvalidOperationException("Seçilen müfredat bu programa ait değil.");
+
+        if (dto.AdvisorId.HasValue)
+        {
+            var instructor = await _context.Instructors.AsNoTracking()
+                .FirstOrDefaultAsync(i => i.Id == dto.AdvisorId.Value)
+                ?? throw new KeyNotFoundException($"Öğretim üyesi bulunamadı: {dto.AdvisorId}");
+
+            var optOutEnabled = await _systemConfig.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true);
+            if (optOutEnabled && instructor.AdvisorOptOutRequested)
+                throw new InvalidOperationException("Bu öğretim üyesi danışmanlık görevi almak istemediğini belirtmiştir.");
+
+            if (instructor.DepartmentId != program.DepartmentId)
+                throw new InvalidOperationException("Danışman, öğrencinin programının bölümünde olmalıdır.");
+        }
+
+        var mainProgram = student.StudentPrograms
+            .FirstOrDefault(p => p.IsActive && p.Type == StudentProgramType.Main)
+            ?? throw new InvalidOperationException("Öğrencinin aktif ana programı bulunamadı.");
+
+        student.Status = status;
+        student.AdvisorId = dto.AdvisorId;
+        student.IsScholarshipStudent = dto.IsScholarshipStudent;
+        student.HasFinancialBlock = dto.HasFinancialBlock;
+        student.UpdatedAt = DateTime.UtcNow;
+
+        if (mainProgram.ProgramId == dto.ProgramId)
+        {
+            // ProgramId composite key'in parçası; aynı kaldığında in-place güncellenebilir.
+            mainProgram.CurriculumId = dto.CurriculumId;
+            mainProgram.Type = programType;
+        }
+        else
+        {
+            // ProgramId (StudentId, ProgramId) composite key'in parçası olduğundan
+            // değiştirilemez: eski kaydı sil, yenisini ekle.
+            var enrollmentDate = mainProgram.EnrollmentDate;
+            _context.Set<StudentProgram>().Remove(mainProgram);
+            _context.Set<StudentProgram>().Add(new StudentProgram
+            {
+                StudentId = student.Id,
+                ProgramId = dto.ProgramId,
+                CurriculumId = dto.CurriculumId,
+                Type = programType,
+                EnrollmentDate = enrollmentDate,
+                IsActive = true
+            });
+        }
+
         await _context.SaveChangesAsync();
     }
 

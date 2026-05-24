@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using SIS.Application.Admin.DTOs;
 using SIS.Application.Common.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -358,5 +359,105 @@ public class AdminStudentServiceTests
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be(userId);
+    }
+
+    private static (AppDbContext context, AdminStudentService service, int studentId) SeedAcademicEditScenario(int advisorDepartmentId = 1)
+    {
+        var context = CreateContext();
+        context.Departments.Add(new Department { Id = 1, Name = "Bilgisayar", Code = "CENG", FacultyId = 1 });
+        context.Departments.Add(new Department { Id = 2, Name = "Elektrik", Code = "EE", FacultyId = 1 });
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 1,
+            DepartmentId = 1,
+            Name = "Program 1",
+            Code = "P1",
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240,
+            CreatedAt = DateTime.UtcNow
+        });
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 2,
+            DepartmentId = 1,
+            Name = "Program 2",
+            Code = "P2",
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 14,
+            TotalRequiredEcts = 240,
+            CreatedAt = DateTime.UtcNow
+        });
+        context.Curricula.Add(new Curriculum { Id = 10, ProgramId = 1, Version = "2023", IsActive = true, CreatedAt = DateTime.UtcNow });
+        context.Curricula.Add(new Curriculum { Id = 20, ProgramId = 2, Version = "2024", IsActive = true, CreatedAt = DateTime.UtcNow });
+        context.Instructors.Add(new Instructor
+        {
+            Id = 5,
+            UserId = 500,
+            DepartmentId = advisorDepartmentId,
+            Title = "Dr.",
+            MaxWeeklyHours = 10,
+        });
+        context.Students.Add(new Student
+        {
+            Id = 20,
+            UserId = 200,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.5m,
+            Sgpa = 2.5m,
+            CompletedSemesters = 2,
+            AdvisorId = null,
+        });
+        context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = 20,
+            ProgramId = 1,
+            CurriculumId = 10,
+            Type = StudentProgramType.Main,
+            EnrollmentDate = DateTime.UtcNow,
+            IsActive = true
+        });
+        context.SaveChanges();
+
+        var config = new Mock<ISystemConfigProvider>();
+        config.Setup(x => x.GetBoolAsync("Instructor.EnableAdvisorOptOutOptions", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new AdminStudentService(context, CreateUserManagerMock().Object, config.Object);
+        return (context, service, 20);
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_UpdatesStatusProgramCurriculumAndFlags()
+    {
+        var (context, service, studentId) = SeedAcademicEditScenario();
+        await using var _ = context;
+
+        await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+            "Frozen", 5, 2, 20, "Main", true, false));
+
+        var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
+        s.Status.Should().Be(StudentStatus.Frozen);
+        s.AdvisorId.Should().Be(5);
+        s.IsScholarshipStudent.Should().BeTrue();
+        var mp = s.StudentPrograms.Single(p => p.IsActive && p.Type == StudentProgramType.Main);
+        mp.ProgramId.Should().Be(2);
+        mp.CurriculumId.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_Throws_WhenAdvisorNotInProgramDepartment()
+    {
+        var (context, service, studentId) = SeedAcademicEditScenario(advisorDepartmentId: 2);
+        await using var _ = context;
+
+        await FluentActions
+            .Invoking(() => service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+                "Active", 5, 2, 20, "Main", false, false)))
+            .Should().ThrowAsync<InvalidOperationException>();
     }
 }
