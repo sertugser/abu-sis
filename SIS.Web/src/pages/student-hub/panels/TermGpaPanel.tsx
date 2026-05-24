@@ -39,8 +39,8 @@ export default function TermGpaPanel() {
                 <td className="px-4 py-3 text-muted-foreground">{term.courseCount}</td>
                 <td className="px-4 py-3 text-muted-foreground">{term.totalCredits}</td>
                 <td className="px-4 py-3 text-muted-foreground">{term.totalEcts}</td>
-                <td className="px-4 py-3 font-semibold">{term.sgpa.toFixed(2)}</td>
-                <td className="px-4 py-3 font-semibold">{term.cgpa.toFixed(2)}</td>
+                <td className="px-4 py-3 font-semibold">{term.sgpa != null ? term.sgpa.toFixed(2) : '—'}</td>
+                <td className="px-4 py-3 font-semibold">{term.cgpa != null ? term.cgpa.toFixed(2) : '—'}</td>
               </tr>
             ))
           )}

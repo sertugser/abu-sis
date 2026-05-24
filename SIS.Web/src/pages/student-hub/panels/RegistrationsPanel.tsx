@@ -39,8 +39,8 @@ export default function RegistrationsPanel() {
                 <td className="px-4 py-3 font-mono text-xs">{reg.courseCode}</td>
                 <td className="px-4 py-3 font-medium text-foreground">{reg.courseName}</td>
                 <td className="px-4 py-3 text-muted-foreground">{reg.ects}</td>
-                <td className="px-4 py-3 text-muted-foreground">{reg.instructorName ?? '—'}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{reg.schedule ?? '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">{reg.instructorName || '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{reg.schedule || '—'}</td>
                 <td className="px-4 py-3">
                   <Badge variant="secondary">{reg.status}</Badge>
                 </td>
