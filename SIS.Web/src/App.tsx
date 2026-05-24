@@ -43,6 +43,7 @@ import StudentCardPage from './pages/student-hub/StudentCardPage';
 import OverviewPanel from './pages/student-hub/panels/OverviewPanel';
 import AcademicInfoPanel from './pages/student-hub/panels/AcademicInfoPanel';
 import AdvisorPanel from './pages/student-hub/panels/AdvisorPanel';
+import PasswordPanel from './pages/student-hub/panels/PasswordPanel';
 import RegistrationsPanel from './pages/student-hub/panels/RegistrationsPanel';
 import GradesPanel from './pages/student-hub/panels/GradesPanel';
 import TermGpaPanel from './pages/student-hub/panels/TermGpaPanel';
@@ -241,6 +242,7 @@ export default function App() {
                       <Route path="mufredat-durumu" element={<CurriculumStatusPanel />} />
                       <Route path="devamsizlik" element={<AttendancePanel />} />
                       <Route path="danisman" element={<AdvisorPanel />} />
+                      <Route path="sifre" element={<PasswordPanel />} />
                     </Route>
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.personel-listesi.view" />}>

@@ -24,6 +24,6 @@ export const CARD_NAV: CardNavGroup[] = [
     { segment: 'danisman', label: 'Danışman Atama', enabled: true },
     { segment: 'no-degistir', label: 'Öğrenci No Değiştirme', enabled: false },
     { segment: 'sinif-atlatma', label: 'Sınıf Atlatma', enabled: false },
-    { segment: 'sifre', label: 'Şifre İşlemleri', enabled: false },
+    { segment: 'sifre', label: 'Şifre İşlemleri', enabled: true },
   ]},
 ];
