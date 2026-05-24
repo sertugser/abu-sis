@@ -113,3 +113,27 @@ export function useAssignAdvisor() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'students'] }),
   });
 }
+
+export interface UpdateStudentAcademic {
+  status: string;
+  advisorId?: number;
+  programId: number;
+  curriculumId: number;
+  programType: string;
+  isScholarshipStudent: boolean;
+  hasFinancialBlock: boolean;
+}
+
+export function useUpdateStudentAcademic() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ studentId, dto }: { studentId: number; dto: UpdateStudentAcademic }) => {
+      await apiClient.put(`${API}/${studentId}/academic`, dto);
+    },
+    onSuccess: (_d, { studentId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'list'] });
+    },
+  });
+}

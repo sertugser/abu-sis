@@ -27,6 +27,14 @@ export interface LookupAdvisor {
   departmentName: string;
 }
 
+export interface LookupCurriculum {
+  id: number;
+  programId: number;
+  name: string;
+  version: string;
+  status: number | string;
+}
+
 /**
  * Fakülte lookup'ı — dropdown/filtre için hafif {id,name,code} listesi.
  * Backend `lookup.faculty` (her authenticated user'a açık, scope-filtreli) ucunu çağırır.
@@ -76,6 +84,20 @@ export function useAdminAdvisors() {
       const { data } = await apiClient.get<LookupAdvisor[]>('/admin/advisors');
       return data;
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAdminCurricula(programId?: number) {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'curricula', programId ?? null],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupCurriculum[]>('/admin/curricula', {
+        params: { programId },
+      });
+      return data;
+    },
+    enabled: programId != null,
     staleTime: 5 * 60 * 1000,
   });
 }
