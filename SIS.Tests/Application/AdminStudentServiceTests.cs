@@ -158,4 +158,33 @@ public class AdminStudentServiceTests
         var student = await context.Students.SingleAsync(x => x.Id == 20);
         student.AdvisorId.Should().Be(10);
     }
+
+    [Fact]
+    public async Task GetStudentByIdAsync_ReturnsUserId()
+    {
+        await using var context = CreateContext();
+        const int studentId = 20;
+        const int userId = 200;
+
+        context.Students.Add(new Student
+        {
+            Id = studentId,
+            UserId = userId,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.5m,
+            Sgpa = 2.5m,
+            CompletedSemesters = 2,
+        });
+        await context.SaveChangesAsync();
+
+        var config = new Mock<ISystemConfigProvider>();
+        var service = new AdminStudentService(context, CreateUserManagerMock().Object, config.Object);
+
+        var result = await service.GetStudentByIdAsync(studentId);
+
+        result.Should().NotBeNull();
+        result!.UserId.Should().Be(userId);
+    }
 }

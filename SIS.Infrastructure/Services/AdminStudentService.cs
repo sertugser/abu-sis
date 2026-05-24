@@ -140,6 +140,7 @@ public class AdminStudentService : IAdminStudentService
 
         return new AdminStudentDetailDto(
             student.Id,
+            student.UserId,
             student.StudentNumber,
             user?.FirstName ?? "",
             user?.LastName ?? "",

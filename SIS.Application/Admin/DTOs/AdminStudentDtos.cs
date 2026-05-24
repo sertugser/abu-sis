@@ -17,6 +17,7 @@ public record AdminStudentListItemDto(
 
 public record AdminStudentDetailDto(
     int Id,
+    int UserId,
     string StudentNumber,
     string FirstName,
     string LastName,

@@ -131,6 +131,7 @@ public class StudentManagementController : ControllerBase
         return Ok(new
         {
             result.Id,
+            result.UserId,
             result.StudentNumber,
             result.FirstName,
             result.LastName,
