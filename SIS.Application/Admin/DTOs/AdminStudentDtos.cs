@@ -45,7 +45,16 @@ public record AdminStudentFilterDto(
     decimal? MaxCgpa,
     int Page = 1,
     int PageSize = 25,
-    IReadOnlyList<int>? DepartmentIds = null
+    IReadOnlyList<int>? DepartmentIds = null,
+    int? AdvisorId = null,
+    bool? HasAdvisor = null,
+    int? CurriculumId = null,
+    int? ClassYear = null,
+    string? StudentNoFrom = null,
+    string? StudentNoTo = null,
+    DateTime? EnrollmentFrom = null,
+    DateTime? EnrollmentTo = null,
+    bool? HasFailingCourse = null
 );
 
 public record CreateStudentDto(

@@ -71,6 +71,51 @@ public class AdminStudentService : IAdminStudentService
         if (filter.MaxCgpa.HasValue)
             query = query.Where(s => s.Cgpa <= filter.MaxCgpa.Value);
 
+        if (filter.AdvisorId.HasValue)
+            query = query.Where(s => s.AdvisorId == filter.AdvisorId.Value);
+
+        if (filter.HasAdvisor.HasValue)
+            query = filter.HasAdvisor.Value
+                ? query.Where(s => s.AdvisorId != null)
+                : query.Where(s => s.AdvisorId == null);
+
+        if (filter.CurriculumId.HasValue)
+            query = query.Where(s => s.StudentPrograms.Any(sp =>
+                sp.IsActive && sp.CurriculumId == filter.CurriculumId.Value));
+
+        if (filter.ClassYear is int cy)
+        {
+            query = cy >= 4
+                ? query.Where(s => s.CompletedSemesters >= 6)
+                : query.Where(s => s.CompletedSemesters >= (cy - 1) * 2
+                                && s.CompletedSemesters <= cy * 2 - 1);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.StudentNoFrom))
+            query = query.Where(s => string.Compare(s.StudentNumber, filter.StudentNoFrom) >= 0);
+
+        if (!string.IsNullOrWhiteSpace(filter.StudentNoTo))
+            query = query.Where(s => string.Compare(s.StudentNumber, filter.StudentNoTo) <= 0);
+
+        if (filter.EnrollmentFrom.HasValue)
+            query = query.Where(s => s.StudentPrograms.Any(sp =>
+                sp.IsActive && sp.EnrollmentDate >= filter.EnrollmentFrom.Value));
+
+        if (filter.EnrollmentTo.HasValue)
+            query = query.Where(s => s.StudentPrograms.Any(sp =>
+                sp.IsActive && sp.EnrollmentDate <= filter.EnrollmentTo.Value));
+
+        // Ders Başarı Durumu: FF/NA notu olan kayıt = başarısız ders.
+        // (AcademicOperationsService.Students.cs satır 96-100 ile birebir aynı predicate.)
+        if (filter.HasFailingCourse.HasValue)
+        {
+            query = filter.HasFailingCourse.Value
+                ? query.Where(s => s.Registrations.Any(r =>
+                    r.Grade == GradeCode.FF || r.Grade == GradeCode.NA))
+                : query.Where(s => !s.Registrations.Any(r =>
+                    r.Grade == GradeCode.FF || r.Grade == GradeCode.NA));
+        }
+
         var totalCount = await query.CountAsync();
 
         var students = await query
@@ -85,6 +130,16 @@ public class AdminStudentService : IAdminStudentService
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id);
 
+        var advisorUserIds = students
+            .Where(s => s.Advisor != null)
+            .Select(s => s.Advisor!.UserId)
+            .Distinct()
+            .ToList();
+
+        var advisorUsers = await _context.Set<ApplicationUser>()
+            .Where(u => advisorUserIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id);
+
         var items = students.Select(s =>
         {
             users.TryGetValue(s.UserId, out var user);
@@ -92,7 +147,7 @@ public class AdminStudentService : IAdminStudentService
             var activeProgram = s.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
 
             var advisorUser = s.Advisor != null
-                ? _context.Set<ApplicationUser>().FirstOrDefault(u => u.Id == s.Advisor.UserId)
+                ? advisorUsers.GetValueOrDefault(s.Advisor.UserId)
                 : null;
 
             return new AdminStudentListItemDto(
