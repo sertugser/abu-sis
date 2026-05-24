@@ -454,41 +454,26 @@ public class StudentController : ControllerBase
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
 
-        var student = await _context.Students
-            .Include(s => s.StudentPrograms)
-                .ThenInclude(sp => sp.Program)
-                    .ThenInclude(p => p.Department)
-                        .ThenInclude(d => d.Faculty)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+        var studentId = await _context.Students
+            .Where(s => s.UserId == userId)
+            .Select(s => (int?)s.Id)
+            .FirstOrDefaultAsync();
 
-        if (student == null)
+        if (studentId == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
-
-        var user = await _context.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user == null)
-            return NotFound(new { error = "Kullanici bilgisi bulunamadi." });
-
-        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
-        if (activeProgram == null)
-            return NotFound(new { error = "Aktif program bulunamadi." });
 
         var transcriptEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptStudentApplicationEnabled", true);
         if (!transcriptEnabled)
             return BadRequest(new { error = "Sosyal transkript başvuru akışı sistem konfigürasyonunda kapalı." });
 
-        var transcriptAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-student-application");
+        var transcriptAccess = await ResolveStudentModuleAccessAsync(studentId.Value, "social-transcript-student-application");
         if (!transcriptAccess.IsOpen)
             return BadRequest(new { error = transcriptAccess.Message ?? "Sosyal transkript başvuru akışı şu anda kapalı." });
 
-        var transcript = await _transcriptService.GetTranscriptAsync(student.Id);
-        if (transcript == null)
-            return NotFound(new { error = "Transkript bilgisi bulunamadi." });
-
-        return Ok(transcript);
+        var transcript = await _transcriptService.GetTranscriptAsync(studentId.Value);
+        return transcript == null
+            ? NotFound(new { error = "Transkript bilgisi bulunamadi." })
+            : Ok(transcript);
     }
 
     private async Task<Dictionary<int, bool>> BuildComponentVisibilityMapAsync(int termId, IEnumerable<GradeComponent> components)
