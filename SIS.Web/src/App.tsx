@@ -52,6 +52,9 @@ import TermGpaPanel from './pages/student-hub/panels/TermGpaPanel';
 import AttendancePanel from './pages/student-hub/panels/AttendancePanel';
 import TranscriptPanel from './pages/student-hub/panels/TranscriptPanel';
 import CurriculumStatusPanel from './pages/student-hub/panels/CurriculumStatusPanel';
+import ContactInfoPanel from './pages/student-hub/panels/ContactInfoPanel';
+import GeneralInfoPanel from './pages/student-hub/panels/GeneralInfoPanel';
+import MilitaryInfoPanel from './pages/student-hub/panels/MilitaryInfoPanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -237,6 +240,9 @@ export default function App() {
                     <Route path="ogrenci-rehberi/:studentId" element={<StudentCardPage />}>
                       <Route index element={<OverviewPanel />} />
                       <Route path="akademik" element={<AcademicInfoPanel />} />
+                      <Route path="iletisim" element={<ContactInfoPanel />} />
+                      <Route path="genel" element={<GeneralInfoPanel />} />
+                      <Route path="askerlik" element={<MilitaryInfoPanel />} />
                       <Route path="ders-kaydi" element={<RegistrationsPanel />} />
                       <Route path="notlar" element={<GradesPanel />} />
                       <Route path="donem-ortalamalari" element={<TermGpaPanel />} />

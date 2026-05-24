@@ -9,8 +9,9 @@ export const CARD_NAV: CardNavGroup[] = [
   { title: 'Genel Bilgiler', items: [
     { segment: '', label: 'Kart Bilgileri', enabled: true },
     { segment: 'akademik', label: 'Akademik Bilgiler', enabled: true },
-    { segment: 'iletisim', label: 'İletişim Bilgileri', enabled: false },
-    { segment: 'genel', label: 'Genel Bilgiler', enabled: false },
+    { segment: 'iletisim', label: 'İletişim Bilgileri', enabled: true },
+    { segment: 'genel', label: 'Genel Bilgiler', enabled: true },
+    { segment: 'askerlik', label: 'Askerlik Bilgileri', enabled: true },
   ]},
   { title: 'Ders İşlemleri', items: [
     { segment: 'transkript', label: 'Transkript', enabled: true },

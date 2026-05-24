@@ -23,6 +23,70 @@ function asBackendError(error: unknown, fallbackMessage: string): Error {
   return new Error(message);
 }
 
+export interface StudentPersonalInfo {
+  studentId: number;
+  // Contact
+  mobilePhone: string | null;
+  phone: string | null;
+  secondaryEmail: string | null;
+  addressProvince: string | null;
+  addressDistrict: string | null;
+  addressLine: string | null;
+  postalCode: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelation: string | null;
+  // Demographic
+  birthDate: string | null;
+  birthPlace: string | null;
+  gender: string | null;
+  nationality: string | null;
+  bloodType: string | null;
+  maritalStatus: string | null;
+  passportNo: string | null;
+  // Military
+  militaryStatus: string | null;
+  militaryDeferralUntil: string | null;
+  militaryOffice: string | null;
+  // Photo
+  photoExtension: string | null;
+}
+
+/** Write model (no studentId; that comes from the route). */
+export type UpdateStudentPersonalInfo = Omit<StudentPersonalInfo, 'studentId'>;
+
+export function useStudentPersonalInfo(studentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'student-card', 'personal-info', studentId],
+    queryFn: async () =>
+      (await apiClient.get<StudentPersonalInfo>(`${BASE}/${studentId}/personal-info`)).data,
+    enabled: studentId != null,
+  });
+}
+
+export function useUpdateStudentPersonalInfo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      studentId,
+      dto,
+    }: {
+      studentId: number;
+      dto: UpdateStudentPersonalInfo;
+    }) => {
+      try {
+        await apiClient.put(`${BASE}/${studentId}/personal-info`, dto);
+      } catch (err) {
+        throw asBackendError(err, 'Kişisel bilgiler güncellenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'personal-info', studentId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+    },
+  });
+}
+
 export function useStudentCardRegistrations(studentId: number | null) {
   return useQuery({
     queryKey: ['admin', 'student-card', 'registrations', studentId],
