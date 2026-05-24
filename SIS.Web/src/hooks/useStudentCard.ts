@@ -194,6 +194,101 @@ export function useDeleteStudentPhoto() {
   });
 }
 
+export interface StudentDocumentStatus {
+  documentTypeId: number;
+  code: string;
+  name: string;
+  isRequired: boolean;
+  sortOrder: number;
+  uploaded: boolean;
+  documentId: number | null;
+  originalFileName: string | null;
+  uploadedAt: string | null;
+}
+
+export function useStudentDocuments(studentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'student-card', 'documents', studentId],
+    queryFn: async () =>
+      (await apiClient.get<StudentDocumentStatus[]>(`${BASE}/${studentId}/documents`)).data,
+    enabled: studentId != null,
+  });
+}
+
+function invalidateDocumentQueries(qc: ReturnType<typeof useQueryClient>, studentId: number) {
+  qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'documents', studentId] });
+  qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+}
+
+export function useUploadStudentDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      studentId,
+      documentTypeId,
+      file,
+    }: {
+      studentId: number;
+      documentTypeId: number;
+      file: File;
+    }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        // Pass Content-Type undefined so axios sets the multipart boundary itself
+        // (the client default is application/json, which would break the upload).
+        await apiClient.post(`${BASE}/${studentId}/documents/${documentTypeId}`, formData, {
+          headers: { 'Content-Type': undefined },
+        });
+      } catch (err) {
+        throw asBackendError(err, 'Belge yüklenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) => invalidateDocumentQueries(qc, studentId),
+  });
+}
+
+export function useDeleteStudentDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId, documentId }: { studentId: number; documentId: number }) => {
+      try {
+        await apiClient.delete(`${BASE}/${studentId}/documents/${documentId}`);
+      } catch (err) {
+        throw asBackendError(err, 'Belge silinemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) => invalidateDocumentQueries(qc, studentId),
+  });
+}
+
+/**
+ * Download a student document. The GET endpoint is auth-guarded, so the file
+ * cannot be linked via a raw `<a href>` (no bearer token). Fetch the bytes as a
+ * blob through apiClient, wrap them in an object URL, trigger a download via a
+ * temporary anchor carrying the original file name, then revoke the URL.
+ */
+export async function downloadStudentDocument(
+  studentId: number,
+  documentId: number,
+  fileName?: string | null,
+): Promise<void> {
+  const { data } = await apiClient.get<Blob>(`${BASE}/${studentId}/documents/${documentId}`, {
+    responseType: 'blob',
+  });
+  const objectUrl = URL.createObjectURL(data);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = fileName ?? `belge-${documentId}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function useStudentCardRegistrations(studentId: number | null) {
   return useQuery({
     queryKey: ['admin', 'student-card', 'registrations', studentId],

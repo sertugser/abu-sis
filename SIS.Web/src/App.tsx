@@ -55,6 +55,7 @@ import CurriculumStatusPanel from './pages/student-hub/panels/CurriculumStatusPa
 import ContactInfoPanel from './pages/student-hub/panels/ContactInfoPanel';
 import GeneralInfoPanel from './pages/student-hub/panels/GeneralInfoPanel';
 import MilitaryInfoPanel from './pages/student-hub/panels/MilitaryInfoPanel';
+import DocumentsPanel from './pages/student-hub/panels/DocumentsPanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -243,6 +244,7 @@ export default function App() {
                       <Route path="iletisim" element={<ContactInfoPanel />} />
                       <Route path="genel" element={<GeneralInfoPanel />} />
                       <Route path="askerlik" element={<MilitaryInfoPanel />} />
+                      <Route path="belgeler" element={<DocumentsPanel />} />
                       <Route path="ders-kaydi" element={<RegistrationsPanel />} />
                       <Route path="notlar" element={<GradesPanel />} />
                       <Route path="donem-ortalamalari" element={<TermGpaPanel />} />
