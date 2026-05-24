@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SIS.API.Authorization;
 using SIS.API.Filters;
@@ -33,12 +34,13 @@ public class StudentManagementController : ControllerBase
     private readonly IAcademicScopeGuard _scopeGuard;
     private readonly IStudentPersonalInfoService _personalInfoService;
     private readonly IStudentPhotoStorage _photoStorage;
+    private readonly IConfiguration _configuration;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig)
-        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage())
+        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new ConfigurationBuilder().Build())
     {
     }
 
@@ -46,7 +48,7 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         IAcademicScopeGuard scopeGuard)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage())
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new ConfigurationBuilder().Build())
     {
     }
 
@@ -57,7 +59,7 @@ public class StudentManagementController : ControllerBase
         IAcademicScopeGuard scopeGuard,
         IStudentPersonalInfoService personalInfoService,
         IStudentPhotoStorage photoStorage)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage, new ConfigurationBuilder().Build())
     {
     }
 
@@ -70,7 +72,8 @@ public class StudentManagementController : ControllerBase
         ISystemConfigProvider systemConfig,
         IAcademicScopeGuard scopeGuard,
         IStudentPersonalInfoService personalInfoService,
-        IStudentPhotoStorage photoStorage)
+        IStudentPhotoStorage photoStorage,
+        IConfiguration configuration)
     {
         _service = service;
         _context = context;
@@ -78,6 +81,7 @@ public class StudentManagementController : ControllerBase
         _scopeGuard = scopeGuard;
         _personalInfoService = personalInfoService;
         _photoStorage = photoStorage;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -341,6 +345,12 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
 
         var maxBytes = ResolveMaxPhotoBytes();
 
+        // Ucuz erken red: client'ın bildirdiği boyut zaten sınırı aşıyorsa buffer'lamaya gerek yok.
+        // Bu yalnızca bir optimizasyon — asıl/yetkili kontrol aşağıda buffered.Length üzerinden yapılır
+        // (forged düşük Content-Length bypass'ını engellemek için).
+        if (file != null && file.Length > maxBytes)
+            return BadRequest(new { message = $"Dosya boyutu üst sınırı ({maxBytes} byte) aşıyor." });
+
         // Header'ı okumak için akışı seekable bir buffer'a al.
         await using var buffered = new MemoryStream();
         if (file is not null && file.Length > 0)
@@ -354,9 +364,11 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         var headerLen = await ReadHeaderAsync(buffered, header, ct);
         buffered.Position = 0;
 
+        // Yetkili boyut kontrolü: client-controlled file.Length değil, gerçekte buffer'a
+        // kopyalanan byte sayısı (buffered.Length) kullanılır.
         var validationError = StudentPhotoValidator.Validate(
             hasFile: file is not null,
-            sizeBytes: file?.Length ?? 0,
+            sizeBytes: buffered.Length,
             maxBytes: maxBytes,
             contentType: file?.ContentType,
             header: header.AsSpan(0, headerLen));
@@ -393,6 +405,9 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         if (photo is null)
             return NotFound(new { message = "Fotoğraf bulunamadı." });
 
+        // Görsel asla indirme/çalıştırılabilir olarak ele alınmasın diye explicit inline.
+        // (X-Content-Type-Options: nosniff zaten SecurityHeadersMiddleware'de global olarak ekleniyor.)
+        Response.Headers["Content-Disposition"] = "inline";
         return File(photo.Value.Stream, photo.Value.ContentType);
     }
 
@@ -472,10 +487,7 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
 
     private long ResolveMaxPhotoBytes()
     {
-        var configured = HttpContext?.RequestServices?
-            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration;
-        var raw = configured?["StudentPhotos:MaxBytes"];
+        var raw = _configuration["StudentPhotos:MaxBytes"];
         return long.TryParse(raw, out var parsed) && parsed > 0 ? parsed : DefaultMaxPhotoBytes;
     }
 
