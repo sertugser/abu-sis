@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import type { StudentRegistrationDto, CourseHistoryTermDto, StudentAttendanceStatusDto } from '../types/registration';
@@ -89,11 +89,19 @@ export function useUpdateStudentPersonalInfo() {
 }
 
 /**
- * Fetch the student's profile photo as a blob and expose it as an object URL.
+ * Fetch the student's profile photo as a Blob and expose it as a per-instance
+ * object URL.
+ *
  * The `<img src>` must NOT point at the raw API URL because that request would
  * not carry the bearer token; we fetch via apiClient (which injects the token)
- * and wrap the blob in an object URL instead. The previous object URL is revoked
- * whenever the query produces a new one and on unmount, to avoid leaks.
+ * and wrap the blob in an object URL instead.
+ *
+ * The shared TanStack Query cache holds the *Blob*, not the URL string. Each
+ * hook instance derives its OWN object URL from that blob and owns that URL's
+ * lifecycle. This prevents the cross-subscriber revocation race: when two
+ * components share the photo key (e.g. the always-mounted header + the panel on
+ * the `genel` route), one unmounting can no longer revoke a URL the other is
+ * still rendering — each instance only ever revokes the URL it created.
  */
 export function useStudentPhoto(studentId: number | null, hasPhoto: boolean) {
   const query = useQuery({
@@ -103,7 +111,7 @@ export function useStudentPhoto(studentId: number | null, hasPhoto: boolean) {
         const { data } = await apiClient.get<Blob>(`${BASE}/${studentId}/photo`, {
           responseType: 'blob',
         });
-        return URL.createObjectURL(data);
+        return data;
       } catch (err) {
         // No photo on the server (404) → treat as "no photo" rather than an error state.
         if (
@@ -119,18 +127,29 @@ export function useStudentPhoto(studentId: number | null, hasPhoto: boolean) {
     },
     enabled: studentId != null && hasPhoto,
     staleTime: Infinity,
-    gcTime: 0,
   });
 
-  const objectUrl = query.data ?? null;
+  const blob = query.data ?? null;
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
-  // Revoke the object URL when it changes (new fetch) or on unmount.
+  // Derive a per-instance object URL from the cached blob. When the blob
+  // changes, revoke the previous url and create a fresh one; on unmount revoke
+  // the current one. Only this instance's url is ever revoked here.
+  // setState-in-effect is intentional: URL.createObjectURL is a platform-API
+  // side effect whose result must be stored to render and revoked on cleanup.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!objectUrl) return;
+    if (!blob) {
+      setObjectUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    setObjectUrl(url);
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      URL.revokeObjectURL(url);
     };
-  }, [objectUrl]);
+  }, [blob]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return objectUrl;
 }

@@ -9,6 +9,7 @@ import {
   type UpdateStudentPersonalInfo,
 } from '../../../hooks/useStudentCard';
 import { Button } from '@/components/ui/button';
+import { toDateInput, toNullable } from '../panelUtils';
 
 const FIELD_LABEL = 'text-xs text-muted-foreground font-medium uppercase tracking-wide';
 const INPUT_CLASS =
@@ -34,22 +35,12 @@ const EMPTY: MilitaryFields = {
   militaryOffice: '',
 };
 
-/** Trim an ISO datetime string down to a yyyy-MM-dd value for a date input. */
-function toDateInput(value: string | null): string {
-  return value ? value.slice(0, 10) : '';
-}
-
 function seedFrom(data: StudentPersonalInfo): MilitaryFields {
   return {
     militaryStatus: data.militaryStatus ?? 'NotApplicable',
     militaryDeferralUntil: toDateInput(data.militaryDeferralUntil),
     militaryOffice: data.militaryOffice ?? '',
   };
-}
-
-function toNullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
 }
 
 export default function MilitaryInfoPanel() {

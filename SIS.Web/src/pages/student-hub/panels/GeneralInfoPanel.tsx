@@ -12,17 +12,19 @@ import {
   type UpdateStudentPersonalInfo,
 } from '../../../hooks/useStudentCard';
 import { Button } from '@/components/ui/button';
+import { toDateInput, toNullable } from '../panelUtils';
 
 const MAX_PHOTO_BYTES = 2_000_000;
 const ACCEPTED_PHOTO_TYPES = ['image/png', 'image/jpeg'];
 
 interface PhotoSectionProps {
   studentId: number;
+  studentName: string;
   hasPhoto: boolean;
   canEdit: boolean;
 }
 
-function PhotoSection({ studentId, hasPhoto, canEdit }: PhotoSectionProps) {
+function PhotoSection({ studentId, studentName, hasPhoto, canEdit }: PhotoSectionProps) {
   const photoUrl = useStudentPhoto(studentId, hasPhoto);
   const upload = useUploadStudentPhoto();
   const remove = useDeleteStudentPhoto();
@@ -70,7 +72,7 @@ function PhotoSection({ studentId, hasPhoto, canEdit }: PhotoSectionProps) {
       <p className={FIELD_LABEL}>Fotoğraf</p>
       <div className="flex items-center gap-4">
         {photoUrl ? (
-          <img src={photoUrl} alt="" className="h-20 w-20 rounded-full object-cover" />
+          <img src={photoUrl} alt={studentName} className="h-20 w-20 rounded-full object-cover" />
         ) : (
           <div
             aria-hidden="true"
@@ -146,11 +148,6 @@ const EMPTY: GeneralFields = {
   passportNo: '',
 };
 
-/** Trim an ISO datetime string down to a yyyy-MM-dd value for a date input. */
-function toDateInput(value: string | null): string {
-  return value ? value.slice(0, 10) : '';
-}
-
 function seedFrom(data: StudentPersonalInfo): GeneralFields {
   return {
     birthDate: toDateInput(data.birthDate),
@@ -161,11 +158,6 @@ function seedFrom(data: StudentPersonalInfo): GeneralFields {
     maritalStatus: data.maritalStatus ?? 'Unspecified',
     passportNo: data.passportNo ?? '',
   };
-}
-
-function toNullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
 }
 
 export default function GeneralInfoPanel() {
@@ -225,6 +217,7 @@ export default function GeneralInfoPanel() {
     <div className="max-w-2xl space-y-6">
       <PhotoSection
         studentId={student.id}
+        studentName={`${student.firstName} ${student.lastName}`}
         hasPhoto={loaded?.photoExtension != null}
         canEdit={canEdit}
       />

@@ -9,6 +9,7 @@ import {
   type UpdateStudentPersonalInfo,
 } from '../../../hooks/useStudentCard';
 import { Button } from '@/components/ui/button';
+import { toNullable } from '../panelUtils';
 
 const FIELD_LABEL = 'text-xs text-muted-foreground font-medium uppercase tracking-wide';
 const INPUT_CLASS =
@@ -53,11 +54,6 @@ function seedFrom(data: StudentPersonalInfo): ContactFields {
     emergencyContactPhone: data.emergencyContactPhone ?? '',
     emergencyContactRelation: data.emergencyContactRelation ?? '',
   };
-}
-
-function toNullable(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
 }
 
 export default function ContactInfoPanel() {
