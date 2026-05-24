@@ -1,12 +1,6 @@
 import { useOutletContext } from 'react-router-dom';
-import type { AdminStudentDetail } from '../../../hooks/useAdminStudents';
-
-function cgpaColor(cgpa: number | null) {
-  if (cgpa === null) return 'text-muted-foreground';
-  if (cgpa >= 3.0) return 'text-green-600';
-  if (cgpa >= 2.0) return 'text-yellow-600';
-  return 'text-red-600';
-}
+import { type StudentCardOutletContext } from '../StudentCardPage';
+import { cgpaColor } from '../utils';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -18,7 +12,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function OverviewPanel() {
-  const { student } = useOutletContext<{ student: AdminStudentDetail }>();
+  const context = useOutletContext<StudentCardOutletContext | null>();
+  if (!context) return null;
+  const { student } = context;
   const transcriptClosed = student.transcriptAccessible === false;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-2xl">

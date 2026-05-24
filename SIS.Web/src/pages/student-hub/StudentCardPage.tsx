@@ -1,9 +1,11 @@
 import { useParams, useNavigate, Outlet } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAdminStudent } from '../../hooks/useAdminStudents';
+import { useAdminStudent, type AdminStudentDetail } from '../../hooks/useAdminStudents';
 import CardSidebar from './components/CardSidebar';
 import StudentCardHeader from './components/StudentCardHeader';
+
+export type StudentCardOutletContext = { student: AdminStudentDetail };
 
 export default function StudentCardPage() {
   const { studentId } = useParams();
@@ -23,7 +25,7 @@ export default function StudentCardPage() {
         <CardSidebar />
         <div className="flex-1 flex flex-col">
           <StudentCardHeader student={student} />
-          <div className="flex-1 p-6"><Outlet context={{ student }} /></div>
+          <div className="flex-1 p-6"><Outlet context={{ student } satisfies StudentCardOutletContext} /></div>
         </div>
       </div>
     </div>

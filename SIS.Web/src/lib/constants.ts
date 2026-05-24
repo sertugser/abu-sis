@@ -278,6 +278,15 @@ export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Graduated: 'Mezun',
 };
 
+export const STUDENT_STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'> = {
+  Active: 'success',
+  Passive: 'secondary',
+  Frozen: 'warning',
+  Suspended: 'destructive',
+  Dismissed: 'destructive',
+  Graduated: 'default',
+};
+
 export const COURSE_LANGUAGE_LABELS: Record<string, string> = {
   Turkish: 'Türkçe',
   English: 'İngilizce',

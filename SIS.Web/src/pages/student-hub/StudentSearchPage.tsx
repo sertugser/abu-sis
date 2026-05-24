@@ -6,24 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAdminStudents } from '../../hooks/useAdminStudents';
 import { useAdminDepartments, useAdminPrograms } from '../../hooks/useAdminLookup';
-import { STUDENT_STATUS_LABELS } from '../../lib/constants';
+import { STUDENT_STATUS_LABELS, STUDENT_STATUS_VARIANT } from '../../lib/constants';
+import { cgpaColor } from './utils';
 import CreateStudentDialog from './CreateStudentDialog';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'> = {
-  Active: 'success',
-  Passive: 'secondary',
-  Frozen: 'warning',
-  Suspended: 'destructive',
-  Dismissed: 'destructive',
-  Graduated: 'default',
-};
-
-function cgpaColor(cgpa: number | null) {
-  if (cgpa === null) return 'text-muted-foreground';
-  if (cgpa >= 3.0) return 'text-green-600';
-  if (cgpa >= 2.0) return 'text-yellow-600';
-  return 'text-red-600';
-}
 
 function parseHasAdvisor(value: string): boolean | undefined {
   if (value === 'true') return true;
@@ -188,7 +173,7 @@ export default function StudentSearchPage() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">{student.advisorName ?? '—'}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[student.status] ?? 'secondary'}>
+                    <Badge variant={STUDENT_STATUS_VARIANT[student.status] ?? 'secondary'}>
                       {STUDENT_STATUS_LABELS[student.status] ?? student.status}
                     </Badge>
                   </td>
