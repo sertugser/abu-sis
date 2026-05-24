@@ -32,7 +32,7 @@ export interface LookupCurriculum {
   programId: number;
   name: string;
   version: string;
-  status: number | string;
+  status: 'Draft' | 'Published' | 'Archived';
 }
 
 /**
@@ -93,7 +93,7 @@ export function useAdminCurricula(programId?: number) {
     queryKey: ['admin', 'lookup', 'curricula', programId ?? null],
     queryFn: async () => {
       const { data } = await apiClient.get<LookupCurriculum[]>('/admin/curricula', {
-        params: { programId },
+        params: programId != null ? { programId } : undefined,
       });
       return data;
     },
