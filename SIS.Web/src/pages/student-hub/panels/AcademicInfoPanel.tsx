@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { type StudentCardOutletContext } from '../StudentCardPage';
 import { usePermissions } from '../../../context/PermissionContext';
@@ -23,6 +23,8 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+
+type ProgramType = 'Main' | 'DoubleMajor' | 'Minor';
 
 const PROGRAM_TYPE_LABELS: Record<string, string> = {
   Main: 'Ana Dal',
@@ -52,7 +54,9 @@ export default function AcademicInfoPanel() {
   const [curriculumId, setCurriculumId] = useState<number | undefined>(
     context?.student.curriculumId ?? undefined,
   );
-  const [programType, setProgramType] = useState(context?.student.programType || 'Main');
+  const [programType, setProgramType] = useState<ProgramType>(
+    (context?.student.programType as ProgramType) || 'Main',
+  );
   const [isScholarshipStudent, setIsScholarshipStudent] = useState(
     context?.student.isScholarshipStudent ?? false,
   );
@@ -68,12 +72,36 @@ export default function AcademicInfoPanel() {
   const { data: curricula = [] } = useAdminCurricula(programId);
   const { data: advisors = [] } = useAdminAdvisors();
 
+  // Re-seed all form fields when navigating between student cards (panel stays mounted).
+  // Intentional id-keyed reseed: a single synchronous pass keyed on student.id, not a render loop.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!context) return;
+    const { student } = context;
+    setStatus(student.status);
+    setAdvisorId(student.advisorId);
+    setProgramId(student.programId ?? undefined);
+    setCurriculumId(student.curriculumId ?? undefined);
+    setProgramType((student.programType as ProgramType) || 'Main');
+    setIsScholarshipStudent(student.isScholarshipStudent);
+    setHasFinancialBlock(student.hasFinancialBlock);
+    setError(null);
+    setSuccess(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context?.student.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   if (!context) return null;
   const { student } = context;
 
   const resetMessages = () => {
     setError(null);
     setSuccess(null);
+  };
+
+  // Clear the lingering "güncellendi" message once the user starts editing again.
+  const markDirty = () => {
+    if (success) setSuccess(null);
   };
 
   const performUpdate = async () => {
@@ -114,6 +142,7 @@ export default function AcademicInfoPanel() {
   };
 
   const handleProgramChange = (value: string) => {
+    markDirty();
     const next = value ? Number(value) : undefined;
     setProgramId(next);
     setCurriculumId(undefined); // stale curriculum guard
@@ -123,12 +152,18 @@ export default function AcademicInfoPanel() {
     <div className="max-w-2xl space-y-6">
       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
         <div>
-          <label className={FIELD_LABEL}>Durum</label>
+          <label className={FIELD_LABEL} htmlFor="field-status">
+            Durum
+          </label>
           <select
+            id="field-status"
             className={SELECT_CLASS}
             value={status}
             disabled={!canEdit}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              markDirty();
+              setStatus(e.target.value);
+            }}
           >
             {Object.entries(STUDENT_STATUS_LABELS).map(([code, label]) => (
               <option key={code} value={code}>
@@ -139,12 +174,18 @@ export default function AcademicInfoPanel() {
         </div>
 
         <div>
-          <label className={FIELD_LABEL}>Program Tipi</label>
+          <label className={FIELD_LABEL} htmlFor="field-program-type">
+            Program Tipi
+          </label>
           <select
+            id="field-program-type"
             className={SELECT_CLASS}
             value={programType}
             disabled={!canEdit}
-            onChange={(e) => setProgramType(e.target.value)}
+            onChange={(e) => {
+              markDirty();
+              setProgramType(e.target.value as ProgramType);
+            }}
           >
             {Object.entries(PROGRAM_TYPE_LABELS).map(([code, label]) => (
               <option key={code} value={code}>
@@ -155,8 +196,11 @@ export default function AcademicInfoPanel() {
         </div>
 
         <div>
-          <label className={FIELD_LABEL}>Program</label>
+          <label className={FIELD_LABEL} htmlFor="field-program">
+            Program
+          </label>
           <select
+            id="field-program"
             className={SELECT_CLASS}
             value={programId ?? ''}
             disabled={!canEdit}
@@ -172,12 +216,18 @@ export default function AcademicInfoPanel() {
         </div>
 
         <div>
-          <label className={FIELD_LABEL}>Müfredat</label>
+          <label className={FIELD_LABEL} htmlFor="field-curriculum">
+            Müfredat
+          </label>
           <select
+            id="field-curriculum"
             className={SELECT_CLASS}
             value={curriculumId ?? ''}
             disabled={!canEdit || programId == null}
-            onChange={(e) => setCurriculumId(e.target.value ? Number(e.target.value) : undefined)}
+            onChange={(e) => {
+              markDirty();
+              setCurriculumId(e.target.value ? Number(e.target.value) : undefined);
+            }}
           >
             <option value="">Seçiniz</option>
             {curricula.map((c) => (
@@ -189,12 +239,18 @@ export default function AcademicInfoPanel() {
         </div>
 
         <div className="col-span-2">
-          <label className={FIELD_LABEL}>Danışman</label>
+          <label className={FIELD_LABEL} htmlFor="field-advisor">
+            Danışman
+          </label>
           <select
+            id="field-advisor"
             className={SELECT_CLASS}
             value={advisorId ?? ''}
             disabled={!canEdit}
-            onChange={(e) => setAdvisorId(e.target.value ? Number(e.target.value) : undefined)}
+            onChange={(e) => {
+              markDirty();
+              setAdvisorId(e.target.value ? Number(e.target.value) : undefined);
+            }}
           >
             <option value="">Danışman yok</option>
             {advisors.map((a) => (
@@ -205,24 +261,32 @@ export default function AcademicInfoPanel() {
           </select>
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm" htmlFor="field-scholarship">
           <input
+            id="field-scholarship"
             type="checkbox"
             className="h-4 w-4 rounded border-input"
             checked={isScholarshipStudent}
             disabled={!canEdit}
-            onChange={(e) => setIsScholarshipStudent(e.target.checked)}
+            onChange={(e) => {
+              markDirty();
+              setIsScholarshipStudent(e.target.checked);
+            }}
           />
           Burslu
         </label>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm" htmlFor="field-financial-block">
           <input
+            id="field-financial-block"
             type="checkbox"
             className="h-4 w-4 rounded border-input"
             checked={hasFinancialBlock}
             disabled={!canEdit}
-            onChange={(e) => setHasFinancialBlock(e.target.checked)}
+            onChange={(e) => {
+              markDirty();
+              setHasFinancialBlock(e.target.checked);
+            }}
           />
           Finansal Blok
         </label>
