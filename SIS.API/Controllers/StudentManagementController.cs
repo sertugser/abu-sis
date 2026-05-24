@@ -210,6 +210,32 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
     }
 }
 
+    [HttpPut("{id:int}/academic")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-academic")]
+    public async Task<IActionResult> UpdateAcademic(int id, [FromBody] UpdateStudentAcademicDto dto)
+    {
+        try
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+
+            var currentDeptId = await GetStudentMainDepartmentIdAsync(id);
+            if (currentDeptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, currentDeptId.Value)) return Forbid();
+
+            var targetDeptId = await _context.AcademicPrograms
+                .Where(p => p.Id == dto.ProgramId)
+                .Select(p => (int?)p.DepartmentId)
+                .FirstOrDefaultAsync();
+            if (targetDeptId == null) return NotFound(new { message = $"Program bulunamadı: {dto.ProgramId}" });
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, targetDeptId.Value)) return Forbid();
+
+            await _service.UpdateAcademicAsync(id, dto);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
     private bool TryGetUserId(out int userId)
     {
         userId = 0;

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using SIS.API.Authorization;
 using SIS.API.Controllers;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
@@ -47,6 +48,72 @@ public class StudentManagementControllerTests
         json.Should().Contain("\"TranscriptAccessible\":false");
         json.Should().Contain("\"Cgpa\":null");
         json.Should().Contain("\"CompletedSemesters\":null");
+    }
+
+    [Fact]
+    public async Task UpdateAcademic_ReturnsForbid_WhenCallerCannotAccessStudentDepartment()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var serviceMock = new Mock<IAdminStudentService>();
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreateControllerWithScopeGuard(
+            context, serviceMock.Object, scopeGuardMock.Object, userId: 42, "DepartmentManager");
+
+        var dto = new UpdateStudentAcademicDto(
+            Status: "Active",
+            AdvisorId: null,
+            ProgramId: 10,
+            CurriculumId: 1,
+            ProgramType: "Main",
+            IsScholarshipStudent: false,
+            HasFinancialBlock: false);
+
+        var result = await controller.UpdateAcademic(5, dto);
+
+        result.Should().BeOfType<ForbidResult>();
+        serviceMock.Verify(
+            s => s.UpdateAcademicAsync(It.IsAny<int>(), It.IsAny<UpdateStudentAcademicDto>()),
+            Times.Never);
+    }
+
+    private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
+    {
+        context.Faculties.Add(new Faculty
+        {
+            Id = 1,
+            Code = "F1",
+            Name = "Mühendislik"
+        });
+        context.Departments.Add(new Department
+        {
+            Id = departmentId,
+            FacultyId = 1,
+            Code = "YZM",
+            Name = "Yazılım Mühendisliği"
+        });
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = programId,
+            DepartmentId = departmentId,
+            Code = "YZM-LIS",
+            Name = "Yazılım Mühendisliği Lisans"
+        });
+        context.Set<StudentProgram>().Add(new StudentProgram
+        {
+            StudentId = studentId,
+            ProgramId = programId,
+            CurriculumId = 1,
+            Type = SIS.Domain.Enums.StudentProgramType.Main,
+            IsActive = true
+        });
+        context.SaveChanges();
     }
 
     private static AppDbContext CreateContext()
@@ -92,6 +159,24 @@ public class StudentManagementControllerTests
         params string[] roles)
     {
         var controller = new StudentManagementController(service, context, config);
+        AttachUser(controller, userId, roles);
+        return controller;
+    }
+
+    private static StudentManagementController CreateControllerWithScopeGuard(
+        AppDbContext context,
+        IAdminStudentService service,
+        IAcademicScopeGuard scopeGuard,
+        int userId,
+        params string[] roles)
+    {
+        var controller = new StudentManagementController(service, context, scopeGuard);
+        AttachUser(controller, userId, roles);
+        return controller;
+    }
+
+    private static void AttachUser(StudentManagementController controller, int userId, string[] roles)
+    {
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -104,6 +189,5 @@ public class StudentManagementControllerTests
                     "TestAuth"))
             }
         };
-        return controller;
     }
 }
