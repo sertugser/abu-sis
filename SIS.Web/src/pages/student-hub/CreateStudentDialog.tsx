@@ -48,6 +48,7 @@ export default function CreateStudentDialog({
   const createStudent = useCreateStudent();
 
   async function handleCreate() {
+    setFormError('');
     if (!form.firstName.trim() || !form.lastName.trim()) {
       setFormError('Ad ve soyad zorunludur.');
       return;

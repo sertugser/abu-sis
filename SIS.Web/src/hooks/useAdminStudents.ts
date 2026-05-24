@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { QUERY_KEYS } from '../lib/constants';
 import apiClient from '../api/axios';
 import type { PagedResult } from './useAdminUsers';
 
@@ -65,17 +64,7 @@ export interface CreateStudentDto {
 
 export function useAdminStudents(filter: AdminStudentFilter) {
   return useQuery({
-    queryKey: QUERY_KEYS.adminStudents(
-      filter.search,
-      filter.programId,
-      filter.departmentId,
-      filter.status,
-      filter.page,
-      filter.advisorId,
-      filter.hasAdvisor,
-      filter.curriculumId,
-      filter.classYear
-    ),
+    queryKey: ['admin', 'students', filter],
     queryFn: async () => {
       const { data } = await apiClient.get<PagedResult<AdminStudentListItem>>(API, {
         params: filter,

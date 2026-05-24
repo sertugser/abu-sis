@@ -161,6 +161,9 @@ export default function StudentSearchPage() {
                 <tr
                   key={student.id}
                   onClick={() => navigate(`/ogrenci-rehberi/${student.id}`)}
+                  onKeyDown={e => { if (e.key === 'Enter') navigate(`/ogrenci-rehberi/${student.id}`); }}
+                  tabIndex={0}
+                  role="button"
                   className="hover:bg-muted/20 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3 font-mono text-xs">{student.studentNumber}</td>
