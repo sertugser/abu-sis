@@ -21,6 +21,7 @@ public class Student
     public Instructor? Advisor { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public StudentPersonalInfo? PersonalInfo { get; set; }
     public ICollection<StudentProgram> StudentPrograms { get; set; } = new List<StudentProgram>();
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
 }

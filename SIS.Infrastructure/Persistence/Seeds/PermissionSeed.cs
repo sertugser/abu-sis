@@ -284,6 +284,7 @@ public static class PermissionSeed
         ("menu.ogrenci-rehberi.view",                    PermissionCategory.Menu, "Öğrenci listesi/detay görüntüleme"),
         ("menu.ogrenci-rehberi.create",                  PermissionCategory.Menu, "Yeni öğrenci oluşturma"),
         ("menu.ogrenci-rehberi.edit-academic",           PermissionCategory.Menu, "Öğrenci akademik bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.edit-personal",           PermissionCategory.Menu, "Öğrenci kişisel bilgisi düzenleme"),
 
         // Sidebar placeholder sayfaları (Faz 4 — backend stub)
         ("menu.ogrenci-no-degistirme.view",              PermissionCategory.Menu, "Öğrenci no değiştirme sayfası"),

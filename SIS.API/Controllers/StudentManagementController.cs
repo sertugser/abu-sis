@@ -9,6 +9,7 @@ using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.API.Controllers;
 
@@ -21,12 +22,13 @@ public class StudentManagementController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _systemConfig;
     private readonly IAcademicScopeGuard _scopeGuard;
+    private readonly IStudentPersonalInfoService _personalInfoService;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig)
-        : this(service, context, systemConfig, new AcademicScopeGuard(context))
+        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context))
     {
     }
 
@@ -34,7 +36,7 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         IAcademicScopeGuard scopeGuard)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context))
     {
     }
 
@@ -45,12 +47,14 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig,
-        IAcademicScopeGuard scopeGuard)
+        IAcademicScopeGuard scopeGuard,
+        IStudentPersonalInfoService personalInfoService)
     {
         _service = service;
         _context = context;
         _systemConfig = systemConfig;
         _scopeGuard = scopeGuard;
+        _personalInfoService = personalInfoService;
     }
 
     [HttpGet]
@@ -247,6 +251,41 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
             if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
             if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
             await _service.ChangeStudentNumberAsync(id, dto.NewStudentNumber);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpGet("{id:int}/personal-info")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    public async Task<IActionResult> GetPersonalInfo(int id)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var deptId = await GetStudentMainDepartmentIdAsync(id);
+        if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+
+        var result = await _personalInfoService.GetAsync(id);
+        if (result == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        return Ok(result);
+    }
+
+    [HttpPut("{id:int}/personal-info")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-personal")]
+    public async Task<IActionResult> UpdatePersonalInfo(int id, [FromBody] UpdateStudentPersonalInfoDto dto)
+    {
+        try
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+
+            var deptId = await GetStudentMainDepartmentIdAsync(id);
+            if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value)) return Forbid();
+
+            await _personalInfoService.UpsertAsync(id, dto);
             return NoContent();
         }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }

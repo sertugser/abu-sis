@@ -107,6 +107,36 @@ public class StudentManagementControllerTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task GetPersonalInfo_ReturnsForbid_WhenCallerCannotAccessDepartment()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var serviceMock = new Mock<IAdminStudentService>();
+        var personalInfoMock = new Mock<IStudentPersonalInfoService>();
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = new StudentManagementController(
+            serviceMock.Object,
+            context,
+            new SIS.Application.Common.Services.NullSystemConfigProvider(),
+            scopeGuardMock.Object,
+            personalInfoMock.Object);
+        AttachUser(controller, userId: 42, new[] { "DepartmentManager" });
+
+        var result = await controller.GetPersonalInfo(5);
+
+        result.Should().BeOfType<ForbidResult>();
+        personalInfoMock.Verify(
+            s => s.GetAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
     {
         context.Faculties.Add(new Faculty

@@ -3084,6 +3084,110 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("StudentGrades");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPersonalInfo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AddressDistrict")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AddressLine")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("AddressProvince")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("BirthDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BirthPlace")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("BloodType")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmergencyContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("EmergencyContactRelation")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("Gender")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaritalStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("MilitaryDeferralUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MilitaryOffice")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("MilitaryStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobilePhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Nationality")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("PassportNo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PhotoExtension")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("SecondaryEmail")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId")
+                        .IsUnique();
+
+                    b.ToTable("StudentPersonalInfos");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
                 {
                     b.Property<int>("StudentId")
@@ -4978,6 +5082,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("GradeComponent");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPersonalInfo", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithOne("PersonalInfo")
+                        .HasForeignKey("SIS.Domain.Entities.StudentPersonalInfo", "StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Curriculum", "Curriculum")
@@ -5307,6 +5420,8 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
                 {
+                    b.Navigation("PersonalInfo");
+
                     b.Navigation("Registrations");
 
                     b.Navigation("StudentPrograms");

@@ -157,7 +157,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AdministrativeStaff — 106 permission (18 view + 88 action)
+            // AdministrativeStaff — 107 permission (18 view + 89 action)
             // ═══════════════════════════════════════════════════════════════════════════
             ["AdministrativeStaff"] = new[]
             {
@@ -267,6 +267,7 @@ public static class RolePermissionSeed
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
                 "menu.ogrenci-rehberi.edit-academic", // edit-academic: şimdilik yalnızca AdministrativeStaff — akademik-düzenleme planında Dean/DepartmentManager kapsamı tekrar değerlendirilecek
+                "menu.ogrenci-rehberi.edit-personal",
                 "menu.ogrenci-no-degistirme.change",
 
                 // ── Sınıf Atlatma (öğrenci kartı paneli) ──

@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
 
     // DbSets
     public DbSet<Student> Students => Set<Student>();
+    public DbSet<StudentPersonalInfo> StudentPersonalInfos => Set<StudentPersonalInfo>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -135,6 +136,41 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(s => s.AdvisorId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── StudentPersonalInfo (1-1 Student) ────────────────────
+        builder.Entity<StudentPersonalInfo>(e =>
+        {
+            e.HasOne<Student>()
+             .WithOne(s => s.PersonalInfo)
+             .HasForeignKey<StudentPersonalInfo>(p => p.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(p => p.StudentId).IsUnique();
+
+            // Contact
+            e.Property(p => p.MobilePhone).HasMaxLength(40);
+            e.Property(p => p.Phone).HasMaxLength(40);
+            e.Property(p => p.SecondaryEmail).HasMaxLength(120);
+            e.Property(p => p.AddressProvince).HasMaxLength(120);
+            e.Property(p => p.AddressDistrict).HasMaxLength(120);
+            e.Property(p => p.AddressLine).HasMaxLength(250);
+            e.Property(p => p.PostalCode).HasMaxLength(40);
+            e.Property(p => p.EmergencyContactName).HasMaxLength(120);
+            e.Property(p => p.EmergencyContactPhone).HasMaxLength(40);
+            e.Property(p => p.EmergencyContactRelation).HasMaxLength(120);
+
+            // Demographic
+            e.Property(p => p.BirthPlace).HasMaxLength(120);
+            e.Property(p => p.Nationality).HasMaxLength(120);
+            e.Property(p => p.BloodType).HasMaxLength(10);
+            e.Property(p => p.PassportNo).HasMaxLength(40);
+
+            // Military
+            e.Property(p => p.MilitaryOffice).HasMaxLength(120);
+
+            // Photo
+            e.Property(p => p.PhotoExtension).HasMaxLength(10);
         });
 
         // ── Instructor ───────────────────────────────────────────
