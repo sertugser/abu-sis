@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using SIS.API.Authorization;
 using SIS.API.Controllers;
@@ -124,9 +125,9 @@ public class StudentManagementControllerTests
         var controller = new StudentManagementController(
             serviceMock.Object,
             context,
-            new SIS.Application.Common.Services.NullSystemConfigProvider(),
             scopeGuardMock.Object,
-            personalInfoMock.Object);
+            personalInfoMock.Object,
+            new SIS.Application.Common.Services.NullStudentPhotoStorage());
         AttachUser(controller, userId: 42, new[] { "DepartmentManager" });
 
         var result = await controller.GetPersonalInfo(5);
@@ -135,6 +136,210 @@ public class StudentManagementControllerTests
         personalInfoMock.Verify(
             s => s.GetAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    // ── Photo upload / serve / delete ───────────────────────────────────────
+
+    private static readonly byte[] ValidPngBytes =
+    {
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG magic
+        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // (rest is arbitrary)
+    };
+
+    private static readonly byte[] JpegishBytes = { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10 };
+
+    private static IFormFile MakeFormFile(byte[] bytes, string contentType, string fileName = "photo.bin")
+    {
+        var stream = new MemoryStream(bytes);
+        return new FormFile(stream, 0, bytes.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType,
+        };
+    }
+
+    private sealed class TempPhotoStorageFixture : IDisposable
+    {
+        public string Dir { get; } = Path.Combine(Path.GetTempPath(), "sis-ctrl-photo-" + Guid.NewGuid().ToString("N"));
+        public SIS.Infrastructure.Services.FileSystemStudentPhotoStorage Storage { get; }
+
+        public TempPhotoStorageFixture()
+        {
+            var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["StudentPhotos:BasePath"] = Dir })
+                .Build();
+            var env = new Mock<Microsoft.Extensions.Hosting.IHostEnvironment>();
+            env.SetupGet(e => e.ContentRootPath).Returns(Dir);
+            Storage = new SIS.Infrastructure.Services.FileSystemStudentPhotoStorage(config, env.Object);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Dir)) Directory.Delete(Dir, true);
+        }
+    }
+
+    private static StudentManagementController CreatePhotoController(
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard,
+        SIS.Infrastructure.Services.FileSystemStudentPhotoStorage storage,
+        int userId,
+        params string[] roles)
+    {
+        var controller = new StudentManagementController(
+            new Mock<IAdminStudentService>().Object,
+            context,
+            scopeGuard,
+            new SIS.Infrastructure.Services.StudentPersonalInfoService(context),
+            storage);
+        AttachUser(controller, userId, roles);
+        return controller;
+    }
+
+    private static Mock<IAcademicScopeGuard> AllowAllScopeGuard()
+    {
+        var mock = new Mock<IAcademicScopeGuard>();
+        mock.Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        return mock;
+    }
+
+    [Fact]
+    public async Task UploadPhoto_ReturnsNoContent_AndSetsPhotoExtension_ForValidPng()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        var file = MakeFormFile(ValidPngBytes, "image/png", "me.png");
+
+        var result = await controller.UploadPhoto(5, file);
+
+        result.Should().BeOfType<NoContentResult>();
+        var info = await context.StudentPersonalInfos.AsNoTracking().SingleAsync();
+        info.PhotoExtension.Should().Be("png");
+        File.Exists(Path.Combine(fixture.Dir, "5.png")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UploadPhoto_Returns400_WhenContentTypeNotAllowed()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        var file = MakeFormFile(ValidPngBytes, "image/gif", "me.gif");
+
+        var result = await controller.UploadPhoto(5, file);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        (await context.StudentPersonalInfos.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UploadPhoto_Returns400_WhenMagicBytesMismatchDeclaredType()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        // Declared png, but bytes are jpeg-ish.
+        var file = MakeFormFile(JpegishBytes, "image/png", "fake.png");
+
+        var result = await controller.UploadPhoto(5, file);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        File.Exists(Path.Combine(fixture.Dir, "5.png")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UploadPhoto_Returns400_WhenNoFile()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+
+        var result = await controller.UploadPhoto(5, file: null);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UploadPhoto_ReturnsForbid_ForScopedNonAdminWithoutAccess()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var scopeGuard = new Mock<IAcademicScopeGuard>();
+        scopeGuard.Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreatePhotoController(context, scopeGuard.Object, fixture.Storage, 42, "DepartmentManager");
+        var file = MakeFormFile(ValidPngBytes, "image/png");
+
+        var result = await controller.UploadPhoto(5, file);
+
+        result.Should().BeOfType<ForbidResult>();
+        File.Exists(Path.Combine(fixture.Dir, "5.png")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetPhoto_Returns404_WhenNoPhoto()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+
+        var result = await controller.GetPhoto(5);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetPhoto_ReturnsFile_AfterUpload()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        await controller.UploadPhoto(5, MakeFormFile(ValidPngBytes, "image/png"));
+
+        var result = await controller.GetPhoto(5);
+
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        fileResult.ContentType.Should().Be("image/png");
+        // Akışı kapat ki temp-dir cleanup dosyayı silebilsin (Windows file lock).
+        await fileResult.FileStream.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DeletePhoto_RemovesFileAndNullsExtension()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        using var fixture = new TempPhotoStorageFixture();
+
+        var controller = CreatePhotoController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        await controller.UploadPhoto(5, MakeFormFile(ValidPngBytes, "image/png"));
+        File.Exists(Path.Combine(fixture.Dir, "5.png")).Should().BeTrue();
+
+        var result = await controller.DeletePhoto(5);
+
+        result.Should().BeOfType<NoContentResult>();
+        File.Exists(Path.Combine(fixture.Dir, "5.png")).Should().BeFalse();
+        var info = await context.StudentPersonalInfos.AsNoTracking().SingleAsync();
+        info.PhotoExtension.Should().BeNull();
     }
 
     private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
@@ -158,6 +363,13 @@ public class StudentManagementControllerTests
             DepartmentId = departmentId,
             Code = "YZM-LIS",
             Name = "Yazılım Mühendisliği Lisans"
+        });
+        context.Students.Add(new Student
+        {
+            Id = studentId,
+            UserId = 1000 + studentId,
+            StudentNumber = $"S{studentId}",
+            NationalId = $"N{studentId}",
         });
         context.Set<StudentProgram>().Add(new StudentProgram
         {

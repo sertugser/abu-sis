@@ -18,17 +18,27 @@ namespace SIS.API.Controllers;
 [Authorize]
 public class StudentManagementController : ControllerBase
 {
+    // Config "StudentPhotos:MaxBytes" yoksa kullanılan varsayılan (2 MB).
+    private const long DefaultMaxPhotoBytes = 2_000_000;
+
+    // Pipeline-level hard ceiling (config'ten daha gevşek). Asıl boyut kontrolü
+    // StudentPhotoValidator içinde config değeriyle yapılır; bu attribute sadece
+    // aşırı büyük gövdeleri erken reddeder. Attribute argümanı compile-time sabit
+    // olmak zorunda olduğu için ayrı tutuldu.
+    private const long MaxPhotoRequestBytes = 10_000_000;
+
     private readonly IAdminStudentService _service;
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _systemConfig;
     private readonly IAcademicScopeGuard _scopeGuard;
     private readonly IStudentPersonalInfoService _personalInfoService;
+    private readonly IStudentPhotoStorage _photoStorage;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig)
-        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context))
+        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage())
     {
     }
 
@@ -36,7 +46,18 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         IAcademicScopeGuard scopeGuard)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context))
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage())
+    {
+    }
+
+    // Test kolaylığı: scope guard + personal-info + photo storage enjekte edilebilir.
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard,
+        IStudentPersonalInfoService personalInfoService,
+        IStudentPhotoStorage photoStorage)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage)
     {
     }
 
@@ -48,13 +69,15 @@ public class StudentManagementController : ControllerBase
         AppDbContext context,
         ISystemConfigProvider systemConfig,
         IAcademicScopeGuard scopeGuard,
-        IStudentPersonalInfoService personalInfoService)
+        IStudentPersonalInfoService personalInfoService,
+        IStudentPhotoStorage photoStorage)
     {
         _service = service;
         _context = context;
         _systemConfig = systemConfig;
         _scopeGuard = scopeGuard;
         _personalInfoService = personalInfoService;
+        _photoStorage = photoStorage;
     }
 
     [HttpGet]
@@ -304,6 +327,168 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPut("{id:int}/photo")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-personal")]
+    [RequestSizeLimit(MaxPhotoRequestBytes)]
+    public async Task<IActionResult> UploadPhoto(int id, IFormFile? file, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var maxBytes = ResolveMaxPhotoBytes();
+
+        // Header'ı okumak için akışı seekable bir buffer'a al.
+        await using var buffered = new MemoryStream();
+        if (file is not null && file.Length > 0)
+        {
+            await using var upload = file.OpenReadStream();
+            await upload.CopyToAsync(buffered, ct);
+        }
+        buffered.Position = 0;
+
+        var header = new byte[StudentPhotoValidator.HeaderSize];
+        var headerLen = await ReadHeaderAsync(buffered, header, ct);
+        buffered.Position = 0;
+
+        var validationError = StudentPhotoValidator.Validate(
+            hasFile: file is not null,
+            sizeBytes: file?.Length ?? 0,
+            maxBytes: maxBytes,
+            contentType: file?.ContentType,
+            header: header.AsSpan(0, headerLen));
+        if (validationError is not null)
+            return BadRequest(new { message = validationError });
+
+        var extension = await _photoStorage.SaveAsync(id, buffered, file!.ContentType, ct);
+        await SetPhotoExtensionAsync(id, extension, ct);
+
+        return NoContent();
+    }
+
+    [HttpGet("{id:int}/photo")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
+    public async Task<IActionResult> GetPhoto(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var extension = await _context.StudentPersonalInfos
+            .AsNoTracking()
+            .Where(p => p.StudentId == id)
+            .Select(p => p.PhotoExtension)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(extension))
+            return NotFound(new { message = "Fotoğraf bulunamadı." });
+
+        var photo = await _photoStorage.GetAsync(id, extension, ct);
+        if (photo is null)
+            return NotFound(new { message = "Fotoğraf bulunamadı." });
+
+        return File(photo.Value.Stream, photo.Value.ContentType);
+    }
+
+    [HttpDelete("{id:int}/photo")]
+    [RequirePermission("menu.ogrenci-rehberi.edit-personal")]
+    public async Task<IActionResult> DeletePhoto(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var info = await _context.StudentPersonalInfos
+            .FirstOrDefaultAsync(p => p.StudentId == id, ct);
+
+        var extension = info?.PhotoExtension;
+        if (!string.IsNullOrWhiteSpace(extension))
+            await _photoStorage.DeleteAsync(id, extension, ct);
+
+        if (info is not null && info.PhotoExtension is not null)
+        {
+            info.PhotoExtension = null;
+            info.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// GetStudent rol-bypass scope desenini uygular. Erişim varsa null döner;
+    /// yoksa uygun IActionResult (NotFound/Forbid).
+    /// </summary>
+    private async Task<IActionResult?> CheckStudentAccessAsync(int studentId, int userId, CancellationToken ct)
+    {
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+        if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
+        {
+            var exists = await _context.Students.AsNoTracking().AnyAsync(s => s.Id == studentId, ct);
+            return exists ? null : NotFound(new { message = "Öğrenci bulunamadı." });
+        }
+
+        var deptId = await GetStudentMainDepartmentIdAsync(studentId);
+        if (deptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+        if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, deptId.Value, ct)) return Forbid();
+        return null;
+    }
+
+    /// <summary>
+    /// PhotoExtension'ı diğer alanları silmeden ayrıca günceller (UpsertAsync tüm
+    /// alanları DTO'dan ezdiği için kullanılmaz). Row yoksa oluşturur.
+    /// </summary>
+    private async Task SetPhotoExtensionAsync(int studentId, string extension, CancellationToken ct)
+    {
+        var info = await _context.StudentPersonalInfos
+            .FirstOrDefaultAsync(p => p.StudentId == studentId, ct);
+
+        var now = DateTime.UtcNow;
+        if (info is null)
+        {
+            info = new Domain.Entities.StudentPersonalInfo
+            {
+                StudentId = studentId,
+                PhotoExtension = extension,
+                CreatedAt = now,
+            };
+            _context.StudentPersonalInfos.Add(info);
+        }
+        else
+        {
+            info.PhotoExtension = extension;
+            info.UpdatedAt = now;
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    private long ResolveMaxPhotoBytes()
+    {
+        var configured = HttpContext?.RequestServices?
+            .GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
+            as Microsoft.Extensions.Configuration.IConfiguration;
+        var raw = configured?["StudentPhotos:MaxBytes"];
+        return long.TryParse(raw, out var parsed) && parsed > 0 ? parsed : DefaultMaxPhotoBytes;
+    }
+
+    private static async Task<int> ReadHeaderAsync(Stream stream, byte[] buffer, CancellationToken ct)
+    {
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var n = await stream.ReadAsync(buffer.AsMemory(read, buffer.Length - read), ct);
+            if (n == 0) break;
+            read += n;
+        }
+        return read;
     }
 
     private bool TryGetUserId(out int userId)

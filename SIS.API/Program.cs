@@ -272,6 +272,7 @@ builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoService>();
+builder.Services.AddScoped<IStudentPhotoStorage, FileSystemStudentPhotoStorage>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<SIS.Application.AcademicCalendar.Services.IAcademicCalendarService, AcademicCalendarService>();
