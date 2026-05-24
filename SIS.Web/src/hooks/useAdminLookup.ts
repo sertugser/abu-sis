@@ -11,6 +11,7 @@ export interface LookupDepartment {
   id: number;
   name: string;
   code: string;
+  facultyId: number;
 }
 
 export interface LookupProgram {
@@ -42,11 +43,13 @@ export function useFacultyLookup() {
   });
 }
 
-export function useAdminDepartments() {
+export function useAdminDepartments(facultyId?: number) {
   return useQuery({
-    queryKey: ['admin', 'lookup', 'departments'],
+    queryKey: ['admin', 'lookup', 'departments', facultyId ?? null],
     queryFn: async () => {
-      const { data } = await apiClient.get<LookupDepartment[]>('/admin/departments');
+      const { data } = await apiClient.get<LookupDepartment[]>('/admin/departments', {
+        params: facultyId ? { facultyId } : undefined,
+      });
       return data;
     },
     staleTime: 5 * 60 * 1000,

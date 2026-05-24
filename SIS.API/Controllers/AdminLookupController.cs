@@ -27,11 +27,15 @@ public class AdminLookupController(AppDbContext db, ISystemConfigProvider system
 
     [HttpGet("departments")]
     [RequirePermission("lookup.department")]
-    public async Task<IActionResult> GetDepartments()
+    public async Task<IActionResult> GetDepartments([FromQuery] int? facultyId)
     {
-        var departments = await db.Departments
+        var query = db.Departments.AsQueryable();
+        if (facultyId.HasValue)
+            query = query.Where(d => d.FacultyId == facultyId.Value);
+
+        var departments = await query
             .OrderBy(d => d.Name)
-            .Select(d => new { d.Id, d.Name, d.Code })
+            .Select(d => new { d.Id, d.Name, d.Code, d.FacultyId })
             .ToListAsync();
         return Ok(departments);
     }

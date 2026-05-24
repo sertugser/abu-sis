@@ -22,6 +22,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         nameof(Faculty),
         nameof(Department),
         nameof(AcademicProgram),
+        nameof(StudentProgram),     // Mufredat/program atama degisiklikleri
         nameof(AcademicTerm),
         nameof(CourseSection),
         nameof(CourseRegistration),
