@@ -32,7 +32,7 @@ const PROGRAM_TYPE_LABELS: Record<string, string> = {
   Minor: 'Yan Dal',
 };
 
-const DESTRUCTIVE_STATUSES = ['Dismissed', 'Graduated'];
+const DESTRUCTIVE_STATUSES = ['Dismissed', 'Graduated', 'Suspended'];
 
 const FIELD_LABEL = 'text-xs text-muted-foreground font-medium uppercase tracking-wide';
 const SELECT_CLASS =
@@ -296,7 +296,7 @@ export default function AcademicInfoPanel() {
       {success && <p className="text-sm text-emerald-600">{success}</p>}
 
       {canEdit && (
-        <Button onClick={handleSave} disabled={updateAcademic.isPending}>
+        <Button onClick={handleSave} disabled={updateAcademic.isPending || confirmOpen}>
           {updateAcademic.isPending ? 'Kaydediliyor...' : 'Kaydet'}
         </Button>
       )}
