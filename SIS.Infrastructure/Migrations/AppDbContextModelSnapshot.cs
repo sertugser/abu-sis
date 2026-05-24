@@ -2713,6 +2713,37 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("InternalAnnouncements");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.IssuedDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("IssuedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId", "IssuedAt");
+
+                    b.ToTable("IssuedDocuments");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Notification", b =>
                 {
                     b.Property<int>("Id")
@@ -5006,6 +5037,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("TargetSection");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.IssuedDocument", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("IssuedDocuments")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Curriculum", "Curriculum")
@@ -5507,6 +5547,8 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
                 {
                     b.Navigation("Documents");
+
+                    b.Navigation("IssuedDocuments");
 
                     b.Navigation("PersonalInfo");
 

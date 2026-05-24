@@ -28,6 +28,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentPersonalInfo> StudentPersonalInfos => Set<StudentPersonalInfo>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
     public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
+    public DbSet<IssuedDocument> IssuedDocuments => Set<IssuedDocument>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -201,6 +202,19 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
 
             e.Property(d => d.FileExtension).HasMaxLength(10);
             e.Property(d => d.OriginalFileName).HasMaxLength(260);
+        });
+
+        // ── IssuedDocument (append-only log of generated documents) ──
+        builder.Entity<IssuedDocument>(e =>
+        {
+            e.HasOne<Student>()
+             .WithMany(s => s.IssuedDocuments)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(d => new { d.StudentId, d.IssuedAt });
+
+            e.Property(d => d.DocumentNumber).HasMaxLength(40);
         });
 
         // ── Instructor ───────────────────────────────────────────
