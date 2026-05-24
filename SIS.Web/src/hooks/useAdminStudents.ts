@@ -102,7 +102,6 @@ export function useCreateStudent() {
   });
 }
 
-// Reserved for the upcoming advisor panel (kart "Danışman Atama"); not yet wired.
 export function useAssignAdvisor() {
   const qc = useQueryClient();
 
