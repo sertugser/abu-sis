@@ -67,12 +67,12 @@ public class StudentDocumentService : IStudentDocumentService
         var studentExists = await _context.Students
             .AnyAsync(s => s.Id == studentId, cancellationToken);
         if (!studentExists)
-            throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
+            throw new KeyNotFoundException("Öğrenci bulunamadı.");
 
         var typeExists = await _context.DocumentTypes
             .AnyAsync(d => d.Id == documentTypeId, cancellationToken);
         if (!typeExists)
-            throw new KeyNotFoundException($"Belge tipi bulunamadı: {documentTypeId}");
+            throw new KeyNotFoundException("Belge tipi bulunamadı.");
 
         var doc = await _context.StudentDocuments
             .FirstOrDefaultAsync(

@@ -251,6 +251,48 @@ public class StudentDocumentEndpointsTests
     }
 
     [Fact]
+    public async Task GetDocument_SetsAttachmentDisposition_ForPdf()
+    {
+        await using var context = CreateContext();
+        SeedStudent(context, studentId: 5, departmentId: 1);
+        SeedDocumentType(context, id: 1, code: "LISE_DIPLOMA");
+        using var fixture = new TempDocStorageFixture();
+
+        var controller = CreateController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        await controller.UploadDocument(5, 1, MakeFormFile(ValidPdfBytes, "application/pdf"));
+        var docId = (await context.StudentDocuments.AsNoTracking().SingleAsync()).Id;
+
+        var result = await controller.GetDocument(5, docId);
+
+        // Gömülü JS riskine karşı PDF inline değil attachment olarak sunulmalı.
+        var disposition = controller.HttpContext.Response.Headers["Content-Disposition"].ToString();
+        disposition.Should().StartWith("attachment");
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        await fileResult.FileStream.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GetDocument_SetsInlineDisposition_ForImage()
+    {
+        await using var context = CreateContext();
+        SeedStudent(context, studentId: 5, departmentId: 1);
+        SeedDocumentType(context, id: 1, code: "LISE_DIPLOMA");
+        using var fixture = new TempDocStorageFixture();
+
+        var controller = CreateController(context, AllowAllScopeGuard().Object, fixture.Storage, 1, "SystemAdministrator");
+        await controller.UploadDocument(5, 1, MakeFormFile(ValidPngBytes, "image/png", "foto.png"));
+        var docId = (await context.StudentDocuments.AsNoTracking().SingleAsync()).Id;
+
+        var result = await controller.GetDocument(5, docId);
+
+        // Görseller tarayıcıda zararsızca inline gösterilir.
+        var disposition = controller.HttpContext.Response.Headers["Content-Disposition"].ToString();
+        disposition.Should().Be("inline");
+        var fileResult = result.Should().BeOfType<FileStreamResult>().Subject;
+        await fileResult.FileStream.DisposeAsync();
+    }
+
+    [Fact]
     public async Task GetDocument_Returns404_ForDocumentBelongingToAnotherStudent()
     {
         await using var context = CreateContext();

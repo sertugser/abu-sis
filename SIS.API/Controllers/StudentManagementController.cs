@@ -536,7 +536,17 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
             return NotFound(new { message = ex.Message });
         }
 
-        await _documentStorage.SaveAsync(id, docId, buffered, file.ContentType, ct);
+        // RecordUploadAsync DB satırını commit etti; dosya yazımı patlarsa (disk hatası)
+        // satır öksüz kalır ("uploaded" görünür ama GET 404). Telafi: satırı geri al, rethrow.
+        try
+        {
+            await _documentStorage.SaveAsync(id, docId, buffered, file.ContentType, ct);
+        }
+        catch
+        {
+            await _documentService.RemoveAsync(id, docId, ct);
+            throw;
+        }
 
         return NoContent();
     }
@@ -561,9 +571,15 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         if (stored is null)
             return NotFound(new { message = "Belge bulunamadı." });
 
-        // Belge asla zorla indirme/çalıştırılabilir olarak ele alınmasın diye explicit inline.
+        // Görseller tarayıcıda zararsızca inline gösterilir; PDF'ler ise gömülü JS
+        // çalıştırma riskine karşı attachment olarak indirtilir (browser PDF viewer'da
+        // inline çalıştırma vektörünü kapatır).
         // (X-Content-Type-Options: nosniff zaten SecurityHeadersMiddleware'de global olarak ekleniyor.)
-        Response.Headers["Content-Disposition"] = "inline";
+        var isImage = stored.Value.ContentType == StudentDocumentValidator.JpegContentType
+            || stored.Value.ContentType == StudentDocumentValidator.PngContentType;
+        Response.Headers["Content-Disposition"] = isImage
+            ? "inline"
+            : $"attachment; filename=\"belge_{documentId}.pdf\"";
         return File(stored.Value.Stream, stored.Value.ContentType);
     }
 
