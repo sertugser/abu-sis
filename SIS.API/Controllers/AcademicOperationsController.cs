@@ -12,6 +12,8 @@ namespace SIS.API.Controllers;
 [Authorize]
 public class AcademicOperationsController : ControllerBase
 {
+    private const int MaxBulkStudentIds = 1000;
+
     private readonly IAcademicOperationsService _academicOperationsService;
     private AcademicOperationsContextDto? _cachedContext;
 
@@ -122,13 +124,28 @@ public class AcademicOperationsController : ControllerBase
         [FromQuery] int? programId,
         [FromQuery] int? curriculumId,
         [FromQuery] int? advisorId,
-        CancellationToken cancellationToken)
+        [FromQuery] bool? hasAdvisor,
+        [FromQuery] bool? hasFailingCourse,
+        [FromQuery] int? classYear,
+        [FromQuery] string? studentNoFrom,
+        [FromQuery] string? studentNoTo,
+        [FromQuery] DateTime? enrollmentFrom,
+        [FromQuery] DateTime? enrollmentTo,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
         if (departmentId <= 0)
             return BadRequest(new { error = "Gecerli bir departmentId gonderilmelidir." });
 
         if (!string.IsNullOrWhiteSpace(search) && search.Length > 200)
             return BadRequest(new { error = "Arama metni en fazla 200 karakter olabilir." });
+
+        if (page < 1)
+            return BadRequest(new { error = "Gecerli bir sayfa numarasi gonderilmelidir." });
+
+        if (pageSize is < 1 or > 200)
+            return BadRequest(new { error = "Sayfa boyutu 1 ile 200 arasinda olmalidir." });
 
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
@@ -137,7 +154,9 @@ public class AcademicOperationsController : ControllerBase
             return Forbid();
 
         var result = await _academicOperationsService.GetDepartmentStudentsAsync(
-            departmentId, userId, roles, search, status, programId, curriculumId, advisorId, cancellationToken);
+            departmentId, userId, roles, search, status, programId, curriculumId, advisorId,
+            hasAdvisor, hasFailingCourse, classYear, studentNoFrom, studentNoTo, enrollmentFrom, enrollmentTo,
+            page, pageSize, cancellationToken);
 
         if (result == null)
             return NotFound(new { error = "Bolum ogrenci listesi bulunamadi." });
@@ -177,6 +196,9 @@ public class AcademicOperationsController : ControllerBase
         if (request.AdvisorId <= 0)
             return BadRequest(new { error = "Gecerli bir advisorId gonderilmelidir." });
 
+        if (request.StudentIds.Count > MaxBulkStudentIds)
+            return BadRequest(new { error = $"Tek istekte en fazla {MaxBulkStudentIds} ogrenci secilebilir." });
+
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
 
@@ -202,6 +224,9 @@ public class AcademicOperationsController : ControllerBase
 
         if (request.CurriculumId <= 0)
             return BadRequest(new { error = "Gecerli bir curriculumId gonderilmelidir." });
+
+        if (request.StudentIds.Count > MaxBulkStudentIds)
+            return BadRequest(new { error = $"Tek istekte en fazla {MaxBulkStudentIds} ogrenci secilebilir." });
 
         if (!TryGetAuthenticatedUser(out var userId, out var roles))
             return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });

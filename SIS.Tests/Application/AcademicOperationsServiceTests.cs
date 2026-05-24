@@ -133,6 +133,180 @@ public class AcademicOperationsServiceTests
         invalidator.Verify(cache => cache.InvalidateForecastContext(), Times.Once);
     }
 
+    [Fact]
+    public async Task BulkAssignCurriculumAsync_AssignsDraftCurriculum_NoStatusRestriction()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddCurriculum(context, id: 2002, programId: 1000, version: "2026", status: CurriculumStatus.Draft);
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkCurriculumAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            CurriculumId = 2002,
+            StudentIds = [1],
+        };
+
+        var result = await service.BulkAssignCurriculumAsync(request, userId: 1, roles: ["AdministrativeStaff"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(1);
+        context.StudentPrograms.Find(1, 1000)!.CurriculumId.Should().Be(2002);
+    }
+
+    [Fact]
+    public async Task BulkAssignCurriculumAsync_AssignsArchivedCurriculum_NoStatusRestriction()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddCurriculum(context, id: 2003, programId: 1000, version: "2019", status: CurriculumStatus.Archived);
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkCurriculumAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            CurriculumId = 2003,
+            StudentIds = [1],
+        };
+
+        var result = await service.BulkAssignCurriculumAsync(request, userId: 1, roles: ["AdministrativeStaff"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(1);
+        context.StudentPrograms.Find(1, 1000)!.CurriculumId.Should().Be(2003);
+    }
+
+    [Fact]
+    public async Task BulkAssignCurriculumAsync_SkipsGraduatedAndDismissedStudents()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddCurriculum(context, id: 2001, programId: 1000, version: "2025");
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000, status: StudentStatus.Graduated);
+        AddStudent(context, id: 2, userId: 602, studentNumber: "20240002", programId: 1000, curriculumId: 2000, status: StudentStatus.Dismissed);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkCurriculumAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            CurriculumId = 2001,
+            StudentIds = [1, 2],
+        };
+
+        var result = await service.BulkAssignCurriculumAsync(request, userId: 1, roles: ["AdministrativeStaff"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(0);
+        result.FailedCount.Should().Be(2);
+        result.Results.Should().OnlyContain(item => item.Message.Contains("Mezun veya iliskigi kesilmis"));
+        context.StudentPrograms.Find(1, 1000)!.CurriculumId.Should().Be(2000);
+        context.StudentPrograms.Find(2, 1000)!.CurriculumId.Should().Be(2000);
+    }
+
+    [Fact]
+    public async Task BulkAssignCurriculumAsync_SkipsStudentAlreadyInTargetCurriculum()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddCurriculum(context, id: 2001, programId: 1000, version: "2025");
+        // Ogrenci hedef mufredatta (2001) zaten kayitli
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2001);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var request = new BulkCurriculumAssignmentRequestDto
+        {
+            DepartmentId = 10,
+            CurriculumId = 2001,
+            StudentIds = [1],
+        };
+
+        var result = await service.BulkAssignCurriculumAsync(request, userId: 1, roles: ["AdministrativeStaff"]);
+
+        result.Should().NotBeNull();
+        result!.SuccessCount.Should().Be(0);
+        result.FailedCount.Should().Be(1);
+        result.Results.Single().Message.Should().Contain("zaten bu mufredata");
+    }
+
+    [Fact]
+    public async Task GetDepartmentStudentsAsync_PopulatesFacultyAndEnrollment_AndPaginates()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        AddStudent(context, id: 2, userId: 602, studentNumber: "20240002", programId: 1000, curriculumId: 2000);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+
+        var firstPage = await service.GetDepartmentStudentsAsync(
+            departmentId: 10, userId: 1, roles: ["AdministrativeStaff"], page: 1, pageSize: 1);
+
+        firstPage.Should().NotBeNull();
+        firstPage!.TotalStudents.Should().Be(2);
+        firstPage.Page.Should().Be(1);
+        firstPage.PageSize.Should().Be(1);
+        firstPage.Students.Should().ContainSingle();
+        firstPage.Students[0].FacultyName.Should().Be("Mühendislik Fakültesi");
+        firstPage.Students[0].FacultyId.Should().Be(1);
+        firstPage.Students[0].EnrollmentDate.Should().NotBe(default);
+
+        var secondPage = await service.GetDepartmentStudentsAsync(
+            departmentId: 10, userId: 1, roles: ["AdministrativeStaff"], page: 2, pageSize: 1);
+
+        secondPage!.Students.Should().ContainSingle();
+        secondPage.Students[0].StudentId.Should().NotBe(firstPage.Students[0].StudentId);
+    }
+
+    [Fact]
+    public async Task GetDepartmentStudentsAsync_FiltersByClassYear()
+    {
+        using var context = CreateContext();
+        SeedBaseData(context);
+        // completedSemesters 2 → 2. sınıf, 6 → 4. sınıf
+        AddStudent(context, id: 1, userId: 601, studentNumber: "20240001", programId: 1000, curriculumId: 2000);
+        var senior = new Student
+        {
+            Id = 2,
+            UserId = 602,
+            StudentNumber = "20210002",
+            NationalId = "10000000002",
+            Status = StudentStatus.Active,
+            Cgpa = 3.0m,
+            CompletedSemesters = 6,
+        };
+        context.Students.Add(senior);
+        context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = 2,
+            ProgramId = 1000,
+            CurriculumId = 2000,
+            Type = StudentProgramType.Main,
+            IsActive = true,
+            EnrollmentDate = DateTime.UtcNow.AddYears(-3),
+        });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+
+        var secondYear = await service.GetDepartmentStudentsAsync(
+            departmentId: 10, userId: 1, roles: ["AdministrativeStaff"], classYear: 2);
+        secondYear!.TotalStudents.Should().Be(1);
+        secondYear.Students[0].StudentId.Should().Be(1);
+
+        var fourthYear = await service.GetDepartmentStudentsAsync(
+            departmentId: 10, userId: 1, roles: ["AdministrativeStaff"], classYear: 4);
+        fourthYear!.TotalStudents.Should().Be(1);
+        fourthYear.Students[0].StudentId.Should().Be(2);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -194,7 +368,12 @@ public class AcademicOperationsServiceTests
         });
     }
 
-    private static void AddCurriculum(AppDbContext context, int id, int programId, string version)
+    private static void AddCurriculum(
+        AppDbContext context,
+        int id,
+        int programId,
+        string version,
+        CurriculumStatus status = CurriculumStatus.Published)
     {
         context.Curricula.Add(new Curriculum
         {
@@ -203,7 +382,7 @@ public class AcademicOperationsServiceTests
             Version = version,
             Name = $"{version} Müfredatı",
             IsActive = version == "2024",
-            Status = CurriculumStatus.Published,
+            Status = status,
         });
     }
 
@@ -226,7 +405,8 @@ public class AcademicOperationsServiceTests
         string studentNumber,
         int programId,
         int curriculumId,
-        int? advisorId = null)
+        int? advisorId = null,
+        StudentStatus status = StudentStatus.Active)
     {
         context.Students.Add(new Student
         {
@@ -234,7 +414,7 @@ public class AcademicOperationsServiceTests
             UserId = userId,
             StudentNumber = studentNumber,
             NationalId = $"1000000000{id}",
-            Status = StudentStatus.Active,
+            Status = status,
             Cgpa = 3.1m,
             CompletedSemesters = 2,
             AdvisorId = advisorId,

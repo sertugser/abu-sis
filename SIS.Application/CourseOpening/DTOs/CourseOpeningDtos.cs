@@ -142,6 +142,12 @@ public class InstructorOptionDto
     public int DepartmentId { get; set; }
     public string DepartmentName { get; set; } = "";
     public string DepartmentCode { get; set; } = "";
+    /// <summary>Akademik unvan (Prof., Doç. Dr. vb.).</summary>
+    public string Title { get; set; } = "";
+    /// <summary>Unvan içermeyen ad soyad.</summary>
+    public string PersonName { get; set; } = "";
+    public string FacultyName { get; set; } = "";
+    public string FacultyCode { get; set; } = "";
     public int MaxWeeklyHours { get; set; }
     public int AssignedWeeklyHours { get; set; }
     /// <summary>

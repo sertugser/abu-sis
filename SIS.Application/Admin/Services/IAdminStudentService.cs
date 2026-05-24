@@ -8,13 +8,4 @@ public interface IAdminStudentService
     Task<AdminStudentDetailDto?> GetStudentByIdAsync(int id);
     Task<AdminStudentDetailDto> CreateStudentAsync(CreateStudentDto dto);
     Task AssignAdvisorAsync(int studentId, int advisorId);
-
-    Task<BulkAdvisorAssignmentPreviewResponseDto> PreviewBulkAdvisorAssignmentAsync(
-        BulkAdvisorAssignmentPreviewRequestDto dto);
-
-    Task<BulkAdvisorAssignmentApplyResponseDto> ApplyBulkAdvisorAssignmentAsync(
-        BulkAdvisorAssignmentApplyRequestDto dto);
-
-    Task<BulkAdvisorSettingsUpdateResponseDto> UpdateBulkAdvisorAssignmentSettingsAsync(
-        BulkAdvisorSettingsUpdateRequestDto dto);
 }

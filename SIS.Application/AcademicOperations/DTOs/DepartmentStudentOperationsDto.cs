@@ -6,7 +6,10 @@ public class DepartmentStudentListDto
 {
     public int DepartmentId { get; set; }
     public string DepartmentName { get; set; } = string.Empty;
-    public int TotalStudents { get; set; }
+    public int TotalStudents { get; set; }   // tüm filtreler uygulandıktan sonraki toplam (sayfalama öncesi)
+    public int WithoutAdvisorCount { get; set; } // danışman filtresi hariç tüm filtrelere uyan, danışmansız öğrenci sayısı
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; }
     public List<DepartmentStudentListItemDto> Students { get; set; } = new();
     public List<string> Notes { get; set; } = new();
 }
@@ -20,12 +23,15 @@ public class DepartmentStudentListItemDto
     public string Status { get; set; } = string.Empty;
     public decimal Cgpa { get; set; }
     public int CompletedSemesters { get; set; }
+    public int FacultyId { get; set; }
+    public string FacultyName { get; set; } = string.Empty;
     public int ProgramId { get; set; }
     public string ProgramName { get; set; } = string.Empty;
     public string ProgramCode { get; set; } = string.Empty;
     public int CurriculumId { get; set; }
     public string CurriculumVersion { get; set; } = string.Empty;
     public string CurriculumName { get; set; } = string.Empty;
+    public DateTime EnrollmentDate { get; set; }
     public int? AdvisorId { get; set; }
     public string? AdvisorName { get; set; }
 }

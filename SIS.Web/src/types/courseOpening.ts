@@ -113,6 +113,12 @@ export interface InstructorOptionDto {
   departmentId: number;
   departmentName: string;
   departmentCode: string;
+  /** Akademik unvan (Prof., Doç. Dr. vb.). */
+  title: string;
+  /** Unvan içermeyen ad soyad. */
+  personName: string;
+  facultyName: string;
+  facultyCode: string;
   maxWeeklyHours: number;
   assignedWeeklyHours: number;
   /** Toplu danışman atamasında bu hocaya verilebilecek max öğrenci sayısı. null = sınırsız. */
