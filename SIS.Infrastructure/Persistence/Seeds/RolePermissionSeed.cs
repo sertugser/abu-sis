@@ -30,7 +30,7 @@ public static class RolePermissionSeed
         new Dictionary<string, IReadOnlyList<string>>
         {
             // ═══════════════════════════════════════════════════════════════════════════
-            // Student — 31 permission (17 view + 14 action)
+            // Student — 29 permission (17 view + 12 action)
             // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Student"] = new[]
@@ -68,8 +68,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
-                "menu.ogrenci-rehberi.eligibility",
-                "menu.ogrenci-rehberi.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -121,7 +119,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AcademicAdvisor — 32 permission (10 view + 22 action)
+            // AcademicAdvisor — 31 permission (10 view + 21 action)
             // C2 sign-off: not-girisi.* YOK — sidebar'dan kaldırıldı.
             // ═══════════════════════════════════════════════════════════════════════════
             ["AcademicAdvisor"] = new[]
@@ -137,7 +135,6 @@ public static class RolePermissionSeed
                 "menu.ders-programim.view",
                 "menu.ders-kayit-duzenleme.view",
                 "menu.ogrenci-rehberi.view",
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.sifre-degistir.view",
 
                 // ── Action permissions (22) ──
@@ -269,6 +266,7 @@ public static class RolePermissionSeed
 
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
+                "menu.ogrenci-rehberi.edit-academic",
                 "menu.toplu-danisman-atama.assign",
                 "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",
@@ -287,13 +285,12 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // DepartmentManager — 126 permission (24 view + 102 action)
+            // DepartmentManager — 125 permission (24 view + 101 action)
             // AdministrativeStaff'ın yetkileri + onay ekleri (publish/archive, swap/lock/unlock,
             // exception approve, dönem kapatma, sınıf atlatma)
             // ═══════════════════════════════════════════════════════════════════════════
@@ -445,7 +442,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",
@@ -609,7 +605,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",
