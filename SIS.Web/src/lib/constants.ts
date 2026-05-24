@@ -120,8 +120,18 @@ export const QUERY_KEYS = {
   // Admin query keys
   adminUsers: (search?: string, role?: string, isActive?: boolean, page?: number) =>
     ['admin', 'users', search, role, isActive, page] as const,
-  adminStudents: (search?: string, programId?: number, departmentId?: number, status?: string, page?: number) =>
-    ['admin', 'students', search, programId, departmentId, status, page] as const,
+  adminStudents: (
+    search?: string,
+    programId?: number,
+    departmentId?: number,
+    status?: string,
+    page?: number,
+    advisorId?: number,
+    hasAdvisor?: boolean,
+    curriculumId?: number,
+    classYear?: number,
+  ) =>
+    ['admin', 'students', search, programId, departmentId, status, page, advisorId, hasAdvisor, curriculumId, classYear] as const,
   adminInstructors: (search?: string, departmentId?: number) =>
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,

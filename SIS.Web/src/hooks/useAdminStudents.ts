@@ -39,6 +39,15 @@ export interface AdminStudentFilter {
   maxCgpa?: number;
   page?: number;
   pageSize?: number;
+  advisorId?: number;
+  hasAdvisor?: boolean;
+  curriculumId?: number;
+  classYear?: number;
+  studentNoFrom?: string;
+  studentNoTo?: string;
+  enrollmentFrom?: string;
+  enrollmentTo?: string;
+  hasFailingCourse?: boolean;
 }
 
 export interface CreateStudentDto {
@@ -61,7 +70,11 @@ export function useAdminStudents(filter: AdminStudentFilter) {
       filter.programId,
       filter.departmentId,
       filter.status,
-      filter.page
+      filter.page,
+      filter.advisorId,
+      filter.hasAdvisor,
+      filter.curriculumId,
+      filter.classYear
     ),
     queryFn: async () => {
       const { data } = await apiClient.get<PagedResult<AdminStudentListItem>>(API, {
