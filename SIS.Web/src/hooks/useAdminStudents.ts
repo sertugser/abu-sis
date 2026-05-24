@@ -22,6 +22,7 @@ export interface AdminStudentListItem {
 }
 
 export interface AdminStudentDetail extends AdminStudentListItem {
+  userId: number;
   sgpa: number | null;
   frozenSemesterCount: number | null;
   isScholarshipStudent: boolean;
@@ -64,7 +65,7 @@ export interface CreateStudentDto {
 
 export function useAdminStudents(filter: AdminStudentFilter) {
   return useQuery({
-    queryKey: ['admin', 'students', filter],
+    queryKey: ['admin', 'students', 'list', filter],
     queryFn: async () => {
       const { data } = await apiClient.get<PagedResult<AdminStudentListItem>>(API, {
         params: filter,
@@ -77,7 +78,7 @@ export function useAdminStudents(filter: AdminStudentFilter) {
 
 export function useAdminStudent(id: number | null) {
   return useQuery({
-    queryKey: ['admin', 'students', id],
+    queryKey: ['admin', 'students', 'detail', id],
     queryFn: async () => {
       const { data } = await apiClient.get<AdminStudentDetail>(`${API}/${id}`);
       return data;
@@ -98,6 +99,7 @@ export function useCreateStudent() {
   });
 }
 
+// Reserved for the upcoming advisor panel (kart "Danışman Atama"); not yet wired.
 export function useAssignAdvisor() {
   const qc = useQueryClient();
 
