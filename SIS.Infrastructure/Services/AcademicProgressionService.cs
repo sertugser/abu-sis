@@ -129,11 +129,6 @@ public class AcademicProgressionService : IAcademicProgressionService
             var studentRegs = registrationsByStudent
                 .GetValueOrDefault(student.Id, new List<CourseRegistration>());
 
-            var passedCourseEcts = studentRegs
-                .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
-                .GroupBy(r => r.CourseSection.CourseId)
-                .Sum(g => g.First().CourseSection.Course?.Ects ?? 0);
-
             var cgpa = cgpaMap.GetValueOrDefault(student.Id, 0m);
 
             // Mevcut seviye: CompletedSemesters bazlı
@@ -144,110 +139,16 @@ public class AcademicProgressionService : IAcademicProgressionService
             var programId = mainProgram.ProgramId;
             var curriculumId = mainProgram.CurriculumId;
             var rules = rulesByProgram.GetValueOrDefault(programId) ?? new List<PromotionRule>();
-            var promotionDetails = new List<string>();
 
-            // Mevcut seviyeden başla — geçmişte kazanılmış seviyeyi koruyoruz.
-            // Sadece mevcut seviyeden ileriye doğru terfi değerlendirilir.
-            int newLevel = Math.Max(1, oldLevel);
-            for (int fromYear = newLevel; fromYear < normalDurationYears; fromYear++)
-            {
-                // γ hibrit lookup: önce müfredat-özel kural (CurriculumId == student.curriculumId), yoksa program-bazlı (CurriculumId == null)
-                var rule = rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == curriculumId)
-                        ?? rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == null);
+            // Toplu işlemle aynı per-öğrenci metrikleri hesapla, sonra ortak değerlendiriciye geç.
+            var metrics = await BuildPromotionMetricsAsync(studentRegs, curriculumId, cgpa, cancellationToken);
+            var passedCourseEcts = metrics.PassedEcts;
 
-                if (rule != null)
-                {
-                    bool canPromote = true;
-                    var reasons = new List<string>();
-
-                    if (rule.MinCgpa.HasValue && cgpa < rule.MinCgpa.Value)
-                    {
-                        canPromote = false;
-                        reasons.Add($"CGPA {cgpa:F2} < {rule.MinCgpa.Value:F2} gerekli");
-                    }
-                    if (rule.MinEcts.HasValue && passedCourseEcts < rule.MinEcts.Value)
-                    {
-                        canPromote = false;
-                        reasons.Add($"AKTS {passedCourseEcts} < {rule.MinEcts.Value} gerekli");
-                    }
-                    if (rule.MinCourseCount.HasValue)
-                    {
-                        var passedCourseCount = studentRegs
-                            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
-                            .Select(r => r.CourseSection.CourseId)
-                            .Distinct()
-                            .Count();
-                        if (passedCourseCount < rule.MinCourseCount.Value)
-                        {
-                            canPromote = false;
-                            reasons.Add($"Ders sayisi {passedCourseCount} < {rule.MinCourseCount.Value} gerekli");
-                        }
-                    }
-                    if (rule.MaxFailedCourses.HasValue)
-                    {
-                        var failedCourseCount = studentRegs
-                            .Where(r => r.Grade == GradeCode.FF || r.Grade == GradeCode.NA || r.Grade == GradeCode.U)
-                            .Select(r => r.CourseSection.CourseId)
-                            .Distinct()
-                            .Count();
-                        if (failedCourseCount > rule.MaxFailedCourses.Value)
-                        {
-                            canPromote = false;
-                            reasons.Add($"Basarisiz ders {failedCourseCount} > max {rule.MaxFailedCourses.Value}");
-                        }
-                    }
-                    if (rule.MinCompulsoryCoursePassed.HasValue)
-                    {
-                        // Öğrencinin müfredatındaki zorunlu derslerden geçtiği sayı
-                        var passedCompulsoryCourseIds = studentRegs
-                            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
-                            .Select(r => r.CourseSection.CourseId)
-                            .Distinct()
-                            .ToHashSet();
-
-                        var compulsoryPassedCount = await _context.CurriculumCourses
-                            .AsNoTracking()
-                            .Where(cc => cc.CurriculumId == mainProgram.CurriculumId
-                                && cc.IsCompulsory
-                                && passedCompulsoryCourseIds.Contains(cc.CourseId))
-                            .CountAsync(cancellationToken);
-
-                        if (compulsoryPassedCount < rule.MinCompulsoryCoursePassed.Value)
-                        {
-                            canPromote = false;
-                            reasons.Add($"Zorunlu ders {compulsoryPassedCount} < {rule.MinCompulsoryCoursePassed.Value} gerekli");
-                        }
-                    }
-
-                    if (canPromote)
-                    {
-                        newLevel = fromYear + 1;
-                        promotionDetails.Add($"{fromYear}→{fromYear + 1}: Gecti (kural bazli)");
-                    }
-                    else
-                    {
-                        promotionDetails.Add($"{fromYear}→{fromYear + 1}: Engellendi — {string.Join(", ", reasons)}");
-                        break; // Seviye atlanamaz
-                    }
-                }
-                else
-                {
-                    // C9: Kural tanımlı değil — AKTS bazlı fallback + uyarı
-                    result.Notes.Add($"Uyari: {program?.Name ?? "Bilinmeyen program"} icin {fromYear}->{fromYear + 1} gecis kurali tanimlanmamis, AKTS bazli fallback kullanildi.");
-                    var ectsForLevel = ectsPerYear * fromYear;
-                    if (passedCourseEcts >= ectsForLevel)
-                    {
-                        newLevel = fromYear + 1;
-                        promotionDetails.Add($"{fromYear}→{fromYear + 1}: Gecti (AKTS bazli fallback, {passedCourseEcts}/{ectsForLevel:F0})");
-                    }
-                    else
-                    {
-                        promotionDetails.Add($"{fromYear}→{fromYear + 1}: Engellendi (AKTS {passedCourseEcts} < {ectsForLevel:F0})");
-                        break;
-                    }
-                }
-            }
-            newLevel = Math.Clamp(newLevel, 1, normalDurationYears);
+            var eval = EvaluatePromotion(metrics, Math.Max(1, oldLevel), normalDurationYears, ectsPerYear, rules, curriculumId);
+            var promotionDetails = eval.Details;
+            foreach (var note in eval.FallbackNotes)
+                result.Notes.Add(note.Replace("{program}", program?.Name ?? "Bilinmeyen program"));
+            int newLevel = Math.Clamp(eval.TargetLevel, 1, normalDurationYears);
 
             // C8: CompletedSemesters: seviye farkı kadar artır (birden fazla sınıf atlayabilir)
             var newSemesters = newLevel > oldLevel
@@ -479,6 +380,269 @@ public class AcademicProgressionService : IAcademicProgressionService
             : $"{registrationsWithoutGrade} kayıt için not girişi eksik.");
 
         return result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TEK ÖĞRENCİ SINIF ATLATMA (PER-STUDENT PROMOTION)
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<StudentPromotionStatusDto?> EvaluateStudentPromotionAsync(int studentId, CancellationToken ct = default)
+    {
+        var student = await _context.Students
+            .AsNoTracking()
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (student == null) return null;
+
+        var mainProgram = student.StudentPrograms
+            .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+
+        var program = mainProgram?.Program;
+        var normalDurationYears = GetNormalDurationYears(program);
+        var totalRequiredEcts = program?.TotalRequiredEcts ?? 240;
+        var ectsPerYear = totalRequiredEcts > 0 && normalDurationYears > 0
+            ? (decimal)totalRequiredEcts / normalDurationYears
+            : 60m;
+
+        var currentLevel = (student.CompletedSemesters / 2) + 1;
+
+        // mainProgram yoksa kural değerlendirilemez — sadece mevcut seviyeyi bildir.
+        if (mainProgram == null)
+        {
+            return new StudentPromotionStatusDto(
+                currentLevel, null, false,
+                "Öğrencinin aktif ana programı bulunamadı.",
+                normalDurationYears,
+                Array.Empty<PromotionCriterionDto>());
+        }
+
+        var curriculumId = mainProgram.CurriculumId;
+
+        var studentRegs = await _context.CourseRegistrations
+            .AsNoTracking()
+            .Include(r => r.CourseSection)
+                .ThenInclude(s => s.Course)
+            .Where(r => r.StudentId == studentId)
+            .ToListAsync(ct);
+
+        var cgpa = await _gpaCalculationService.CalculateCgpaAsync(studentId);
+
+        var rules = await _context.PromotionRules
+            .AsNoTracking()
+            .Where(pr => pr.ProgramId == mainProgram.ProgramId)
+            .ToListAsync(ct);
+
+        var metrics = await BuildPromotionMetricsAsync(studentRegs, curriculumId, cgpa, ct);
+
+        var eval = EvaluatePromotion(metrics, Math.Max(1, currentLevel), normalDurationYears, ectsPerYear, rules, curriculumId);
+        var targetLevel = Math.Clamp(eval.TargetLevel, 1, normalDurationYears);
+
+        var canPromote = targetLevel > currentLevel;
+        int? eligibleTargetLevel = canPromote ? targetLevel : null;
+        var reason = canPromote ? null : eval.BlockReason ?? "Öğrenci bir sonraki sınıfa geçiş kurallarını sağlamıyor.";
+
+        return new StudentPromotionStatusDto(
+            currentLevel,
+            eligibleTargetLevel,
+            canPromote,
+            reason,
+            normalDurationYears,
+            eval.Criteria);
+    }
+
+    public async Task SetStudentLevelAsync(int studentId, int targetLevel, CancellationToken ct = default)
+    {
+        var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId, ct)
+            ?? throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
+        if (targetLevel < 1) throw new InvalidOperationException("Sınıf seviyesi 1'den küçük olamaz.");
+        // Clean inverse of level = CompletedSemesters/2 + 1
+        student.CompletedSemesters = (targetLevel - 1) * 2;
+        student.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ORTAK SINIF ATLATMA DEĞERLENDİRİCİSİ (batch + per-student)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Per-öğrenci sınıf atlatma metrikleri (toplu ve tekil yolun ortak girdisi).</summary>
+    private sealed record PromotionMetrics(
+        decimal Cgpa,
+        int PassedEcts,
+        int PassedCourseCount,
+        int FailedCourseCount,
+        int CompulsoryPassedCount);
+
+    /// <summary>Ortak değerlendirici çıktısı.</summary>
+    private sealed record PromotionEvaluation(
+        int TargetLevel,
+        List<string> Details,
+        List<string> FallbackNotes,
+        List<PromotionCriterionDto> Criteria,
+        string? BlockReason);
+
+    /// <summary>
+    /// Öğrencinin ders kayıtlarından sınıf atlatma metriklerini hesaplar
+    /// (toplu işlemle birebir aynı mantık; zorunlu ders sayısı tek DB sorgusuyla).
+    /// </summary>
+    private async Task<PromotionMetrics> BuildPromotionMetricsAsync(
+        List<CourseRegistration> studentRegs,
+        int? curriculumId,
+        decimal cgpa,
+        CancellationToken ct)
+    {
+        var passedEcts = studentRegs
+            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+            .GroupBy(r => r.CourseSection.CourseId)
+            .Sum(g => g.First().CourseSection.Course?.Ects ?? 0);
+
+        var passedCourseIds = studentRegs
+            .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
+            .Select(r => r.CourseSection.CourseId)
+            .Distinct()
+            .ToHashSet();
+
+        var passedCourseCount = passedCourseIds.Count;
+
+        var failedCourseCount = studentRegs
+            .Where(r => r.Grade == GradeCode.FF || r.Grade == GradeCode.NA || r.Grade == GradeCode.U)
+            .Select(r => r.CourseSection.CourseId)
+            .Distinct()
+            .Count();
+
+        var compulsoryPassedCount = await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.CurriculumId == curriculumId
+                && cc.IsCompulsory
+                && passedCourseIds.Contains(cc.CourseId))
+            .CountAsync(ct);
+
+        return new PromotionMetrics(cgpa, passedEcts, passedCourseCount, failedCourseCount, compulsoryPassedCount);
+    }
+
+    /// <summary>
+    /// γ-hibrit kural lookup + kriter kontrolleri + AKTS fallback. Toplu işlem (PromoteDepartmentStudentsAsync)
+    /// ve tekil işlem (EvaluateStudentPromotionAsync) bu metodu paylaşır — kural mantığı tek noktada.
+    /// Davranış toplu işlemden ÇIKARILDI, değiştirilmedi.
+    /// </summary>
+    private static PromotionEvaluation EvaluatePromotion(
+        PromotionMetrics m,
+        int startLevel,
+        int normalDurationYears,
+        decimal ectsPerYear,
+        List<PromotionRule> rules,
+        int? curriculumId)
+    {
+        var details = new List<string>();
+        var fallbackNotes = new List<string>();
+        var criteria = new List<PromotionCriterionDto>();
+        string? blockReason = null;
+
+        int newLevel = startLevel;
+        for (int fromYear = startLevel; fromYear < normalDurationYears; fromYear++)
+        {
+            // γ hibrit lookup: önce müfredat-özel kural, yoksa program-bazlı (CurriculumId == null)
+            var rule = rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == curriculumId)
+                    ?? rules.FirstOrDefault(r => r.FromYear == fromYear && r.ToYear == fromYear + 1 && r.CurriculumId == null);
+
+            if (rule != null)
+            {
+                bool canPromote = true;
+                var reasons = new List<string>();
+
+                if (rule.MinCgpa.HasValue)
+                {
+                    var passed = m.Cgpa >= rule.MinCgpa.Value;
+                    if (!passed)
+                    {
+                        canPromote = false;
+                        reasons.Add($"CGPA {m.Cgpa:F2} < {rule.MinCgpa.Value:F2} gerekli");
+                    }
+                    if (fromYear == startLevel)
+                        criteria.Add(new PromotionCriterionDto("CGPA", passed, $"{m.Cgpa:F2} / {rule.MinCgpa.Value:F2}"));
+                }
+                if (rule.MinEcts.HasValue)
+                {
+                    var passed = m.PassedEcts >= rule.MinEcts.Value;
+                    if (!passed)
+                    {
+                        canPromote = false;
+                        reasons.Add($"AKTS {m.PassedEcts} < {rule.MinEcts.Value} gerekli");
+                    }
+                    if (fromYear == startLevel)
+                        criteria.Add(new PromotionCriterionDto("AKTS", passed, $"{m.PassedEcts} / {rule.MinEcts.Value}"));
+                }
+                if (rule.MinCourseCount.HasValue)
+                {
+                    var passed = m.PassedCourseCount >= rule.MinCourseCount.Value;
+                    if (!passed)
+                    {
+                        canPromote = false;
+                        reasons.Add($"Ders sayisi {m.PassedCourseCount} < {rule.MinCourseCount.Value} gerekli");
+                    }
+                    if (fromYear == startLevel)
+                        criteria.Add(new PromotionCriterionDto("Geçilen Ders Sayısı", passed, $"{m.PassedCourseCount} / {rule.MinCourseCount.Value}"));
+                }
+                if (rule.MaxFailedCourses.HasValue)
+                {
+                    var passed = m.FailedCourseCount <= rule.MaxFailedCourses.Value;
+                    if (!passed)
+                    {
+                        canPromote = false;
+                        reasons.Add($"Basarisiz ders {m.FailedCourseCount} > max {rule.MaxFailedCourses.Value}");
+                    }
+                    if (fromYear == startLevel)
+                        criteria.Add(new PromotionCriterionDto("Başarısız Ders Sayısı", passed, $"{m.FailedCourseCount} / max {rule.MaxFailedCourses.Value}"));
+                }
+                if (rule.MinCompulsoryCoursePassed.HasValue)
+                {
+                    var passed = m.CompulsoryPassedCount >= rule.MinCompulsoryCoursePassed.Value;
+                    if (!passed)
+                    {
+                        canPromote = false;
+                        reasons.Add($"Zorunlu ders {m.CompulsoryPassedCount} < {rule.MinCompulsoryCoursePassed.Value} gerekli");
+                    }
+                    if (fromYear == startLevel)
+                        criteria.Add(new PromotionCriterionDto("Geçilen Zorunlu Ders", passed, $"{m.CompulsoryPassedCount} / {rule.MinCompulsoryCoursePassed.Value}"));
+                }
+
+                if (canPromote)
+                {
+                    newLevel = fromYear + 1;
+                    details.Add($"{fromYear}→{fromYear + 1}: Gecti (kural bazli)");
+                }
+                else
+                {
+                    details.Add($"{fromYear}→{fromYear + 1}: Engellendi — {string.Join(", ", reasons)}");
+                    blockReason ??= string.Join(", ", reasons);
+                    break; // Seviye atlanamaz
+                }
+            }
+            else
+            {
+                // C9: Kural tanımlı değil — AKTS bazlı fallback + uyarı
+                fallbackNotes.Add($"Uyari: {{program}} icin {fromYear}->{fromYear + 1} gecis kurali tanimlanmamis, AKTS bazli fallback kullanildi.");
+                var ectsForLevel = ectsPerYear * fromYear;
+                var passed = m.PassedEcts >= ectsForLevel;
+                if (fromYear == startLevel)
+                    criteria.Add(new PromotionCriterionDto("AKTS (kuralsız fallback)", passed, $"{m.PassedEcts} / {ectsForLevel:F0}"));
+                if (passed)
+                {
+                    newLevel = fromYear + 1;
+                    details.Add($"{fromYear}→{fromYear + 1}: Gecti (AKTS bazli fallback, {m.PassedEcts}/{ectsForLevel:F0})");
+                }
+                else
+                {
+                    details.Add($"{fromYear}→{fromYear + 1}: Engellendi (AKTS {m.PassedEcts} < {ectsForLevel:F0})");
+                    blockReason ??= $"AKTS {m.PassedEcts} < {ectsForLevel:F0} gerekli";
+                    break;
+                }
+            }
+        }
+
+        return new PromotionEvaluation(newLevel, details, fallbackNotes, criteria, blockReason);
     }
 
     // ═══════════════════════════════════════════════════════════════

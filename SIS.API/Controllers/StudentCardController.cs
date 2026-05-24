@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.AcademicProgression.DTOs;
+using SIS.Application.AcademicProgression.Services;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.StudentCard.Services;
@@ -22,6 +24,7 @@ public class StudentCardController : ControllerBase
     private readonly IAcademicScopeGuard _scopeGuard;
     private readonly IStudentTranscriptService _transcriptService;
     private readonly ICurriculumStatusService _curriculumStatusService;
+    private readonly IAcademicProgressionService _progressionService;
 
     public StudentCardController(
         ICourseRegistrationService registrationService,
@@ -29,7 +32,8 @@ public class StudentCardController : ControllerBase
         AppDbContext context,
         IAcademicScopeGuard scopeGuard,
         IStudentTranscriptService transcriptService,
-        ICurriculumStatusService curriculumStatusService)
+        ICurriculumStatusService curriculumStatusService,
+        IAcademicProgressionService progressionService)
     {
         _registrationService = registrationService;
         _gpaService = gpaService;
@@ -37,6 +41,7 @@ public class StudentCardController : ControllerBase
         _scopeGuard = scopeGuard;
         _transcriptService = transcriptService;
         _curriculumStatusService = curriculumStatusService;
+        _progressionService = progressionService;
     }
 
     [HttpGet("registrations")]
@@ -94,6 +99,59 @@ public class StudentCardController : ControllerBase
         if (guard != null) return guard;
         var dto = await _curriculumStatusService.GetCurriculumStatusAsync(studentId);
         return dto == null ? NotFound(new { message = "Müfredat bilgisi bulunamadı." }) : Ok(dto);
+    }
+
+    [HttpGet("promotion-status")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.view")]
+    public async Task<IActionResult> GetPromotionStatus(int studentId)
+    {
+        var guard = await EnsureAccessAsync(studentId);
+        if (guard != null) return guard;
+        var dto = await _progressionService.EvaluateStudentPromotionAsync(studentId);
+        return dto == null ? NotFound(new { message = "Öğrenci bulunamadı." }) : Ok(dto);
+    }
+
+    [HttpPost("promote")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.promote")]
+    public async Task<IActionResult> Promote(int studentId, [FromBody] PromoteStudentRequest req)
+    {
+        var guard = await EnsureAccessAsync(studentId);
+        if (guard != null) return guard;
+        try
+        {
+            var status = await _progressionService.EvaluateStudentPromotionAsync(studentId);
+            if (status == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            int target;
+            if (req.TargetLevel.HasValue)      // manual override to a chosen level
+                target = req.TargetLevel.Value;
+            else                               // rule-based
+            {
+                if (!status.CanPromote) return BadRequest(new { message = status.Reason ?? "Öğrenci sınıf atlatma kurallarını sağlamıyor." });
+                target = status.EligibleTargetLevel ?? status.CurrentLevel;
+            }
+            await _progressionService.SetStudentLevelAsync(studentId, target);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPost("promotion-rollback")]
+    [RequirePermission("menu.sinif-atlatma-islemleri.rollback")]
+    public async Task<IActionResult> RollbackPromotion(int studentId)
+    {
+        var guard = await EnsureAccessAsync(studentId);
+        if (guard != null) return guard;
+        try
+        {
+            var status = await _progressionService.EvaluateStudentPromotionAsync(studentId);
+            if (status == null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            if (status.CurrentLevel <= 1) return BadRequest(new { message = "Öğrenci zaten 1. sınıfta; geri alınamaz." });
+            await _progressionService.SetStudentLevelAsync(studentId, status.CurrentLevel - 1);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     private async Task<IActionResult?> EnsureAccessAsync(int studentId)

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Authorization;
 using SIS.API.Controllers;
+using SIS.Application.AcademicProgression.Services;
 using SIS.Application.Common.DTOs;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
@@ -270,6 +271,37 @@ public class StudentCardControllerTests
         ok.Value.Should().BeSameAs(expected);
     }
 
+    [Fact]
+    public async Task Promote_ReturnsForbid_WhenCallerCannotAccessDepartment()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var registrationMock = new Mock<ICourseRegistrationService>();
+        var gpaMock = new Mock<IGpaCalculationService>();
+        var progressionMock = new Mock<IAcademicProgressionService>();
+        var scopeGuardMock = new Mock<IAcademicScopeGuard>();
+        scopeGuardMock
+            .Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = CreateController(
+            context, registrationMock.Object, gpaMock.Object, scopeGuardMock.Object,
+            userId: 42, roles: new[] { "DepartmentManager" },
+            progressionService: progressionMock.Object);
+
+        var result = await controller.Promote(5, new SIS.Application.AcademicProgression.DTOs.PromoteStudentRequest(null));
+
+        result.Should().BeOfType<ForbidResult>();
+        progressionMock.Verify(
+            s => s.EvaluateStudentPromotionAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        progressionMock.Verify(
+            s => s.SetStudentLevelAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
     {
         context.Faculties.Add(new Faculty
@@ -320,7 +352,8 @@ public class StudentCardControllerTests
         int userId,
         string[] roles,
         IStudentTranscriptService? transcriptService = null,
-        ICurriculumStatusService? curriculumStatusService = null)
+        ICurriculumStatusService? curriculumStatusService = null,
+        IAcademicProgressionService? progressionService = null)
     {
         var controller = new StudentCardController(
             registrationService,
@@ -328,7 +361,8 @@ public class StudentCardControllerTests
             context,
             scopeGuard,
             transcriptService ?? new Mock<IStudentTranscriptService>().Object,
-            curriculumStatusService ?? new Mock<ICurriculumStatusService>().Object);
+            curriculumStatusService ?? new Mock<ICurriculumStatusService>().Object,
+            progressionService ?? new Mock<IAcademicProgressionService>().Object);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

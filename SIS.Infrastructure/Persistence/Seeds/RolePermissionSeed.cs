@@ -268,6 +268,11 @@ public static class RolePermissionSeed
                 "menu.ogrenci-rehberi.create",
                 "menu.ogrenci-rehberi.edit-academic", // edit-academic: şimdilik yalnızca AdministrativeStaff — akademik-düzenleme planında Dean/DepartmentManager kapsamı tekrar değerlendirilecek
                 "menu.ogrenci-no-degistirme.change",
+
+                // ── Sınıf Atlatma (öğrenci kartı paneli) ──
+                "menu.sinif-atlatma-islemleri.view",
+                "menu.sinif-atlatma-islemleri.promote",
+                "menu.sinif-atlatma-islemleri.rollback",
                 "menu.toplu-danisman-atama.assign",
                 "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",
