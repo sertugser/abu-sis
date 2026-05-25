@@ -42,8 +42,6 @@ public class StudentDocumentPdfService : IStudentDocumentPdfService
 
     public async Task<byte[]?> GenerateStudentInfoFormAsync(int studentId, CancellationToken ct = default)
     {
-        QuestPDF.Settings.License = LicenseType.Community;
-
         var data = await LoadAsync(studentId, ct);
         if (data is null) return null;
 
@@ -98,8 +96,6 @@ public class StudentDocumentPdfService : IStudentDocumentPdfService
 
     public async Task<byte[]?> GenerateEnrollmentCertificateAsync(int studentId, CancellationToken ct = default)
     {
-        QuestPDF.Settings.License = LicenseType.Community;
-
         var data = await LoadAsync(studentId, ct);
         if (data is null) return null;
 

@@ -13,6 +13,14 @@ public class StudentDocumentPdfServiceTests
 {
     private const int StudentId = 5;
 
+    // QuestPDF lisansı production'da Program.cs startup'ında bir kez set edilir
+    // (servisin Generate metotlarından çıkarıldı). Unit testler Program.cs'i çalıştırmadığı
+    // için lisansı burada bir kez ayarlarız.
+    static StudentDocumentPdfServiceTests()
+    {
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+    }
+
     private sealed class FixedClock : IDateTimeProvider
     {
         public DateTime UtcNow => new(2026, 5, 25, 9, 0, 0, DateTimeKind.Utc);

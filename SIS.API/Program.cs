@@ -275,6 +275,8 @@ builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoServi
 builder.Services.AddScoped<IStudentDocumentService, StudentDocumentService>();
 builder.Services.AddScoped<IIssuedDocumentService, IssuedDocumentService>();
 builder.Services.AddScoped<IStudentDocumentPdfService, StudentDocumentPdfService>();
+// QuestPDF Community lisansı bir kez ayarlanır (paylaşılan statik state'e her istekte yazmamak için).
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 builder.Services.AddScoped<IStudentPhotoStorage, FileSystemStudentPhotoStorage>();
 builder.Services.AddScoped<IStudentDocumentStorage, FileSystemStudentDocumentStorage>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();

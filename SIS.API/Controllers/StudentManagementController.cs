@@ -632,18 +632,23 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
     [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GenerateStudentInfoForm(int id, CancellationToken ct = default)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
+        try
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        var accessError = await CheckStudentAccessAsync(id, userId, ct);
-        if (accessError is not null) return accessError;
+            var accessError = await CheckStudentAccessAsync(id, userId, ct);
+            if (accessError is not null) return accessError;
 
-        var pdf = await _pdfService.GenerateStudentInfoFormAsync(id, ct);
-        if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            var pdf = await _pdfService.GenerateStudentInfoFormAsync(id, ct);
+            if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
 
-        await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.StudentInfoForm, userId, ct);
+            await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.StudentInfoForm, userId, ct);
 
-        var studentNumber = await ResolveStudentNumberAsync(id, ct);
-        return File(pdf, "application/pdf", $"ogrenci-bilgi-formu-{studentNumber}.pdf");
+            var studentNumber = await ResolveStudentNumberAsync(id, ct);
+            return File(pdf, "application/pdf", $"ogrenci-bilgi-formu-{studentNumber}.pdf");
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpGet("{id:int}/documents/enrollment-certificate")]
@@ -652,18 +657,23 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
     [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GenerateEnrollmentCertificate(int id, CancellationToken ct = default)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
+        try
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        var accessError = await CheckStudentAccessAsync(id, userId, ct);
-        if (accessError is not null) return accessError;
+            var accessError = await CheckStudentAccessAsync(id, userId, ct);
+            if (accessError is not null) return accessError;
 
-        var pdf = await _pdfService.GenerateEnrollmentCertificateAsync(id, ct);
-        if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
+            var pdf = await _pdfService.GenerateEnrollmentCertificateAsync(id, ct);
+            if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
 
-        await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.EnrollmentCertificate, userId, ct);
+            await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.EnrollmentCertificate, userId, ct);
 
-        var studentNumber = await ResolveStudentNumberAsync(id, ct);
-        return File(pdf, "application/pdf", $"ogrenci-belgesi-{studentNumber}.pdf");
+            var studentNumber = await ResolveStudentNumberAsync(id, ct);
+            return File(pdf, "application/pdf", $"ogrenci-belgesi-{studentNumber}.pdf");
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpGet("{id:int}/issued-documents")]
