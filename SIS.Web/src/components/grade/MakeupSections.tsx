@@ -15,6 +15,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   useButunlemeRoster,
   useFinalizeButunleme,
   useFinalizeMazeret,
@@ -330,15 +336,34 @@ export function ButunlemePanel({ sectionId }: ButunlemePanelProps) {
                   <RefreshCw className={`h-4 w-4 ${saveScoresMut.isPending ? 'animate-spin' : ''}`} />
                   {saveScoresMut.isPending ? 'Kaydediliyor...' : 'Puanları Kaydet'}
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={handleFinalize}
-                  disabled={finalizeMut.isPending}
-                  className="gap-1.5"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  {finalizeMut.isPending ? 'İşleniyor...' : 'Bütünleme Sonuçlandır'}
-                </Button>
+                {(() => {
+                  const hasUnsaved = Object.values(pendingScores).some((v) => v !== '');
+                  const finalizeDisabled = finalizeMut.isPending || hasUnsaved;
+                  return (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={finalizeDisabled ? 0 : undefined}>
+                            <Button
+                              size="sm"
+                              onClick={handleFinalize}
+                              disabled={finalizeDisabled}
+                              className="gap-1.5"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                              {finalizeMut.isPending ? 'İşleniyor...' : 'Bütünleme Sonuçlandır'}
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {hasUnsaved && (
+                          <TooltipContent>
+                            <p>Önce puanları kaydedin.</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                  );
+                })()}
               </div>
             </>
           )}
@@ -551,15 +576,34 @@ export function MazeretPanel({ sectionId }: MazeretPanelProps) {
                   <RefreshCw className={`h-4 w-4 ${saveScoresMut.isPending ? 'animate-spin' : ''}`} />
                   {saveScoresMut.isPending ? 'Kaydediliyor...' : 'Puanları Kaydet'}
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={handleFinalize}
-                  disabled={finalizeMut.isPending}
-                  className="gap-1.5"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  {finalizeMut.isPending ? 'İşleniyor...' : 'Mazeret Sonuçlandır'}
-                </Button>
+                {(() => {
+                  const hasUnsaved = Object.values(pendingScores).some((v) => v !== '');
+                  const finalizeDisabled = finalizeMut.isPending || hasUnsaved;
+                  return (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={finalizeDisabled ? 0 : undefined}>
+                            <Button
+                              size="sm"
+                              onClick={handleFinalize}
+                              disabled={finalizeDisabled}
+                              className="gap-1.5"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                              {finalizeMut.isPending ? 'İşleniyor...' : 'Mazeret Sonuçlandır'}
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {hasUnsaved && (
+                          <TooltipContent>
+                            <p>Önce puanları kaydedin.</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
+                  );
+                })()}
               </div>
             </>
           )}

@@ -1032,35 +1032,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         }
 
         // 2. Harf notu aralıkları: yönerge kilitliyse ya da section criteria yoksa regulation eşikleri kullanılır.
-        var criteria = await _context.GradingCriteria
-            .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
-
-        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
-            section.CourseId, section.TermId, default);
-
-        GradingCriteria effectiveCriteria;
-        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
-        {
-            // Regulation-driven: build a transient GradingCriteria from the policy thresholds.
-            // Do NOT persist — used only for letter resolution in this finalize run.
-            effectiveCriteria = new GradingCriteria
-            {
-                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
-                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
-                DDMin = letterPolicy.DDMin
-            };
-        }
-        else if (criteria != null)
-        {
-            effectiveCriteria = criteria;
-        }
-        else
-        {
-            if (letterPolicy != null && !letterPolicy.Editable && !letterPolicy.HasUniqueThresholds)
-                return BadRequest(new { error = "Bu dersin bağlı programları arasında çelişen harf aralıkları var. Sınav müfredatını (harf aralıklarını) düzeltin." });
-
-            return BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." });
-        }
+        var (effectiveCriteria, criteriaError) = await ResolveEffectiveCriteriaAsync(section, cancellationToken: default);
+        if (criteriaError != null)
+            return criteriaError;
 
         // 3. Section'daki aktif öğrencileri al (çekilenler hariç — GetGrades ile tutarlı)
         var registrations = await _context.CourseRegistrations
@@ -1266,10 +1240,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         {
             var (weightedScore, roundedScore, studentGrades) = roundedScores[reg.Id];
 
-            // Base letter: from relative curve (if active) or absolute criteria
+            // Base letter: from relative curve (if active) or absolute criteria.
+            // effectiveCriteria is guaranteed non-null here (criteriaError guard above).
             var baseLetter = relativeLetters != null
                 ? relativeLetters[reg.Id]
-                : effectiveCriteria.ResolveGrade(roundedScore);
+                : effectiveCriteria!.ResolveGrade(roundedScore);
 
             // Sınav yönergesi: final barajı + geçme notu + Rule C (bulk dict lookup, no N+1)
             examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
@@ -1554,8 +1529,18 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 && cr.Grade == GradeCode.FF)
             .ToListAsync();
 
-        var ffRegistrationMap = ffRegistrations.ToDictionary(r => r.StudentId);
-        var ffRegistrationIds = ffRegistrations.Select(r => r.Id).ToList();
+        // F guard (AutoTransferFailedToMakeup): resolve exam regulations and filter out students
+        // whose regulation has F=false. Mirrors the same check in FinalizeButunleme and the roster.
+        // Storing an orphan MakeupScore for an ineligible student would be silently ignored at
+        // finalize time but creates confusing DB state.
+        var ffStudentIds = ffRegistrations.Select(r => r.StudentId).Distinct().ToList();
+        var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
+            ffStudentIds, section.TermId, default);
+
+        var ffRegistrationMap = ffRegistrations
+            .Where(r => examRegByStudent.TryGetValue(r.StudentId, out var reg) && reg!.AutoTransferFailedToMakeup)
+            .ToDictionary(r => r.StudentId);
+        var ffRegistrationIds = ffRegistrationMap.Values.Select(r => r.Id).ToList();
 
         // Load existing StudentGrade rows for Final component
         var existingGradeRows = await _context.StudentGrades
@@ -1569,7 +1554,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         foreach (var item in dto.Items)
         {
             if (!ffRegistrationMap.TryGetValue(item.StudentId, out var reg))
-                continue; // only process FF students in this section
+                continue; // only process F-eligible FF students in this section
 
             if (existingGradeRows.TryGetValue(reg.Id, out var existing))
             {
@@ -1633,31 +1618,14 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
         var finalComponents = components.Where(c => c.Type == GradeComponentType.Final).ToList();
 
-        // Resolve grading criteria (mirrors Finalize)
-        var criteria = await _context.GradingCriteria
-            .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
-
-        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
-            section.CourseId, section.TermId, default);
-
-        GradingCriteria effectiveCriteria;
-        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
-        {
-            effectiveCriteria = new GradingCriteria
-            {
-                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
-                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
-                DDMin = letterPolicy.DDMin
-            };
-        }
-        else if (criteria != null)
-        {
-            effectiveCriteria = criteria;
-        }
-        else
-        {
-            return BadRequest(new { error = "Harf notu aralıkları tanımlanmadan bütünleme sonuçlandırılamaz." });
-        }
+        // Resolve grading criteria (mirrors Finalize — shared helper).
+        // INTENTIONAL: makeup recompute uses the ABSOLUTE effectiveCriteria only.
+        // The relative (curve) grading was applied once at the original Finalize run.
+        // For makeup (büt), the instructor's set absolute table is used per the regulation
+        // model — the curve is NOT re-run.
+        var (effectiveCriteria, criteriaError) = await ResolveEffectiveCriteriaAsync(section, cancellationToken: default);
+        if (criteriaError != null)
+            return criteriaError;
 
         // Get FF registrations eligible for bütünleme
         var ffRegistrations = await _context.CourseRegistrations
@@ -1751,11 +1719,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
             var oldGrade = reg.Grade;
 
-            // Recompute with useMakeupScore=true — büt replaces final
+            // Recompute with useMakeupScore=true — büt replaces final.
+            // effectiveCriteria is guaranteed non-null here (criteriaError guard above).
             var (weightedScore, roundedScore) = ComputeStudentWeightedScore(
                 components, studentGrades, studentReg, useMakeupScore: true);
 
-            var baseLetter = effectiveCriteria.ResolveGrade(roundedScore);
+            var baseLetter = effectiveCriteria!.ResolveGrade(roundedScore);
             var finalRaw = ComputeStudentFinalRaw(components, studentGrades, useMakeupScore: true);
             var newGrade = ApplyGradeRules(baseLetter, roundedScore, finalRaw, studentGrades, components, studentReg);
 
@@ -2041,31 +2010,14 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             .OrderBy(gc => gc.Order)
             .ToListAsync();
 
-        // Resolve grading criteria (mirrors Finalize / bütünleme)
-        var criteria = await _context.GradingCriteria
-            .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
-
-        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
-            section.CourseId, section.TermId, default);
-
-        GradingCriteria effectiveCriteria;
-        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
-        {
-            effectiveCriteria = new GradingCriteria
-            {
-                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
-                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
-                DDMin = letterPolicy.DDMin
-            };
-        }
-        else if (criteria != null)
-        {
-            effectiveCriteria = criteria;
-        }
-        else
-        {
-            return BadRequest(new { error = "Harf notu aralıkları tanımlanmadan mazeret sonuçlandırılamaz." });
-        }
+        // Resolve grading criteria (mirrors Finalize — shared helper).
+        // INTENTIONAL: makeup recompute uses the ABSOLUTE effectiveCriteria only.
+        // The relative (curve) grading was applied once at the original Finalize run.
+        // For mazeret, the instructor's set absolute table is used per the regulation
+        // model — the curve is NOT re-run.
+        var (effectiveCriteria, criteriaError) = await ResolveEffectiveCriteriaAsync(section, cancellationToken: default);
+        if (criteriaError != null)
+            return criteriaError;
 
         // Get I-registrations eligible for mazeret
         var incompleteRegistrations = await _context.CourseRegistrations
@@ -2139,11 +2091,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
             var oldGrade = reg.Grade;
 
-            // Recompute with useMakeupScore=true — makeup replaces excused component score
+            // Recompute with useMakeupScore=true — makeup replaces excused component score.
+            // effectiveCriteria is guaranteed non-null here (criteriaError guard above).
             var (weightedScore, roundedScore) = ComputeStudentWeightedScore(
                 components, studentGrades, studentReg, useMakeupScore: true);
 
-            var baseLetter = effectiveCriteria.ResolveGrade(roundedScore);
+            var baseLetter = effectiveCriteria!.ResolveGrade(roundedScore);
             var finalRaw = ComputeStudentFinalRaw(components, studentGrades, useMakeupScore: true);
             var newGrade = ApplyGradeRules(baseLetter, roundedScore, finalRaw, studentGrades, components, studentReg);
 
@@ -2297,8 +2250,14 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// component's StudentGrade.MakeupScore is non-null, MakeupScore is used in place of Score.
     /// </summary>
     /// <remarks>
-    /// Pre-condition: all gradeRow entries for non-Absent components have a non-null Score
-    /// (guaranteed by the missing-grades check in Finalize before this helper is called).
+    /// Pre-condition — callers MUST ensure every component has a StudentGrade row for this student
+    /// before calling this method:
+    ///   - Finalize: enforces this via the missing-grades check (returns 400 if any row is absent).
+    ///   - Makeup (büt/mazeret): enforces this via the readiness check (skips the student if not
+    ///     all required scores are present).
+    /// The <c>.First(...)</c> call below will throw <see cref="InvalidOperationException"/> on
+    /// violation BY DESIGN — a loud failure is strongly preferred over silently producing a wrong
+    /// grade from incomplete data.  Do NOT change .First to .FirstOrDefault here.
     /// </remarks>
     private static (decimal WeightedScore, int RoundedScore) ComputeStudentWeightedScore(
         IReadOnlyList<GradeComponent> components,
@@ -2364,6 +2323,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     /// Absent components contribute 0. When <paramref name="useMakeupScore"/> is true and a
     /// component's StudentGrade.MakeupScore is non-null, MakeupScore is used in place of Score.
     /// Returns null when there are no Final-type components.
+    /// <para>
+    /// Pre-condition — callers MUST ensure every Final-type component has a StudentGrade row for
+    /// this student before calling (same guarantee as <see cref="ComputeStudentWeightedScore"/>).
+    /// The <c>.First(...)</c> call inside will throw <see cref="InvalidOperationException"/> on
+    /// violation BY DESIGN.  Do NOT change .First to .FirstOrDefault here.
+    /// </para>
     /// </summary>
     private static decimal? ComputeStudentFinalRaw(
         IReadOnlyList<GradeComponent> components,
@@ -2518,6 +2483,54 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             .AnyAsync(other => other.CourseId == section.CourseId
                 && other.TermId == section.TermId
                 && other.InstructorId != section.InstructorId);
+    }
+
+    /// <summary>
+    /// Resolves the effective <see cref="GradingCriteria"/> for the given section's course/term.
+    /// Priority order (mirrors what Finalize uses):
+    ///   1. If the letter policy supplies unique thresholds AND (editing is locked OR no section
+    ///      GradingCriteria row exists yet) → build a transient GradingCriteria from the policy.
+    ///      The transient object is NOT persisted.
+    ///   2. Section-level GradingCriteria row (instructor-editable, persisted).
+    ///   3. Neither applies → error:
+    ///      - Conflicting policy (non-editable, no unique thresholds) → conflict error message.
+    ///      - No criteria at all → generic missing-criteria error message.
+    /// </summary>
+    /// <returns>
+    /// A tuple where <c>Criteria</c> is non-null iff <c>Error</c> is null.
+    /// Callers MUST check <c>Error != null</c> and return it before using <c>Criteria</c>.
+    /// </returns>
+    private async Task<(GradingCriteria? Criteria, IActionResult? Error)> ResolveEffectiveCriteriaAsync(
+        CourseSection section, CancellationToken cancellationToken)
+    {
+        var criteria = await _context.GradingCriteria
+            .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId,
+                cancellationToken);
+
+        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
+            section.CourseId, section.TermId, cancellationToken);
+
+        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
+        {
+            // Regulation-driven: build a transient GradingCriteria from the policy thresholds.
+            // Do NOT persist — used only for letter resolution in this finalize run.
+            var transient = new GradingCriteria
+            {
+                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
+                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
+                DDMin = letterPolicy.DDMin
+            };
+            return (transient, null);
+        }
+
+        if (criteria != null)
+            return (criteria, null);
+
+        // Neither path yielded criteria — return an appropriate error.
+        if (letterPolicy != null && !letterPolicy.Editable && !letterPolicy.HasUniqueThresholds)
+            return (null, BadRequest(new { error = "Bu dersin bağlı programları arasında çelişen harf aralıkları var. Sınav müfredatını (harf aralıklarını) düzeltin." }));
+
+        return (null, BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." }));
     }
 
     private async Task<CourseSection?> GetAuthorizedSectionAsync(int sectionId)
