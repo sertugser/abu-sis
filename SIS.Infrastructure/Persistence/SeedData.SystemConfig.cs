@@ -35,6 +35,7 @@ public static partial class SeedData
             new() { Key = "Attendance.TermWeekCount", Value = "14", Category = "Attendance", DataType = "int", Description = "Devamsizlik hesabinda kullanilan aktif donem hafta sayisi" },
             new() { Key = "Attendance.TheoryAbsenceLimitPercent", Value = "30", Category = "Attendance", DataType = "decimal", Description = "Teorik derslerde devamsizliktan kalma esigi (%)" },
             new() { Key = "Attendance.LabAbsenceLimitPercent", Value = "20", Category = "Attendance", DataType = "decimal", Description = "Uygulama/lab derslerinde devamsizliktan kalma esigi (%)" },
+            new() { Key = "ExamRegulation.GlobalEditLock", Value = "false", Category = "ExamRegulation", DataType = "bool", Description = "Açıkken sınav yönergelerinde ekleme/düzenleme/silme tüm rollere kapalı (SysAdmin hariç)." },
 
             // ── Kayıt ECTS Limitleri ─────────────────────────────
             new() { Key = "Registration.EctsLimit.CgpaBelow200", Value = "30", Category = "Registration", DataType = "int", Description = "CGPA < 2.00 olan öğrencilerin alabileceği max AKTS" },
