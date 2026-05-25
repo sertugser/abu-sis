@@ -104,6 +104,16 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         return NoContent();
     }
 
+    [HttpGet("attendance-policy")]
+    [RequirePermission("menu.sinav-mufredati.view")]
+    public async Task<IActionResult> GetAttendancePolicy(CancellationToken ct)
+    {
+        var weekCount = await _config.GetIntAsync("Attendance.TermWeekCount", 14, ct);
+        var theoryPercent = await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30, ct);
+        var labPercent = await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20, ct);
+        return Ok(new AttendancePolicyDto(weekCount, theoryPercent, labPercent));
+    }
+
     [HttpPost("{id:int}/clone")]
     [RequirePermission("menu.sinav-mufredati.create")]
     public async Task<IActionResult> Clone(int id, [FromBody] CloneExamRegulationRequest req, CancellationToken ct)
@@ -256,3 +266,5 @@ public record SaveExamRegulationRequest(
     int CCMin = 55, int DCMin = 50, int DDMin = 45, bool LetterRangesEditable = true);
 
 public record CloneExamRegulationRequest(int? ProgramId, int Year);
+
+public record AttendancePolicyDto(int TermWeekCount, decimal TheoryAbsenceLimitPercent, decimal LabAbsenceLimitPercent);

@@ -5,6 +5,7 @@ import {
   getExamRegulations,
   updateExamRegulation,
   cloneExamRegulation,
+  getAttendancePolicy,
 } from '../api/examRegulation.api';
 import type { SaveExamRegulationRequest } from '../types/examRegulation';
 
@@ -48,5 +49,13 @@ export function useCloneExamRegulation() {
     mutationFn: ({ id, payload }: { id: number; payload: { programId?: number; year: number } }) =>
       cloneExamRegulation(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ROOT }),
+  });
+}
+
+export function useAttendancePolicy() {
+  return useQuery({
+    queryKey: [...ROOT, 'attendance-policy'],
+    queryFn: getAttendancePolicy,
+    staleTime: 5 * 60 * 1000,
   });
 }

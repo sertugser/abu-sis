@@ -28,3 +28,14 @@ export async function cloneExamRegulation(id: number, payload: { programId?: num
   const { data } = await apiClient.post<ExamRegulation>(`${API}/${id}/clone`, payload);
   return data;
 }
+
+export interface AttendancePolicy {
+  termWeekCount: number;
+  theoryAbsenceLimitPercent: number;
+  labAbsenceLimitPercent: number;
+}
+
+export async function getAttendancePolicy(): Promise<AttendancePolicy> {
+  const { data } = await apiClient.get<AttendancePolicy>(`${API}/attendance-policy`);
+  return data;
+}
