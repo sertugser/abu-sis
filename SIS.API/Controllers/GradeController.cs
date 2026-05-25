@@ -124,6 +124,7 @@ public class GradeController : ControllerBase
             component.Name = dto.Name;
             component.Weight = dto.Weight;
             component.Order = dto.Order;
+            component.Type = dto.Type;
         }
         else
         {
@@ -134,7 +135,8 @@ public class GradeController : ControllerBase
                 AcademicTermId = section.TermId,
                 Name = dto.Name,
                 Weight = dto.Weight,
-                Order = dto.Order
+                Order = dto.Order,
+                Type = dto.Type
             };
             _context.GradeComponents.Add(component);
         }
@@ -1242,6 +1244,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         public string Name { get; set; } = string.Empty;
         public decimal Weight { get; set; }
         public int Order { get; set; }
+        public GradeComponentType Type { get; set; } = GradeComponentType.Other;
     }
 
     public class GradeSubmitDto
