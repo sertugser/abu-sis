@@ -1223,47 +1223,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         foreach (var reg in gradedRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
-
-            // Rule A — BlockFinalIfNoMidterm (opt-in): if the student's regulation has this flag
-            // enabled AND the student attended NO midterm component, treat all Final-type component
-            // scores as 0 for the weighted computation (they cannot benefit from the final).
-            // "Attended a midterm" = ExamAttendance==Present OR (NotMarked AND Score!=null).
             examRegByStudent.TryGetValue(reg.StudentId, out var studentRegForPrePass);
-            var blockFinalScores = false;
-            if (studentRegForPrePass != null && studentRegForPrePass.BlockFinalIfNoMidterm)
-            {
-                var midtermComponents = components.Where(c => c.Type == GradeComponentType.Midterm).ToList();
-                // Rule A is only meaningful when midterm components actually exist.
-                // If there are no midterm components, "attended no midterm" is trivially true
-                // but penalising is wrong — the rule must be moot in this case.
-                if (midtermComponents.Count > 0)
-                {
-                    var attendedAnyMidterm = midtermComponents.Any(mc =>
-                    {
-                        var g = studentGrades.FirstOrDefault(sg => sg.GradeComponentId == mc.Id);
-                        if (g == null) return false;
-                        return g.ExamAttendance == ExamAttendance.Present
-                            || (g.ExamAttendance == ExamAttendance.NotMarked && g.Score != null);
-                    });
-                    blockFinalScores = !attendedAnyMidterm;
-                }
-            }
 
-            decimal weightedScore = 0;
-            foreach (var comp in components)
-            {
-                // gradeRow is guaranteed present by the missing-grades check above (for graded registrations).
-                var gradeRow = studentGrades.First(g => g.GradeComponentId == comp.Id);
-                // Absent → 0; otherwise use the stored score (guaranteed non-null for non-Absent by the missing-grades check).
-                var score = gradeRow.ExamAttendance == ExamAttendance.Absent
-                    ? 0m
-                    : gradeRow.Score!.Value;
-                // Rule A: override Final-type score to 0 when BlockFinalIfNoMidterm fired.
-                if (blockFinalScores && comp.Type == GradeComponentType.Final)
-                    score = 0m;
-                weightedScore += score * comp.Weight / 100m;
-            }
-            var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
+            var (weightedScore, roundedScore) = ComputeStudentWeightedScore(
+                components, studentGrades, studentRegForPrePass, useMakeupScore: false);
+
             roundedScores[reg.Id] = (weightedScore, roundedScore, studentGrades);
         }
 
@@ -1297,64 +1261,21 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             // If FellBackToAbsolute: relativeLetters stays null → absolute path used below
         }
 
-        // ── Per-student assign: base letter + existing Faz 2a floors ────────────
+        // ── Per-student assign: base letter + floors + rules ────────────────────
         foreach (var reg in gradedRegistrations)
         {
             var (weightedScore, roundedScore, studentGrades) = roundedScores[reg.Id];
 
             // Base letter: from relative curve (if active) or absolute criteria
-            var letterGrade = relativeLetters != null
+            var baseLetter = relativeLetters != null
                 ? relativeLetters[reg.Id]
                 : effectiveCriteria.ResolveGrade(roundedScore);
 
-            // Sınav yönergesi: final barajı + geçme notu kontrolü (bulk dict lookup, no N+1)
+            // Sınav yönergesi: final barajı + geçme notu + Rule C (bulk dict lookup, no N+1)
             examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
 
-            if (studentReg != null)
-            {
-                // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → BelowFloorGrade
-                var finalComponents = components
-                    .Where(c => c.Type == GradeComponentType.Final)
-                    .ToList();
-
-                if (finalComponents.Count > 0 && studentReg.FinalExamFloor > 0)
-                {
-                    var finalAvg = finalComponents
-                        .Select(fc =>
-                        {
-                            var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
-                            return g.ExamAttendance == ExamAttendance.Absent ? 0m : g.Score!.Value;
-                        })
-                        .Average();
-
-                    if (finalAvg < studentReg.FinalExamFloor)
-                        letterGrade = studentReg.BelowFloorGrade;
-                }
-
-                // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → BelowFloorGrade (varsayılan: FF)
-                if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
-                    letterGrade = studentReg.BelowFloorGrade;
-
-                // Rule C — FailIfNoFinal (opt-in): if the student's regulation has this flag
-                // enabled AND the student's Final component attendance is Absent (unexcused
-                // non-attendance), assign BelowFloorGrade regardless of the numeric average.
-                // Excused students are already assigned GradeCode.I above and excluded from
-                // gradedRegistrations, so only truly absent students reach this point.
-                if (studentReg.FailIfNoFinal)
-                {
-                    var failFinalComps = components
-                        .Where(c => c.Type == GradeComponentType.Final)
-                        .ToList();
-                    var absentFromFinal = failFinalComps.Count > 0
-                        && failFinalComps.Any(fc =>
-                        {
-                            var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
-                            return g.ExamAttendance == ExamAttendance.Absent;
-                        });
-                    if (absentFromFinal)
-                        letterGrade = studentReg.BelowFloorGrade;
-                }
-            }
+            var finalRaw = ComputeStudentFinalRaw(components, studentGrades, useMakeupScore: false);
+            var letterGrade = ApplyGradeRules(baseLetter, roundedScore, finalRaw, studentGrades, components, studentReg);
 
             reg.Grade = letterGrade;
             reg.UpdatedAt = DateTime.UtcNow;
@@ -1549,6 +1470,169 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Not araliklari guncellendi. Sonuclandirilmis sectionlar etkilenmez, yeniden sonuclandirma gerekir." });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  PER-STUDENT GRADE COMPUTATION HELPERS
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Computes the weighted score (decimal) and rounded integer score for one student.
+    /// Absent components contribute 0. Rule A (BlockFinalIfNoMidterm) zeroes Final-type
+    /// components when triggered. When <paramref name="useMakeupScore"/> is true and a
+    /// component's StudentGrade.MakeupScore is non-null, MakeupScore is used in place of Score.
+    /// </summary>
+    /// <remarks>
+    /// Pre-condition: all gradeRow entries for non-Absent components have a non-null Score
+    /// (guaranteed by the missing-grades check in Finalize before this helper is called).
+    /// </remarks>
+    private static (decimal WeightedScore, int RoundedScore) ComputeStudentWeightedScore(
+        IReadOnlyList<GradeComponent> components,
+        IReadOnlyList<StudentGrade> studentGrades,
+        ExamRegulation? studentReg,
+        bool useMakeupScore)
+    {
+        // Rule A — BlockFinalIfNoMidterm (opt-in): when enabled and the student attended
+        // NO midterm component, treat all Final-type component scores as 0.
+        // "Attended a midterm" = ExamAttendance==Present OR (NotMarked AND Score!=null).
+        var blockFinalScores = false;
+        if (studentReg != null && studentReg.BlockFinalIfNoMidterm)
+        {
+            var midtermComponents = components.Where(c => c.Type == GradeComponentType.Midterm).ToList();
+            // Rule A is only meaningful when midterm components actually exist.
+            // If there are no midterm components, "attended no midterm" is trivially true
+            // but penalising is wrong — the rule must be moot in this case.
+            if (midtermComponents.Count > 0)
+            {
+                var attendedAnyMidterm = midtermComponents.Any(mc =>
+                {
+                    var g = studentGrades.FirstOrDefault(sg => sg.GradeComponentId == mc.Id);
+                    if (g == null) return false;
+                    return g.ExamAttendance == ExamAttendance.Present
+                        || (g.ExamAttendance == ExamAttendance.NotMarked && g.Score != null);
+                });
+                blockFinalScores = !attendedAnyMidterm;
+            }
+        }
+
+        decimal weightedScore = 0;
+        foreach (var comp in components)
+        {
+            // gradeRow is guaranteed present by the missing-grades check (for graded registrations).
+            var gradeRow = studentGrades.First(g => g.GradeComponentId == comp.Id);
+
+            decimal score;
+            if (gradeRow.ExamAttendance == ExamAttendance.Absent)
+            {
+                score = 0m;
+            }
+            else
+            {
+                // When useMakeupScore is true and MakeupScore is available, use it; otherwise Score.
+                score = (useMakeupScore && gradeRow.MakeupScore != null)
+                    ? gradeRow.MakeupScore.Value
+                    : gradeRow.Score!.Value;
+            }
+
+            // Rule A: override Final-type score to 0 when BlockFinalIfNoMidterm fired.
+            if (blockFinalScores && comp.Type == GradeComponentType.Final)
+                score = 0m;
+
+            weightedScore += score * comp.Weight / 100m;
+        }
+
+        var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
+        return (weightedScore, roundedScore);
+    }
+
+    /// <summary>
+    /// Computes the raw average score of all Final-type components for one student.
+    /// Absent components contribute 0. When <paramref name="useMakeupScore"/> is true and a
+    /// component's StudentGrade.MakeupScore is non-null, MakeupScore is used in place of Score.
+    /// Returns null when there are no Final-type components.
+    /// </summary>
+    private static decimal? ComputeStudentFinalRaw(
+        IReadOnlyList<GradeComponent> components,
+        IReadOnlyList<StudentGrade> studentGrades,
+        bool useMakeupScore)
+    {
+        var finalComponents = components
+            .Where(c => c.Type == GradeComponentType.Final)
+            .ToList();
+
+        if (finalComponents.Count == 0)
+            return null;
+
+        var finalRaw = finalComponents
+            .Select(fc =>
+            {
+                var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
+                if (g.ExamAttendance == ExamAttendance.Absent)
+                    return 0m;
+                return (useMakeupScore && g.MakeupScore != null)
+                    ? g.MakeupScore.Value
+                    : g.Score!.Value;
+            })
+            .Average();
+
+        return finalRaw;
+    }
+
+    /// <summary>
+    /// Applies exam-regulation floors and rule C on top of a base letter grade.
+    /// Returns the final <see cref="GradeCode"/> to assign.
+    /// </summary>
+    /// <param name="baseLetter">Letter resolved from absolute criteria or relative curve.</param>
+    /// <param name="roundedScore">Integer weighted score for PassingGrade check.</param>
+    /// <param name="finalRaw">Average raw score of Final-type components (null when none exist).</param>
+    /// <param name="studentGrades">All StudentGrade rows for this registration (for Rule C absent check).</param>
+    /// <param name="components">All GradeComponent rows for the course/term (for Rule C absent check).</param>
+    /// <param name="studentReg">Student's resolved exam regulation (null → no floors/rules applied).</param>
+    private static GradeCode ApplyGradeRules(
+        GradeCode baseLetter,
+        int roundedScore,
+        decimal? finalRaw,
+        IReadOnlyList<StudentGrade> studentGrades,
+        IReadOnlyList<GradeComponent> components,
+        ExamRegulation? studentReg)
+    {
+        if (studentReg == null)
+            return baseLetter;
+
+        var letterGrade = baseLetter;
+
+        // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → BelowFloorGrade
+        if (finalRaw.HasValue && studentReg.FinalExamFloor > 0)
+        {
+            if (finalRaw.Value < studentReg.FinalExamFloor)
+                letterGrade = studentReg.BelowFloorGrade;
+        }
+
+        // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → BelowFloorGrade
+        if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
+            letterGrade = studentReg.BelowFloorGrade;
+
+        // Rule C — FailIfNoFinal (opt-in): if the student's regulation has this flag
+        // enabled AND the student's Final component attendance is Absent (unexcused
+        // non-attendance), assign BelowFloorGrade regardless of the numeric average.
+        // Excused students are already assigned GradeCode.I above and excluded from
+        // gradedRegistrations, so only truly absent students reach this point.
+        if (studentReg.FailIfNoFinal)
+        {
+            var finalComps = components
+                .Where(c => c.Type == GradeComponentType.Final)
+                .ToList();
+            var absentFromFinal = finalComps.Count > 0
+                && finalComps.Any(fc =>
+                {
+                    var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
+                    return g.ExamAttendance == ExamAttendance.Absent;
+                });
+            if (absentFromFinal)
+                letterGrade = studentReg.BelowFloorGrade;
+        }
+
+        return letterGrade;
     }
 
     // ══════════════════════════════════════════════════════════
