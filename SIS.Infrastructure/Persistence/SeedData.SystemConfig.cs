@@ -84,6 +84,9 @@ public static partial class SeedData
             new() { Key = "Application.DeregistrationCareerPortalEnabled", Value = "false", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusu kariyer portalından başvuruya açık" },
             new() { Key = "Application.DeregistrationRequireEDevletLogin", Value = "true", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusuna sadece e-Devlet ile giriş yapan öğrenciler başvuru yapabilir" },
 
+            // ── Sınav Yönergesi Kontrolleri ───────────────────────
+            new() { Key = "ExamRegulation.GlobalEditLock", Value = "false", Category = "ExamRegulation", DataType = "bool", Description = "Açıkken sınav yönergelerinde ekleme/düzenleme/silme tüm rollere kapalı (SysAdmin hariç)." },
+
             // ── Ders Çekilme Limitleri ────────────────────────────
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
             new() { Key = "Withdrawal.MaxCount.Associate", Value = "3", Category = "Registration", DataType = "int", Description = "Önlisans öğrencileri için toplam çekilme hakkı" },
