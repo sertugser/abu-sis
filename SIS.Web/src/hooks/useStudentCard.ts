@@ -579,3 +579,46 @@ export function useDeleteScholarship() {
       qc.invalidateQueries({ queryKey: SCHOLARSHIPS_KEY(studentId) }),
   });
 }
+
+export interface StudentPlacement {
+  id: number | null;
+  entranceType: string | null;
+  entranceTypeLabel: string | null;
+  scoreType: string | null;
+  score: number | null;
+  rankOrder: number | null;
+  quotaType: string | null;
+  placementYear: number | null;
+  preferenceOrder: number | null;
+  placedProgramName: string | null;
+  note: string | null;
+}
+
+export type UpdatePlacement = Omit<StudentPlacement, 'id' | 'entranceTypeLabel'>;
+
+const PLACEMENT_KEY = (studentId: number) =>
+  ['admin', 'student-card', 'placement', studentId] as const;
+
+export function usePlacement(studentId: number | null) {
+  return useQuery({
+    queryKey: PLACEMENT_KEY(studentId ?? 0),
+    queryFn: async () =>
+      (await apiClient.get<StudentPlacement>(`${BASE}/${studentId}/placement`)).data,
+    enabled: studentId != null,
+  });
+}
+
+export function useUpdatePlacement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId, dto }: { studentId: number; dto: UpdatePlacement }) => {
+      try {
+        await apiClient.put(`${BASE}/${studentId}/placement`, dto);
+      } catch (err) {
+        throw asBackendError(err, 'Yerleştirme bilgileri güncellenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: PLACEMENT_KEY(studentId) }),
+  });
+}
