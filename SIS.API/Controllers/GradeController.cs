@@ -12,6 +12,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using ClosedXML.Excel;
+using static SIS.Application.Grading.AttendanceAbsenceCalculator;
 
 namespace SIS.API.Controllers;
 
@@ -951,7 +952,78 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             .GroupBy(grade => grade.CourseRegistrationId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var missingGrades = registrations
+        // 3b. Devamsızlık NA kontrolü — eksik yoklama girişi olan kayıtlar atlanır, sadece
+        //     gerçek devamsızlık kaydı bulunan ve limiti aşan öğrenciler NA alır.
+        var attendanceRecordsForSection = await _context.AttendanceRecords
+            .AsNoTracking()
+            .Where(ar => registrationIds.Contains(ar.CourseRegistrationId))
+            .ToListAsync();
+
+        var attendanceByRegistration = attendanceRecordsForSection
+            .GroupBy(ar => ar.CourseRegistrationId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<AttendanceRecord>)g.ToList());
+
+        // Build ordered schedule slots for this section (mirrors GetStudentAttendanceStatusAsync)
+        var sectionScheduleRows = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .Select(ss => new
+            {
+                ss.BlockType,
+                ss.TimeSlot.DayOfWeek,
+                ss.TimeSlot.StartTime,
+                ss.TimeSlot.SlotOrder
+            })
+            .ToListAsync();
+
+        var sectionSlots = sectionScheduleRows
+            .OrderBy(s => DaysFromMonday(s.DayOfWeek))
+            .ThenBy(s => s.StartTime)
+            .ThenBy(s => s.SlotOrder)
+            .Select((s, index) => new AttendanceSlotInfo(index + 1, s.BlockType))
+            .ToList();
+
+        // Config keys with defaults: 14 weeks / 30% theory / 20% lab
+        var weekCount = Math.Max(1, await _systemConfig.GetIntAsync("Attendance.TermWeekCount", 14));
+        var theoryLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m);
+        var labLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m);
+
+        var course = section.Course;
+        var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
+        var labTotalHours = weekCount * Math.Max(0, course.LabHours);
+        var theoryLimitHours = CalculateLimitHours(theoryTotalHours, theoryLimitPercent);
+        var labLimitHours = CalculateLimitHours(labTotalHours, labLimitPercent);
+
+        var naRegistrationIds = new HashSet<int>();
+
+        foreach (var reg in registrations)
+        {
+            if (!attendanceByRegistration.TryGetValue(reg.Id, out var records) || records.Count == 0)
+                continue; // No attendance data → not auto-NA
+
+            var (theoryAbs, labAbs) = CalculateAbsenceHours(
+                records,
+                course.TheoryHours,
+                course.LabHours,
+                course.ApplicationHours,
+                sectionSlots);
+
+            if (IsFailedByAbsence(theoryAbs, labAbs, theoryLimitHours, labLimitHours))
+                naRegistrationIds.Add(reg.Id);
+        }
+
+        // Apply NA grade to over-limit registrations immediately; exclude from subsequent checks.
+        var naResults = new List<object>();
+        foreach (var reg in registrations.Where(r => naRegistrationIds.Contains(r.Id)))
+        {
+            reg.Grade = GradeCode.NA;
+            reg.UpdatedAt = DateTime.UtcNow;
+            naResults.Add(new { StudentId = reg.StudentId, LetterGrade = GradeCode.NA.ToString() });
+        }
+
+        var nonNaRegistrations = registrations.Where(r => !naRegistrationIds.Contains(r.Id)).ToList();
+
+        var missingGrades = nonNaRegistrations
             .SelectMany(reg => components
                 .Where(component => !gradesByRegistration
                     .GetValueOrDefault(reg.Id, new List<StudentGrade>())
@@ -973,10 +1045,10 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             });
         }
 
-        // 4. Her öğrenci için harf notu hesapla
-        var results = new List<object>();
+        // 4. Her öğrenci için harf notu hesapla (NA olanlar zaten işaretlendi, atla)
+        var results = new List<object>(naResults);
 
-        foreach (var reg in registrations)
+        foreach (var reg in nonNaRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
 
