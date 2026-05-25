@@ -2207,8 +2207,29 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CCMin")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DDMin")
+                        .HasColumnType("integer");
 
                     b.Property<int>("DegreeLevel")
                         .HasColumnType("integer");
@@ -2221,6 +2242,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("numeric(5,2)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("LetterRangesEditable")
                         .HasColumnType("boolean");
 
                     b.Property<decimal>("MaxFinalWeightPercent")
