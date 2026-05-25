@@ -48,6 +48,7 @@ export interface GradingCriteria {
   ccMin: number;
   dcMin: number;
   ddMin: number;
+  editable?: boolean;
 }
 
 export interface FinalizePreviewItem {

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAdminPrograms } from '../hooks/useAdminLookup';
 import { useExamRegulations, useDeleteExamRegulation, useCloneExamRegulation } from '../hooks/useExamRegulations';
+import { useSystemConfigs } from '../hooks/useSystemConfig';
 import { ExamRegulationFormDialog } from '../components/exam-regulation/ExamRegulationFormDialog';
 import type { ExamRegulation } from '../types/examRegulation';
 import { TERM_LABELS, LEVEL_LABELS } from '../lib/examRegulationLabels';
@@ -13,6 +14,12 @@ export default function ExamRegulationManagementPage() {
   const regulations = useExamRegulations(programId);
   const deleteMut = useDeleteExamRegulation();
   const cloneMut = useCloneExamRegulation();
+  const systemConfigs = useSystemConfigs();
+
+  const attendanceWeeks = systemConfigs.data?.find(c => c.key === 'Attendance.TermWeekCount')?.value;
+  const attendanceTheory = systemConfigs.data?.find(c => c.key === 'Attendance.TheoryAbsenceLimitPercent')?.value;
+  const attendanceLab = systemConfigs.data?.find(c => c.key === 'Attendance.LabAbsenceLimitPercent')?.value;
+  const hasAttendanceData = attendanceWeeks !== undefined && attendanceTheory !== undefined && attendanceLab !== undefined;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ExamRegulation | null>(null);
@@ -93,8 +100,19 @@ export default function ExamRegulationManagementPage() {
 
       <Card>
         <CardContent className="p-4 text-sm text-muted-foreground">
-          Devamsızlık eşikleri (hafta sayısı, teori/uygulama oranı) tüm üniversite için ortak olup
-          <strong> Sistem Ayarları</strong> sayfasından yönetilir.
+          {hasAttendanceData ? (
+            <>
+              Devamsızlık: <strong>{attendanceWeeks} hafta</strong> · Teori{' '}
+              <strong>%{attendanceTheory}</strong> · Uygulama{' '}
+              <strong>%{attendanceLab}</strong>{' '}
+              (<strong>Sistem Ayarları</strong>'ndan yönetilir)
+            </>
+          ) : (
+            <>
+              Devamsızlık eşikleri (hafta sayısı, teori/uygulama oranı) tüm üniversite için ortak olup
+              <strong> Sistem Ayarları</strong> sayfasından yönetilir.
+            </>
+          )}
         </CardContent>
       </Card>
 

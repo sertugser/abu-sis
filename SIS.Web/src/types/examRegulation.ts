@@ -19,6 +19,14 @@ export interface ExamRegulation {
   rawScoreFloor1: number;
   rawScoreFloor2: number;
   finalExamFloor: number;
+  aaMin: number;
+  baMin: number;
+  bbMin: number;
+  cbMin: number;
+  ccMin: number;
+  dcMin: number;
+  ddMin: number;
+  letterRangesEditable: boolean;
 }
 
 export type SaveExamRegulationRequest = Omit<ExamRegulation, 'id' | 'programName'>;

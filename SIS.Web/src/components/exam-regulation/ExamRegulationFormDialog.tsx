@@ -17,6 +17,8 @@ const emptyForm: SaveExamRegulationRequest = {
   minMidtermWeightPercent: 40, maxMidtermWeightPercent: 60,
   minFinalWeightPercent: 40, maxFinalWeightPercent: 60,
   passingGrade: 50, rawScoreFloor1: 0, rawScoreFloor2: 0, finalExamFloor: 0,
+  aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
+  letterRangesEditable: true,
 };
 
 export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Props) {
@@ -99,6 +101,38 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             <Input type="number" min={0} value={form.rawScoreFloor1} onChange={(e) => set('rawScoreFloor1', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Ham Başarı Alt Limit 2</Label>
             <Input type="number" min={0} value={form.rawScoreFloor2} onChange={(e) => set('rawScoreFloor2', Number(e.target.value))} /></div>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Harf Aralıkları</h3>
+            <div className="flex items-center gap-2">
+              <Switch checked={form.letterRangesEditable} onCheckedChange={(v) => set('letterRangesEditable', v)} />
+              <Label className="text-sm">Harf Aralığı Değişebilir</Label>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {([
+              { key: 'aaMin' as const, label: 'AA min' },
+              { key: 'baMin' as const, label: 'BA min' },
+              { key: 'bbMin' as const, label: 'BB min' },
+              { key: 'cbMin' as const, label: 'CB min' },
+              { key: 'ccMin' as const, label: 'CC min' },
+              { key: 'dcMin' as const, label: 'DC min' },
+              { key: 'ddMin' as const, label: 'DD min' },
+            ]).map(({ key, label }) => (
+              <div key={key} className="space-y-1">
+                <Label className="font-mono text-xs">{label}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={form[key]}
+                  onChange={(e) => set(key, Number(e.target.value))}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {mutation.isError && (

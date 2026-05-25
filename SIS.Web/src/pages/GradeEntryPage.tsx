@@ -707,6 +707,12 @@ const handleApplyImport = () => {
           </DialogHeader>
           {editCriteria && (
             <div className="space-y-4 pt-2">
+              {criteria?.editable === false && (
+                <div className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
+                  Bu dersin harf aralıkları sınav yönergesinde kilitli — değiştirilemez.
+                </div>
+              )}
+
               <p className="text-sm text-muted-foreground">
                 Her harf notu için minimum puan değerini belirleyin.
               </p>
@@ -743,6 +749,7 @@ const handleApplyImport = () => {
                       value={editCriteria[key]}
                       onChange={(e) => setEditCriteria(prev => prev ? { ...prev, [key]: Number(e.target.value) } : null)}
                       className="font-mono"
+                      disabled={criteria?.editable === false}
                     />
                   </div>
                 ))}
@@ -751,7 +758,12 @@ const handleApplyImport = () => {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setShowCriteriaDialog(false)}>İptal</Button>
-            <Button onClick={handleSaveCriteria} disabled={updateCriteriaMut.isPending}>Kaydet</Button>
+            <Button
+              onClick={handleSaveCriteria}
+              disabled={updateCriteriaMut.isPending || criteria?.editable === false}
+            >
+              Kaydet
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
