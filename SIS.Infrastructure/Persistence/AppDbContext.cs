@@ -71,6 +71,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<WebModuleSetting> WebModuleSettings => Set<WebModuleSetting>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
+    public DbSet<ExamRegulation> ExamRegulations => Set<ExamRegulation>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
@@ -1078,6 +1079,23 @@ builder.Entity<GradingCriteria>(e =>
              .WithMany()
              .HasForeignKey(pr => pr.CurriculumId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ExamRegulation ───────────────────────────────────────
+        builder.Entity<ExamRegulation>(e =>
+        {
+            e.HasIndex(r => new { r.ProgramId, r.DegreeLevel, r.TermType, r.Year }).IsUnique();
+            e.Property(r => r.Name).HasMaxLength(200).IsRequired();
+            e.Property(r => r.MinMidtermWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MaxMidtermWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MinFinalWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MaxFinalWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.PassingGrade).HasPrecision(5, 2);
+            e.Property(r => r.RawScoreFloor1).HasPrecision(5, 2);
+            e.Property(r => r.RawScoreFloor2).HasPrecision(5, 2);
+            e.Property(r => r.FinalExamFloor).HasPrecision(5, 2);
+            e.HasOne(r => r.Program).WithMany()
+             .HasForeignKey(r => r.ProgramId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Classroom ────────────────────────────────────────────
