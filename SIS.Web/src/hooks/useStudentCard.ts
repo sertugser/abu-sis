@@ -289,6 +289,89 @@ export async function downloadStudentDocument(
   }
 }
 
+export interface IssuedDocument {
+  id: number;
+  kind: string;
+  kindLabel: string;
+  issuedAt: string;
+  documentNumber: string | null;
+  issuedByName: string | null;
+}
+
+/** History of documents issued for a student (newest-first). */
+export function useIssuedDocuments(studentId: number | null) {
+  return useQuery({
+    queryKey: ['admin', 'student-card', 'issued-documents', studentId],
+    queryFn: async () =>
+      (await apiClient.get<IssuedDocument[]>(`${BASE}/${studentId}/issued-documents`)).data,
+    enabled: studentId != null,
+  });
+}
+
+/**
+ * Fetch an auth-guarded PDF as a blob (the bearer token cannot ride a raw
+ * `<a href>`), wrap it in an object URL, trigger a download via a temporary
+ * anchor carrying the given file name, then revoke the URL.
+ */
+async function downloadGeneratedPdf(url: string, fileName: string): Promise<void> {
+  const { data } = await apiClient.get<Blob>(url, { responseType: 'blob' });
+  const objectUrl = URL.createObjectURL(data);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Generate + download the student info form PDF, then refresh the issuance
+ * history (the server logs an issuance as a side effect of generating).
+ */
+export function useGenerateStudentInfoForm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        await downloadGeneratedPdf(
+          `${BASE}/${studentId}/documents/student-info-form`,
+          'ogrenci-bilgi-formu.pdf',
+        );
+      } catch (err) {
+        throw asBackendError(err, 'Öğrenci bilgi formu üretilemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'issued-documents', studentId] }),
+  });
+}
+
+/**
+ * Generate + download the enrollment certificate PDF, then refresh the
+ * issuance history.
+ */
+export function useGenerateEnrollmentCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        await downloadGeneratedPdf(
+          `${BASE}/${studentId}/documents/enrollment-certificate`,
+          'ogrenci-belgesi.pdf',
+        );
+      } catch (err) {
+        throw asBackendError(err, 'Öğrenci belgesi üretilemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: ['admin', 'student-card', 'issued-documents', studentId] }),
+  });
+}
+
 export function useStudentCardRegistrations(studentId: number | null) {
   return useQuery({
     queryKey: ['admin', 'student-card', 'registrations', studentId],

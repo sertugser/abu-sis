@@ -13,6 +13,7 @@ export const CARD_NAV: CardNavGroup[] = [
     { segment: 'genel', label: 'Genel Bilgiler', enabled: true },
     { segment: 'askerlik', label: 'Askerlik Bilgileri', enabled: true },
     { segment: 'belgeler', label: 'Belgeler', enabled: true },
+    { segment: 'verilen-belgeler', label: 'Verilen Belgeler', enabled: true },
   ]},
   { title: 'Ders İşlemleri', items: [
     { segment: 'transkript', label: 'Transkript', enabled: true },
