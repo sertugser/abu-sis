@@ -1058,11 +1058,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             return BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." });
         }
 
-        // 3. Section'daki aktif öğrencileri al
+        // 3. Section'daki aktif öğrencileri al (çekilenler hariç — GetGrades ile tutarlı)
         var registrations = await _context.CourseRegistrations
             .Where(cr => cr.CourseSectionId == sectionId
                 && cr.Status != RegistrationStatus.Dropped
-                && cr.Status != RegistrationStatus.Draft)
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn)
             .ToListAsync();
 
         var registrationIds = registrations.Select(r => r.Id).ToList();
@@ -1145,11 +1146,39 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
         var nonNaRegistrations = registrations.Where(r => !naRegistrationIds.Contains(r.Id)).ToList();
 
-        var missingGrades = nonNaRegistrations
+        // 3c. Excused (mazeretli) öğrenciler: bileşenlerinden herhangi birinde ExamAttendance==Excused
+        //     olan kayıtlara GradeCode.I (Incomplete) atanır; weighted-average/relative/missing-grade
+        //     hesaplarına dahil edilmezler (Faz 4c'de tamamlanacak).
+        var excusedRegistrationIds = new HashSet<int>();
+        foreach (var reg in nonNaRegistrations)
+        {
+            var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
+            if (studentGrades.Any(g => g.ExamAttendance == ExamAttendance.Excused))
+                excusedRegistrationIds.Add(reg.Id);
+        }
+
+        foreach (var reg in nonNaRegistrations.Where(r => excusedRegistrationIds.Contains(r.Id)))
+        {
+            reg.Grade = GradeCode.I;
+            reg.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Graded registrations = non-NA minus excused; these are the only ones scored/relative-graded.
+        var gradedRegistrations = nonNaRegistrations.Where(r => !excusedRegistrationIds.Contains(r.Id)).ToList();
+
+        // Missing-grades check: a component is "missing" for a student only when
+        // Score==null AND ExamAttendance != Absent (Absent is a deliberate 0, not a gap).
+        var missingGrades = gradedRegistrations
             .SelectMany(reg => components
-                .Where(component => !gradesByRegistration
-                    .GetValueOrDefault(reg.Id, new List<StudentGrade>())
-                    .Any(grade => grade.GradeComponentId == component.Id && grade.Score != null))
+                .Where(component =>
+                {
+                    var grade = gradesByRegistration
+                        .GetValueOrDefault(reg.Id, new List<StudentGrade>())
+                        .FirstOrDefault(g => g.GradeComponentId == component.Id);
+                    // Missing = no row OR (Score is null AND not deliberately Absent)
+                    return grade == null
+                        || (grade.Score == null && grade.ExamAttendance != ExamAttendance.Absent);
+                })
                 .Select(component => new
                 {
                     reg.StudentId,
@@ -1167,24 +1196,37 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             });
         }
 
-        // 4. Her öğrenci için harf notu hesapla (NA olanlar zaten işaretlendi, atla)
-        var results = new List<object>(naResults);
+        // 4. Her öğrenci için harf notu hesapla (NA + Excused olanlar zaten işaretlendi, atla)
+        // naResults already contains NA entries; add I entries for excused.
+        var excusedResults = nonNaRegistrations
+            .Where(r => excusedRegistrationIds.Contains(r.Id))
+            .Select(r => (object)new { StudentId = r.StudentId, LetterGrade = GradeCode.I.ToString() })
+            .ToList();
 
-        // Bulk-resolve exam regulations for all non-NA students in 3 queries (no per-student N+1)
-        var nonNaStudentIds = nonNaRegistrations.Select(r => r.StudentId).Distinct().ToList();
+        var results = new List<object>(naResults.Count + excusedResults.Count + gradedRegistrations.Count);
+        results.AddRange(naResults);
+        results.AddRange(excusedResults);
+
+        // Bulk-resolve exam regulations for graded (non-NA, non-Excused) students (no per-student N+1)
+        var gradedStudentIds = gradedRegistrations.Select(r => r.StudentId).Distinct().ToList();
         var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
-            nonNaStudentIds, section.TermId, default);
+            gradedStudentIds, section.TermId, default);
 
-        // ── Pre-pass: compute roundedScore for every non-NA registration ────────
+        // ── Pre-pass: compute roundedScore for every graded registration ────────
+        // For Absent components: score is treated as 0 (deliberate, not a gap).
         // roundedScores: regId → (weightedScore, roundedScore, studentGrades list)
-        var roundedScores = new Dictionary<int, (decimal WeightedScore, int RoundedScore, List<StudentGrade> Grades)>(nonNaRegistrations.Count);
-        foreach (var reg in nonNaRegistrations)
+        var roundedScores = new Dictionary<int, (decimal WeightedScore, int RoundedScore, List<StudentGrade> Grades)>(gradedRegistrations.Count);
+        foreach (var reg in gradedRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
             decimal weightedScore = 0;
             foreach (var comp in components)
             {
-                var score = studentGrades.First(g => g.GradeComponentId == comp.Id).Score!.Value;
+                var gradeRow = studentGrades.FirstOrDefault(g => g.GradeComponentId == comp.Id);
+                // Absent → 0; otherwise use the stored score (guaranteed non-null by missing-grades check above).
+                var score = (gradeRow?.ExamAttendance == ExamAttendance.Absent)
+                    ? 0m
+                    : gradeRow!.Score!.Value;
                 weightedScore += score * comp.Weight / 100m;
             }
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
@@ -1199,7 +1241,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         IReadOnlyDictionary<int, GradeCode>? relativeLetters = null;
         if (relPolicy != null && !relPolicy.IsConflicting && relPolicy.EvaluationType == GradeEvaluationType.Relative)
         {
-            var inputs = nonNaRegistrations
+            var inputs = gradedRegistrations
                 .Select(r => new RelativeGradeInput(r.Id, (decimal)roundedScores[r.Id].RoundedScore))
                 .ToList();
 
@@ -1222,7 +1264,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         }
 
         // ── Per-student assign: base letter + existing Faz 2a floors ────────────
-        foreach (var reg in nonNaRegistrations)
+        foreach (var reg in gradedRegistrations)
         {
             var (weightedScore, roundedScore, studentGrades) = roundedScores[reg.Id];
 
@@ -1244,7 +1286,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 if (finalComponents.Count > 0 && studentReg.FinalExamFloor > 0)
                 {
                     var finalAvg = finalComponents
-                        .Select(fc => studentGrades.First(g => g.GradeComponentId == fc.Id).Score!.Value)
+                        .Select(fc =>
+                        {
+                            var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
+                            return g.ExamAttendance == ExamAttendance.Absent ? 0m : g.Score!.Value;
+                        })
                         .Average();
 
                     if (finalAvg < studentReg.FinalExamFloor)
