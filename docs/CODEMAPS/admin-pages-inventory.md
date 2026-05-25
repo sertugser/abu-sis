@@ -1199,23 +1199,32 @@
 | **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
 | **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Açıklama:** Program bazında sınav yönergesi (Sınav Müfredatı) yönetimi. Her kayıt bir program + dönem tipi + yıl bileşimine ait değerlendirme kurallarını tanımlar (ara sınav/YYS sayısı, ağırlık oranları, geçme notu, ham başarı baraj değerleri).
+**Açıklama:** Program bazında sınav yönergesi (Sınav Müfredatı) yönetimi. Her kayıt `(ProgramId, DegreeLevel, TermType, Year)` birleşimine aittir. Kapsam: ara sınav/YYS sayısı ve ağırlık sınırları, geçme notu + final/ham başarı barajları, BelowFloorGrade (baraj altı atanacak harf), harf notu aralıkları (AA…DD eşikleri + kilitli mi bayrağı), bağıl değerlendirme (T-skor eşikleri, InclusionLimit, AbsoluteFloor), 7 sınav kuralı toggle'ı. Devamsızlık eşikleri (hafta sayısı, teori/uygulama oranı, method) tüm üniversite için ortaktır; ayrı bir SystemConfig okuma endpoint'i ile sayfada gösterilir. Ayrıntılı mimari için bkz. `docs/CODEMAPS/exam-grade-system.md`.
 
-**Veri kancaları (4):**
+**Veri kancaları (6):**
 - `useAdminPrograms()`
 - `useExamRegulations(programId?)`
+- `useCreateExamRegulation()`
+- `useUpdateExamRegulation()`
 - `useDeleteExamRegulation()`
 - `useCloneExamRegulation()`
+- `useAttendancePolicy()`
 
-**Controller:** `ExamRegulationController` → `api/admin/exam-regulations`
+**Bileşenler:**
+- `ExamRegulationFormDialog` — `SIS.Web/src/components/exam-regulation/ExamRegulationFormDialog.tsx`
 
-**API endpoint'leri (6):**
+**Controller:** `ExamRegulationController` → `api/admin/exam-regulations`  
+**Hooks dosyası:** `SIS.Web/src/hooks/useExamRegulations.ts`  
+**API modülü:** `SIS.Web/src/api/examRegulation.api.ts`
+
+**API endpoint'leri (7):**
 - `GET api/admin/exam-regulations` — liste (programId query filtresi opsiyonel)
 - `GET api/admin/exam-regulations/{id}` — tek kayıt
 - `POST api/admin/exam-regulations` — oluştur
 - `PUT api/admin/exam-regulations/{id}` — güncelle
 - `DELETE api/admin/exam-regulations/{id}` — sil
 - `POST api/admin/exam-regulations/{id}/clone` — yeni yıl/programa çoğalt
+- `GET api/admin/exam-regulations/attendance-policy` — üniversite devamsızlık politikasını okur (SystemConfig)
 
 **İzinler:**
 - `menu.sinav-mufredati.view`
@@ -1706,9 +1715,27 @@
 
 | | |
 |---|---|
-| **Route** | `/not-girisi` |
-| **Dosya** | `(bulunamadı)` |
-| **Roller** | dean, departmentManager, instructor |
+| **Route** | `/not-girisi/:sectionId` |
+| **Dosya** | `SIS.Web/src/pages/GradeEntryPage.tsx` |
+| **Roller** | instructor (ve hocanın kendi section'ına erişim yetkisi) |
+| **Modal sayısı** | 2+ (bileşen ekleme dialog, sınav yoklama panel, bütünleme + mazeret panelleri) |
+
+**Açıklama:** Hocanın kendi section'ı için not girişi. Bileşen yönetimi (Midterm/Final/Other tipi), toplu skor girişi, Excel import/export, sınav katılım işaretleme (NotMarked/Present/Absent/Excused), canlı ağırlıklı ortalama + sınıf istatistik paneli, harf notu aralığı düzenleme, finalize/unfinalize. Finalize sonrasında bütünleme (FF öğrenciler) ve mazeret (I öğrenciler) panelleri aktif olur. Ayrıntılı pipeline için bkz. `docs/CODEMAPS/exam-grade-system.md`.
+
+**Veri kancaları (13):**
+- `useComponents`, `useAddComponent`, `useDeleteComponent`
+- `useGrades`, `useSubmitGrades`
+- `useGradingCriteria`, `useUpdateGradingCriteria`
+- `useSetExamAttendance`
+- `useFinalize`, `useUnfinalize`
+- `useDownloadTemplate`, `usePreviewImport`, `useApplyImport`
+
+**Controller:** `GradeController` → `api/instructor`  
+**Hooks dosyası:** `SIS.Web/src/hooks/useGradeData.ts`  
+**API modülü:** `SIS.Web/src/api/grade.api.ts`  
+**Makeup bileşenleri:** `SIS.Web/src/components/grade/MakeupSections.tsx`
+
+**İzinler (prefix: `menu.not-girisi.`):** `.view`, `.edit`, `.submit`, `.finalize`, `.unfinalize`, `.export`, `.import`
 ---
 
 ### Yoklama Yönetimi
