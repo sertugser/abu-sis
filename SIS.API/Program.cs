@@ -272,6 +272,7 @@ builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoService>();
+builder.Services.AddScoped<IStudentScholarshipService, StudentScholarshipService>();
 builder.Services.AddScoped<IStudentDocumentService, StudentDocumentService>();
 builder.Services.AddScoped<IIssuedDocumentService, IssuedDocumentService>();
 builder.Services.AddScoped<IStudentDocumentPdfService, StudentDocumentPdfService>();
