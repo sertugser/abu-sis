@@ -32,6 +32,16 @@ public class ExamRegulation
     public decimal RawScoreFloor2 { get; set; } = 0m;     // Ham Başarı Notu Alt Limiti2
     public decimal FinalExamFloor { get; set; } = 0m;     // Yarıyıl Sonu Sınav Limiti
 
+    // Harf notu aralığı eşikleri (alt sınır — bu puan ve üzeri o harfi alır)
+    public int AAMin { get; set; } = 91;
+    public int BAMin { get; set; } = 81;
+    public int BBMin { get; set; } = 71;
+    public int CBMin { get; set; } = 61;
+    public int CCMin { get; set; } = 55;
+    public int DCMin { get; set; } = 50;
+    public int DDMin { get; set; } = 45;
+    public bool LetterRangesEditable { get; set; } = true; // "Harf Aralığı Değişebilir mi"
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
