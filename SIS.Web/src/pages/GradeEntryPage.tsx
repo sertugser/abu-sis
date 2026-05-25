@@ -53,6 +53,7 @@ import {
   useApplyImport,
   useSetExamAttendance,
 } from '../hooks/useGradeData';
+import { ButunlemePanel, MazeretPanel } from '../components/grade/MakeupSections';
 import type {
   ExamAttendance,
   GradeComponentType,
@@ -1102,6 +1103,14 @@ const handleApplyImport = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ═══ BÜTÜNLEME & MAZERET PANELS (post-finalize only) ═══ */}
+      {isFinalized && (
+        <>
+          <ButunlemePanel sectionId={id} />
+          <MazeretPanel sectionId={id} />
+        </>
+      )}
 
       {/* Excel Import Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>

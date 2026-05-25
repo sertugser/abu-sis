@@ -101,3 +101,96 @@ export interface ImportApplyResponse {
   updated: number;
   skipped: number;
 }
+
+// ══════════════════════════════════════════════════════════
+// BÜTÜNLEME (RESIT MAKEUP) TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ButunlemeVizeScore {
+  componentId: number;
+  componentName: string;
+  score: number | null;
+}
+
+export interface ButunlemeFinalScore {
+  componentId: number;
+  componentName: string;
+  score: number | null;
+  makeupScore: number | null;
+}
+
+export interface ButunlemeStudent {
+  studentId: number;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  currentGrade: string | null;
+  vizeScores: ButunlemeVizeScore[];
+  finalScores: ButunlemeFinalScore[];
+}
+
+export interface ButunlemeRosterResponse {
+  sectionId: number;
+  finalComponentId: number | null;
+  students: ButunlemeStudent[];
+}
+
+export interface ButunlemeScoreItem {
+  studentId: number;
+  makeupScore: number;
+}
+
+export interface ButunlemeFinalizeResult {
+  studentId: number;
+  oldGrade: string | null;
+  newGrade: string;
+  weightedAverage: number;
+}
+
+export interface ButunlemeFinalizeResponse {
+  message: string;
+  results: ButunlemeFinalizeResult[];
+}
+
+// ══════════════════════════════════════════════════════════
+// MAZERET (EXCUSE MAKEUP) TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ExcusedComponent {
+  componentId: number;
+  componentName: string;
+  originalScore: number | null;
+  makeupScore: number | null;
+}
+
+export interface MazeretStudent {
+  studentId: number;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  currentGrade: string | null;
+  excusedComponents: ExcusedComponent[];
+}
+
+export interface MazeretRosterResponse {
+  sectionId: number;
+  students: MazeretStudent[];
+}
+
+export interface MazeretScoreItem {
+  studentId: number;
+  componentId: number;
+  makeupScore: number;
+}
+
+export interface MazeretFinalizeResult {
+  studentId: number;
+  oldGrade: string | null;
+  newGrade: string;
+  weightedAverage: number;
+}
+
+export interface MazeretFinalizeResponse {
+  message: string;
+  results: MazeretFinalizeResult[];
+}
