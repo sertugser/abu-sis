@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Domain.Entities;
 
 public class GradeComponent
@@ -12,6 +14,7 @@ public class GradeComponent
 
     public string Name { get; set; } = string.Empty;   // "Vize", "Final", "Ödev 1", "Lab"
     public string ExamType { get; set; } = "Other";    // Midterm, Final, Makeup, Assignment, Project, Lab, Quiz, Other
+    public GradeComponentType Type { get; set; } = GradeComponentType.Other;
 
     public decimal Weight { get; set; }                // 30.00 = %30
     public int Order { get; set; }                     // Görüntüleme sırası
