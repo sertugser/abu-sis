@@ -3346,6 +3346,10 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("GradeComponentId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("MakeupScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<decimal?>("Score")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");

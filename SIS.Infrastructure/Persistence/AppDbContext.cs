@@ -689,6 +689,7 @@ builder.Entity<GradeComponent>(e =>
             e.HasIndex(sg => new { sg.CourseRegistrationId, sg.GradeComponentId }).IsUnique();
 
             e.Property(sg => sg.Score).HasPrecision(5, 2);
+            e.Property(sg => sg.MakeupScore).HasPrecision(5, 2);
 
             e.HasOne(sg => sg.CourseRegistration)
              .WithMany()
