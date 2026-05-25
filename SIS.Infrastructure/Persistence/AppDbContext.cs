@@ -30,6 +30,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
     public DbSet<IssuedDocument> IssuedDocuments => Set<IssuedDocument>();
     public DbSet<StudentScholarshipDetail> StudentScholarshipDetails => Set<StudentScholarshipDetail>();
+    public DbSet<StudentPlacement> StudentPlacements => Set<StudentPlacement>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -233,6 +234,20 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.Property(d => d.RatePercent).HasPrecision(5, 2);
             e.Property(d => d.Source).HasMaxLength(160);
             e.Property(d => d.Note).HasMaxLength(500);
+        });
+
+        builder.Entity<StudentPlacement>(e =>
+        {
+            e.HasOne<Student>()
+             .WithOne(s => s.Placement)
+             .HasForeignKey<StudentPlacement>(p => p.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(p => p.StudentId).IsUnique();
+            e.Property(p => p.Score).HasPrecision(9, 4);
+            e.Property(p => p.ScoreType).HasMaxLength(20);
+            e.Property(p => p.QuotaType).HasMaxLength(80);
+            e.Property(p => p.PlacedProgramName).HasMaxLength(200);
+            e.Property(p => p.Note).HasMaxLength(500);
         });
 
         // ── Instructor ───────────────────────────────────────────
