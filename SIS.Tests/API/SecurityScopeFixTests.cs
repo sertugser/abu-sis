@@ -15,6 +15,7 @@ using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 
 namespace SIS.Tests.API;
 
@@ -306,6 +307,7 @@ public class SecurityScopeFixTests
             context,
             Mock.Of<IGpaCalculationService>(),
             new FakeClock(),
+            new ExamRegulationResolver(context),
             webModuleControls: webModuleControls);
         SetUser(controller, userId, "Instructor");
         return controller;

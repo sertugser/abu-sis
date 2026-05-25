@@ -25,22 +25,22 @@ public class GradeController : ControllerBase
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
     private readonly ISystemConfigProvider _systemConfig;
-    private readonly IExamRegulationResolver? _examRegulationResolver;
+    private readonly IExamRegulationResolver _examRegulationResolver;
 
     public GradeController(
         AppDbContext context,
         IGpaCalculationService gpaService,
         IDateTimeProvider clock,
+        IExamRegulationResolver examRegulationResolver,
         ISystemConfigProvider? systemConfig = null,
-        IWebModuleControlService? webModuleControls = null,
-        IExamRegulationResolver? examRegulationResolver = null)
+        IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _gpaService = gpaService;
         _clock = clock;
+        _examRegulationResolver = examRegulationResolver;
         _systemConfig = systemConfig ?? new NullSystemConfigProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
-        _examRegulationResolver = examRegulationResolver;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -906,29 +906,26 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             return BadRequest(new { error = $"Bilesen agirliklarinin toplami %100 olmalidir. Simdi: %{totalWeight}" });
 
         // 1b. Sınav yönergesi ağırlık sınırları kontrolü
-        if (_examRegulationResolver != null)
+        var midtermSum = components
+            .Where(c => c.Type == GradeComponentType.Midterm)
+            .Sum(c => c.Weight);
+        var finalSum = components
+            .Where(c => c.Type == GradeComponentType.Final)
+            .Sum(c => c.Weight);
+
+        var bounds = await _examRegulationResolver.ResolveCourseWeightBoundsAsync(
+            section.CourseId, section.TermId, default);
+
+        if (bounds != null)
         {
-            var midtermSum = components
-                .Where(c => c.Type == GradeComponentType.Midterm)
-                .Sum(c => c.Weight);
-            var finalSum = components
-                .Where(c => c.Type == GradeComponentType.Final)
-                .Sum(c => c.Weight);
+            if (bounds.IsEmpty)
+                return BadRequest(new { error = "Bu dersin programları arasında çelişen sınav ağırlık sınırları var. Sınav müfredatını düzeltin." });
 
-            var bounds = await _examRegulationResolver.ResolveCourseWeightBoundsAsync(
-                section.CourseId, section.TermId, default);
+            if (midtermSum < bounds.MinMidterm || midtermSum > bounds.MaxMidterm)
+                return BadRequest(new { error = $"Toplam ara sınav ağırlığı %{bounds.MinMidterm:0.##}-%{bounds.MaxMidterm:0.##} arasında olmalı (şu an %{midtermSum:0.##})." });
 
-            if (bounds != null)
-            {
-                if (bounds.IsEmpty)
-                    return BadRequest(new { error = "Bu dersin programları arasında çelişen sınav ağırlık sınırları var. Sınav müfredatını düzeltin." });
-
-                if (midtermSum < bounds.MinMidterm || midtermSum > bounds.MaxMidterm)
-                    return BadRequest(new { error = $"Toplam ara sınav ağırlığı %{bounds.MinMidterm:0.##}-%{bounds.MaxMidterm:0.##} arasında olmalı (şu an %{midtermSum:0.##})." });
-
-                if (finalSum < bounds.MinFinal || finalSum > bounds.MaxFinal)
-                    return BadRequest(new { error = $"Toplam final ağırlığı %{bounds.MinFinal:0.##}-%{bounds.MaxFinal:0.##} arasında olmalı (şu an %{finalSum:0.##})." });
-            }
+            if (finalSum < bounds.MinFinal || finalSum > bounds.MaxFinal)
+                return BadRequest(new { error = $"Toplam final ağırlığı %{bounds.MinFinal:0.##}-%{bounds.MaxFinal:0.##} arasında olmalı (şu an %{finalSum:0.##})." });
         }
 
         // 2. Harf notu aralıkları sonuçlandırmadan önce kaydedilmiş olmalı.
@@ -996,32 +993,29 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             var letterGrade = criteria.ResolveGrade(roundedScore);
 
             // Sınav yönergesi: final barajı + geçme notu kontrolü
-            if (_examRegulationResolver != null)
+            var studentReg = await _examRegulationResolver.ResolveForStudentAsync(
+                reg.StudentId, section.TermId, default);
+
+            if (studentReg != null)
             {
-                var studentReg = await _examRegulationResolver.ResolveForStudentAsync(
-                    reg.StudentId, section.TermId, default);
+                // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → FF
+                var finalComponents = components
+                    .Where(c => c.Type == GradeComponentType.Final)
+                    .ToList();
 
-                if (studentReg != null)
+                if (finalComponents.Count > 0 && studentReg.FinalExamFloor > 0)
                 {
-                    // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → FF
-                    var finalComponents = components
-                        .Where(c => c.Type == GradeComponentType.Final)
-                        .ToList();
+                    var finalAvg = finalComponents
+                        .Select(fc => studentGrades.First(g => g.GradeComponentId == fc.Id).Score!.Value)
+                        .Average();
 
-                    if (finalComponents.Count > 0 && studentReg.FinalExamFloor > 0)
-                    {
-                        var finalAvg = finalComponents
-                            .Select(fc => studentGrades.First(g => g.GradeComponentId == fc.Id).Score!.Value)
-                            .Average();
-
-                        if (finalAvg < studentReg.FinalExamFloor)
-                            letterGrade = GradeCode.FF;
-                    }
-
-                    // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → FF
-                    if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
+                    if (finalAvg < studentReg.FinalExamFloor)
                         letterGrade = GradeCode.FF;
                 }
+
+                // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → FF
+                if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
+                    letterGrade = GradeCode.FF;
             }
 
             reg.Grade = letterGrade;

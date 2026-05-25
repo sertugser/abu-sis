@@ -39,12 +39,14 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
             .FirstOrDefaultAsync(t => t.Id == academicTermId, ct);
         if (term == null) return null;
 
-        var programIds = await context.CurriculumCourses.AsNoTracking()
+        var programInfos = await context.CurriculumCourses.AsNoTracking()
             .Where(cc => cc.CourseId == courseId)
-            .Select(cc => cc.Curriculum.ProgramId)
+            .Select(cc => new { cc.Curriculum.ProgramId, cc.Curriculum.Program.DegreeLevel })
             .Distinct()
             .ToListAsync(ct);
-        if (programIds.Count == 0) return null;
+        if (programInfos.Count == 0) return null;
+
+        var programIds = programInfos.Select(p => p.ProgramId).ToList();
 
         var regs = await context.ExamRegulations.AsNoTracking()
             .Where(r =>
@@ -55,10 +57,16 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
             .ToListAsync(ct);
         if (regs.Count == 0) return null;
 
-        var minMid = regs.Max(r => r.MinMidtermWeightPercent);
-        var maxMid = regs.Min(r => r.MaxMidtermWeightPercent);
-        var minFin = regs.Max(r => r.MinFinalWeightPercent);
-        var maxFin = regs.Min(r => r.MaxFinalWeightPercent);
+        // Keep only regulations whose DegreeLevel matches the program they belong to.
+        var regsFiltered = regs
+            .Where(r => programInfos.Any(p => p.ProgramId == r.ProgramId && p.DegreeLevel == r.DegreeLevel))
+            .ToList();
+        if (regsFiltered.Count == 0) return null;
+
+        var minMid = regsFiltered.Max(r => r.MinMidtermWeightPercent);
+        var maxMid = regsFiltered.Min(r => r.MaxMidtermWeightPercent);
+        var minFin = regsFiltered.Max(r => r.MinFinalWeightPercent);
+        var maxFin = regsFiltered.Min(r => r.MaxFinalWeightPercent);
         var empty = minMid > maxMid || minFin > maxFin;
 
         return new WeightBounds(minMid, maxMid, minFin, maxFin, empty);
