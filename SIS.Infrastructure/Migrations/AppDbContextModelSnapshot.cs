@@ -2216,6 +2216,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("BBMin")
                         .HasColumnType("integer");
 
+                    b.Property<int>("BelowFloorGrade")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CBMin")
                         .HasColumnType("integer");
 

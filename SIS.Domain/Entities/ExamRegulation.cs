@@ -31,6 +31,7 @@ public class ExamRegulation
     public decimal RawScoreFloor1 { get; set; } = 0m;     // Ham Başarı Notu Alt Limiti
     public decimal RawScoreFloor2 { get; set; } = 0m;     // Ham Başarı Notu Alt Limiti2
     public decimal FinalExamFloor { get; set; } = 0m;     // Yarıyıl Sonu Sınav Limiti
+    public GradeCode BelowFloorGrade { get; set; } = GradeCode.FF; // Geçme/final barajı altında atanacak harf (Proliz "Altı Atanacak Harf")
 
     // Harf notu aralığı eşikleri (alt sınır — bu puan ve üzeri o harfi alır)
     public int AAMin { get; set; } = 91;
