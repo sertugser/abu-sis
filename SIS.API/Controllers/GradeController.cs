@@ -1222,11 +1222,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             decimal weightedScore = 0;
             foreach (var comp in components)
             {
-                var gradeRow = studentGrades.FirstOrDefault(g => g.GradeComponentId == comp.Id);
-                // Absent → 0; otherwise use the stored score (guaranteed non-null by missing-grades check above).
-                var score = (gradeRow?.ExamAttendance == ExamAttendance.Absent)
+                // gradeRow is guaranteed present by the missing-grades check above (for graded registrations).
+                var gradeRow = studentGrades.First(g => g.GradeComponentId == comp.Id);
+                // Absent → 0; otherwise use the stored score (guaranteed non-null for non-Absent by the missing-grades check).
+                var score = gradeRow.ExamAttendance == ExamAttendance.Absent
                     ? 0m
-                    : gradeRow!.Score!.Value;
+                    : gradeRow.Score!.Value;
                 weightedScore += score * comp.Weight / 100m;
             }
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
@@ -1360,7 +1361,8 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         var registrations = await _context.CourseRegistrations
             .Where(cr => cr.CourseSectionId == sectionId
                 && cr.Status != RegistrationStatus.Dropped
-                && cr.Status != RegistrationStatus.Draft)
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn)
             .ToListAsync();
 
         foreach (var reg in registrations)
