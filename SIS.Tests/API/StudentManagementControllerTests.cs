@@ -342,6 +342,151 @@ public class StudentManagementControllerTests
         info.PhotoExtension.Should().BeNull();
     }
 
+    // ── Resmî belge üretimi (Öğrenci Bilgi Formu / Öğrenci Belgesi) ─────────
+
+    private static readonly byte[] FakePdfBytes = { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37 }; // "%PDF-1.7"
+
+    private static StudentManagementController CreateDocumentController(
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard,
+        IStudentDocumentPdfService pdfService,
+        IIssuedDocumentService issuedDocumentService,
+        int userId,
+        params string[] roles)
+    {
+        var controller = new StudentManagementController(
+            new Mock<IAdminStudentService>().Object,
+            context,
+            scopeGuard,
+            pdfService,
+            issuedDocumentService);
+        AttachUser(controller, userId, roles);
+        return controller;
+    }
+
+    [Fact]
+    public async Task GenerateStudentInfoForm_ReturnsPdfFile_AndRecordsIssuance()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var pdfMock = new Mock<IStudentDocumentPdfService>();
+        pdfMock.Setup(x => x.GenerateStudentInfoFormAsync(5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FakePdfBytes);
+
+        var issuedService = new SIS.Infrastructure.Services.IssuedDocumentService(context);
+
+        var controller = CreateDocumentController(
+            context, AllowAllScopeGuard().Object, pdfMock.Object, issuedService, 1, "SystemAdministrator");
+
+        var result = await controller.GenerateStudentInfoForm(5);
+
+        var file = result.Should().BeOfType<FileContentResult>().Subject;
+        file.ContentType.Should().Be("application/pdf");
+        file.FileDownloadName.Should().Be("ogrenci-bilgi-formu-S5.pdf");
+        file.FileContents.Should().BeEquivalentTo(FakePdfBytes);
+
+        var logged = await context.IssuedDocuments.SingleAsync();
+        logged.StudentId.Should().Be(5);
+        logged.Kind.Should().Be(SIS.Domain.Enums.IssuedDocumentKind.StudentInfoForm);
+        logged.IssuedByUserId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GenerateEnrollmentCertificate_ReturnsPdfFile_AndRecordsIssuance()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var pdfMock = new Mock<IStudentDocumentPdfService>();
+        pdfMock.Setup(x => x.GenerateEnrollmentCertificateAsync(5, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FakePdfBytes);
+
+        var issuedService = new SIS.Infrastructure.Services.IssuedDocumentService(context);
+
+        var controller = CreateDocumentController(
+            context, AllowAllScopeGuard().Object, pdfMock.Object, issuedService, 1, "SystemAdministrator");
+
+        var result = await controller.GenerateEnrollmentCertificate(5);
+
+        var file = result.Should().BeOfType<FileContentResult>().Subject;
+        file.ContentType.Should().Be("application/pdf");
+        file.FileDownloadName.Should().Be("ogrenci-belgesi-S5.pdf");
+
+        var logged = await context.IssuedDocuments.SingleAsync();
+        logged.Kind.Should().Be(SIS.Domain.Enums.IssuedDocumentKind.EnrollmentCertificate);
+    }
+
+    [Fact]
+    public async Task GenerateStudentInfoForm_Returns404_WhenStudentMissing()
+    {
+        await using var context = CreateContext();
+        // Hiç öğrenci seed edilmedi → CheckStudentAccess admin için NotFound döner.
+
+        var pdfMock = new Mock<IStudentDocumentPdfService>();
+        var issuedService = new SIS.Infrastructure.Services.IssuedDocumentService(context);
+
+        var controller = CreateDocumentController(
+            context, AllowAllScopeGuard().Object, pdfMock.Object, issuedService, 1, "SystemAdministrator");
+
+        var result = await controller.GenerateStudentInfoForm(999);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+        (await context.IssuedDocuments.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateStudentInfoForm_ReturnsForbid_ForScopedRoleWithoutAccess()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+
+        var scopeGuard = new Mock<IAcademicScopeGuard>();
+        scopeGuard.Setup(x => x.CanAccessDepartmentAsync(
+                It.IsAny<ClaimsPrincipal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var pdfMock = new Mock<IStudentDocumentPdfService>();
+        var issuedService = new SIS.Infrastructure.Services.IssuedDocumentService(context);
+
+        var controller = CreateDocumentController(
+            context, scopeGuard.Object, pdfMock.Object, issuedService, 42, "DepartmentManager");
+
+        var result = await controller.GenerateStudentInfoForm(5);
+
+        result.Should().BeOfType<ForbidResult>();
+        pdfMock.Verify(x => x.GenerateStudentInfoFormAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        (await context.IssuedDocuments.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetIssuedDocuments_ReturnsOk_WithHistory()
+    {
+        await using var context = CreateContext();
+        SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
+        context.IssuedDocuments.Add(new IssuedDocument
+        {
+            StudentId = 5,
+            Kind = SIS.Domain.Enums.IssuedDocumentKind.StudentInfoForm,
+            IssuedAt = DateTime.UtcNow,
+            DocumentNumber = "OBF-2026-000001",
+        });
+        await context.SaveChangesAsync();
+
+        var pdfMock = new Mock<IStudentDocumentPdfService>();
+        var issuedService = new SIS.Infrastructure.Services.IssuedDocumentService(context);
+
+        var controller = CreateDocumentController(
+            context, AllowAllScopeGuard().Object, pdfMock.Object, issuedService, 1, "SystemAdministrator");
+
+        var result = await controller.GetIssuedDocuments(5);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var list = ok.Value.Should().BeAssignableTo<List<IssuedDocumentDto>>().Subject;
+        list.Should().HaveCount(1);
+        list[0].DocumentNumber.Should().Be("OBF-2026-000001");
+    }
+
     private static void SeedStudentInDepartment(AppDbContext context, int studentId, int programId, int departmentId)
     {
         context.Faculties.Add(new Faculty

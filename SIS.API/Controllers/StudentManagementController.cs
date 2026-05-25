@@ -11,6 +11,7 @@ using SIS.Application.Admin.Services;
 using SIS.Application.Common.Services;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Time;
 
 namespace SIS.API.Controllers;
 
@@ -43,13 +44,15 @@ public class StudentManagementController : ControllerBase
     private readonly IStudentPhotoStorage _photoStorage;
     private readonly IStudentDocumentService _documentService;
     private readonly IStudentDocumentStorage _documentStorage;
+    private readonly IStudentDocumentPdfService _pdfService;
+    private readonly IIssuedDocumentService _issuedDocumentService;
     private readonly IConfiguration _configuration;
 
     public StudentManagementController(
         IAdminStudentService service,
         AppDbContext context,
         ISystemConfigProvider systemConfig)
-        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
+        : this(service, context, systemConfig, new AcademicScopeGuard(context), new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), DefaultPdfService(context), new IssuedDocumentService(context), new ConfigurationBuilder().Build())
     {
     }
 
@@ -57,7 +60,7 @@ public class StudentManagementController : ControllerBase
         IAdminStudentService service,
         AppDbContext context,
         IAcademicScopeGuard scopeGuard)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), DefaultPdfService(context), new IssuedDocumentService(context), new ConfigurationBuilder().Build())
     {
     }
 
@@ -68,7 +71,7 @@ public class StudentManagementController : ControllerBase
         IAcademicScopeGuard scopeGuard,
         IStudentPersonalInfoService personalInfoService,
         IStudentPhotoStorage photoStorage)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage, new StudentDocumentService(context), new NullStudentDocumentStorage(), new ConfigurationBuilder().Build())
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, personalInfoService, photoStorage, new StudentDocumentService(context), new NullStudentDocumentStorage(), DefaultPdfService(context, photoStorage), new IssuedDocumentService(context), new ConfigurationBuilder().Build())
     {
     }
 
@@ -80,7 +83,18 @@ public class StudentManagementController : ControllerBase
         IStudentDocumentService documentService,
         IStudentDocumentStorage documentStorage,
         IConfiguration configuration)
-        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), documentService, documentStorage, configuration)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), documentService, documentStorage, DefaultPdfService(context), new IssuedDocumentService(context), configuration)
+    {
+    }
+
+    // Test kolaylığı: PDF üreticisi + issuance log servisi enjekte edilebilir.
+    public StudentManagementController(
+        IAdminStudentService service,
+        AppDbContext context,
+        IAcademicScopeGuard scopeGuard,
+        IStudentDocumentPdfService pdfService,
+        IIssuedDocumentService issuedDocumentService)
+        : this(service, context, new NullSystemConfigProvider(), scopeGuard, new StudentPersonalInfoService(context), new NullStudentPhotoStorage(), new StudentDocumentService(context), new NullStudentDocumentStorage(), pdfService, issuedDocumentService, new ConfigurationBuilder().Build())
     {
     }
 
@@ -96,6 +110,8 @@ public class StudentManagementController : ControllerBase
         IStudentPhotoStorage photoStorage,
         IStudentDocumentService documentService,
         IStudentDocumentStorage documentStorage,
+        IStudentDocumentPdfService pdfService,
+        IIssuedDocumentService issuedDocumentService,
         IConfiguration configuration)
     {
         _service = service;
@@ -106,8 +122,13 @@ public class StudentManagementController : ControllerBase
         _photoStorage = photoStorage;
         _documentService = documentService;
         _documentStorage = documentStorage;
+        _pdfService = pdfService;
+        _issuedDocumentService = issuedDocumentService;
         _configuration = configuration;
     }
+
+    private static IStudentDocumentPdfService DefaultPdfService(AppDbContext context, IStudentPhotoStorage? photoStorage = null) =>
+        new StudentDocumentPdfService(context, photoStorage ?? new NullStudentPhotoStorage(), new SystemDateTimeProvider());
 
     [HttpGet]
     [RequirePermission("menu.ogrenci-rehberi.view")]
@@ -601,6 +622,73 @@ public async Task<IActionResult> AssignAdvisor(int id, [FromBody] AssignAdvisorD
         await _documentService.RemoveAsync(id, documentId, ct);
 
         return NoContent();
+    }
+
+    // ── Resmî belge üretimi (Öğrenci Bilgi Formu / Öğrenci Belgesi) ─────────
+
+    [HttpGet("{id:int}/documents/student-info-form")]
+    [RequirePermission("menu.ogrenci-rehberi.generate-documents")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
+    public async Task<IActionResult> GenerateStudentInfoForm(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var pdf = await _pdfService.GenerateStudentInfoFormAsync(id, ct);
+        if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.StudentInfoForm, userId, ct);
+
+        var studentNumber = await ResolveStudentNumberAsync(id, ct);
+        return File(pdf, "application/pdf", $"ogrenci-bilgi-formu-{studentNumber}.pdf");
+    }
+
+    [HttpGet("{id:int}/documents/enrollment-certificate")]
+    [RequirePermission("menu.ogrenci-rehberi.generate-documents")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
+    [SensitiveDataAccess(EntityType = "Student", EntityIdRouteParam = "id")]
+    public async Task<IActionResult> GenerateEnrollmentCertificate(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var pdf = await _pdfService.GenerateEnrollmentCertificateAsync(id, ct);
+        if (pdf is null) return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        await _issuedDocumentService.RecordAsync(id, Domain.Enums.IssuedDocumentKind.EnrollmentCertificate, userId, ct);
+
+        var studentNumber = await ResolveStudentNumberAsync(id, ct);
+        return File(pdf, "application/pdf", $"ogrenci-belgesi-{studentNumber}.pdf");
+    }
+
+    [HttpGet("{id:int}/issued-documents")]
+    [RequirePermission("menu.ogrenci-rehberi.view")]
+    public async Task<IActionResult> GetIssuedDocuments(int id, CancellationToken ct = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var accessError = await CheckStudentAccessAsync(id, userId, ct);
+        if (accessError is not null) return accessError;
+
+        var history = await _issuedDocumentService.GetHistoryAsync(id, ct);
+        if (history is null) return NotFound(new { message = "Öğrenci bulunamadı." });
+
+        return Ok(history);
+    }
+
+    private async Task<string> ResolveStudentNumberAsync(int studentId, CancellationToken ct)
+    {
+        var number = await _context.Students
+            .AsNoTracking()
+            .Where(s => s.Id == studentId)
+            .Select(s => s.StudentNumber)
+            .FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(number) ? studentId.ToString() : number;
     }
 
     /// <summary>

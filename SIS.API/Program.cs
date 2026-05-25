@@ -274,6 +274,7 @@ builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
 builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoService>();
 builder.Services.AddScoped<IStudentDocumentService, StudentDocumentService>();
 builder.Services.AddScoped<IIssuedDocumentService, IssuedDocumentService>();
+builder.Services.AddScoped<IStudentDocumentPdfService, StudentDocumentPdfService>();
 builder.Services.AddScoped<IStudentPhotoStorage, FileSystemStudentPhotoStorage>();
 builder.Services.AddScoped<IStudentDocumentStorage, FileSystemStudentDocumentStorage>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
