@@ -29,6 +29,8 @@ BulkCurriculumAssignmentRequestDto
 BulkOpenCoursesRequest
 BulkValidateCellsRequestDto
 ComponentDto
+# ExamRegulation: simple admin CRUD with inline controller validation (same pattern as CreateElectiveSubtypeRequest / CreatePromotionRuleDto)
+CloneExamRegulationRequest
 CopyCurriculumRequest
 CreateAccessRuleRequest
 CreateAcademicCvActivityDto
@@ -71,7 +73,7 @@ PreviewTermCalendarEventMoveDto
 RegistrationPlanItemDto
 RegistrationSubmitDto
 SaveAcademicCalendarChangesDto
-SaveExamCurriculumTemplateRequest
+SaveExamRegulationRequest
 SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto

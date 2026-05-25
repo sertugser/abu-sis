@@ -178,9 +178,9 @@ public static class PermissionSeed
         ("menu.ders-acma-islemleri.close-all",           PermissionCategory.Menu, "Tüm dersi kapatma"),
         ("menu.ders-acma-islemleri.reactivate",          PermissionCategory.Menu, "Section yeniden aktifleştirme"),
 
-        // Sınav Müfredatı (kendi izni — Ders Aç'tan ayrıldı, ExamCurriculumController)
-        ("menu.sinav-mufredati.view",                    PermissionCategory.Menu, "Sınav müfredatı (sınav bileşen şablonu) görüntüleme"),
-        ("menu.sinav-mufredati.edit",                    PermissionCategory.Menu, "Sınav müfredatı şablonu kaydetme"),
+        // Sınav Müfredatı (program seviyesi sınav yönergeleri — ExamRegulationController)
+        ("menu.sinav-mufredati.view",                    PermissionCategory.Menu, "Sınav yönergesi görüntüleme"),
+        ("menu.sinav-mufredati.edit",                    PermissionCategory.Menu, "Sınav yönergesi düzenleme"),
         ("menu.sinav-mufredati.create",                  PermissionCategory.Menu, "Sınav yönergesi oluşturma"),
         ("menu.sinav-mufredati.delete",                  PermissionCategory.Menu, "Sınav yönergesi silme"),
 
