@@ -25,6 +25,13 @@ const emptyForm: SaveExamRegulationRequest = {
   evaluationType: 'Absolute',
   relativeMinStudentCount: 10, relativeInclusionLimit: 0, relativeAbsoluteFloor: 0,
   tAAMin: 70, tBAMin: 63, tBBMin: 57, tCBMin: 50, tCCMin: 45, tDCMin: 40, tDDMin: 35,
+  blockFinalIfNoMidterm: false,
+  failIfNoFinal: false,
+  blockMakeupIfNoFinal: false,
+  zeroIfMissedMakeup: false,
+  makeupReplacesFinal: false,
+  autoTransferFailedToMakeup: false,
+  autoTransferExcusedToMakeup: false,
 };
 
 export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Props) {
@@ -202,6 +209,26 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             </p>
           </div>
         )}
+
+        <div className="space-y-3 pt-2">
+          <h3 className="text-sm font-semibold">Sınav Giriş Kuralları</h3>
+          <div className="space-y-2">
+            {([
+              { key: 'blockFinalIfNoMidterm' as const, label: 'Hiçbir ara sınava girmeyen finale giremez' },
+              { key: 'failIfNoFinal' as const, label: 'Finale girmeyen kalır' },
+              { key: 'blockMakeupIfNoFinal' as const, label: 'Finale girmeyen bütünlemeye giremez' },
+              { key: 'zeroIfMissedMakeup' as const, label: 'Bütünlemeye girmeyene 0 ver' },
+              { key: 'makeupReplacesFinal' as const, label: 'Bütünleme finalin yerine değerlendirilir' },
+              { key: 'autoTransferFailedToMakeup' as const, label: 'Kalanlar otomatik bütünleme listesine' },
+              { key: 'autoTransferExcusedToMakeup' as const, label: 'Mazeretliler otomatik mazeret listesine' },
+            ]).map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-2">
+                <Switch checked={form[key]} onCheckedChange={(v) => set(key, v)} />
+                <Label className="text-sm font-normal">{label}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {mutation.isError && (
           <p className="text-sm text-destructive">

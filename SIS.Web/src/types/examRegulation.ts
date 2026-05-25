@@ -39,6 +39,13 @@ export interface ExamRegulation {
   tCCMin: number;
   tDCMin: number;
   tDDMin: number;
+  blockFinalIfNoMidterm: boolean;
+  failIfNoFinal: boolean;
+  blockMakeupIfNoFinal: boolean;
+  zeroIfMissedMakeup: boolean;
+  makeupReplacesFinal: boolean;
+  autoTransferFailedToMakeup: boolean;
+  autoTransferExcusedToMakeup: boolean;
 }
 
 export type SaveExamRegulationRequest = Omit<ExamRegulation, 'id' | 'programName'>;

@@ -169,6 +169,13 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
             TCCMin = source.TCCMin,
             TDCMin = source.TDCMin,
             TDDMin = source.TDDMin,
+            BlockFinalIfNoMidterm = source.BlockFinalIfNoMidterm,
+            FailIfNoFinal = source.FailIfNoFinal,
+            BlockMakeupIfNoFinal = source.BlockMakeupIfNoFinal,
+            ZeroIfMissedMakeup = source.ZeroIfMissedMakeup,
+            MakeupReplacesFinal = source.MakeupReplacesFinal,
+            AutoTransferFailedToMakeup = source.AutoTransferFailedToMakeup,
+            AutoTransferExcusedToMakeup = source.AutoTransferExcusedToMakeup,
             CreatedAt = DateTime.UtcNow
         };
         context.ExamRegulations.Add(clone);
@@ -264,6 +271,13 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         e.TCCMin = req.TCCMin;
         e.TDCMin = req.TDCMin;
         e.TDDMin = req.TDDMin;
+        e.BlockFinalIfNoMidterm = req.BlockFinalIfNoMidterm;
+        e.FailIfNoFinal = req.FailIfNoFinal;
+        e.BlockMakeupIfNoFinal = req.BlockMakeupIfNoFinal;
+        e.ZeroIfMissedMakeup = req.ZeroIfMissedMakeup;
+        e.MakeupReplacesFinal = req.MakeupReplacesFinal;
+        e.AutoTransferFailedToMakeup = req.AutoTransferFailedToMakeup;
+        e.AutoTransferExcusedToMakeup = req.AutoTransferExcusedToMakeup;
     }
 
     private static ExamRegulationDto ToDto(ExamRegulation r) => new(
@@ -276,7 +290,10 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         r.BelowFloorGrade.ToString(),
         r.EvaluationType.ToString(),
         r.RelativeMinStudentCount, r.RelativeInclusionLimit, r.RelativeAbsoluteFloor,
-        r.TAAMin, r.TBAMin, r.TBBMin, r.TCBMin, r.TCCMin, r.TDCMin, r.TDDMin);
+        r.TAAMin, r.TBAMin, r.TBBMin, r.TCBMin, r.TCCMin, r.TDCMin, r.TDDMin,
+        r.BlockFinalIfNoMidterm, r.FailIfNoFinal, r.BlockMakeupIfNoFinal,
+        r.ZeroIfMissedMakeup, r.MakeupReplacesFinal,
+        r.AutoTransferFailedToMakeup, r.AutoTransferExcusedToMakeup);
 }
 
 public record ExamRegulationDto(
@@ -292,7 +309,14 @@ public record ExamRegulationDto(
     int RelativeMinStudentCount,
     decimal RelativeInclusionLimit,
     decimal RelativeAbsoluteFloor,
-    int TAAMin, int TBAMin, int TBBMin, int TCBMin, int TCCMin, int TDCMin, int TDDMin);
+    int TAAMin, int TBAMin, int TBBMin, int TCBMin, int TCCMin, int TDCMin, int TDDMin,
+    bool BlockFinalIfNoMidterm,
+    bool FailIfNoFinal,
+    bool BlockMakeupIfNoFinal,
+    bool ZeroIfMissedMakeup,
+    bool MakeupReplacesFinal,
+    bool AutoTransferFailedToMakeup,
+    bool AutoTransferExcusedToMakeup);
 
 public record SaveExamRegulationRequest(
     int ProgramId, DegreeLevel DegreeLevel, TermType TermType, int Year,
@@ -308,7 +332,14 @@ public record SaveExamRegulationRequest(
     decimal RelativeInclusionLimit = 0,
     decimal RelativeAbsoluteFloor = 0,
     int TAAMin = 70, int TBAMin = 63, int TBBMin = 57, int TCBMin = 50,
-    int TCCMin = 45, int TDCMin = 40, int TDDMin = 35);
+    int TCCMin = 45, int TDCMin = 40, int TDDMin = 35,
+    bool BlockFinalIfNoMidterm = false,
+    bool FailIfNoFinal = false,
+    bool BlockMakeupIfNoFinal = false,
+    bool ZeroIfMissedMakeup = false,
+    bool MakeupReplacesFinal = false,
+    bool AutoTransferFailedToMakeup = false,
+    bool AutoTransferExcusedToMakeup = false);
 
 public record CloneExamRegulationRequest(int? ProgramId, int Year);
 
