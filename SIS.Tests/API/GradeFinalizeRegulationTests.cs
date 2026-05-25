@@ -852,5 +852,209 @@ public class GradeFinalizeRegulationTests : IDisposable
             "no regulation → section GradingCriteria used; score=70 → CB");
     }
 
+    /// <summary>
+    /// Deadlock edge: regulation is LOCKED (LetterRangesEditable=false) but programs have
+    /// CONFLICTING thresholds (HasUniqueThresholds=false) and NO section GradingCriteria row.
+    /// UpdateGradingCriteria is blocked by the lock, and without this fix Finalize falls
+    /// through to the generic "girilmeden" message — an unresolvable deadlock.
+    /// After the fix, Finalize must return 400 with a message containing "çelişen".
+    /// All components are Type=Other so the weight-bounds check is bypassed.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_ReturnsConflictError_WhenLockedRegulationsHaveConflictingThresholds()
+    {
+        // Arrange: isolated DB — course belongs to TWO programs, each with a locked regulation
+        // but DIFFERENT thresholds, so HasUniqueThresholds=false.
+        // No GradingCriteria row.  Components are Type=Other (weight-bounds skipped).
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var ctx = new AppDbContext(options);
+
+        const int fId = 50, dId1 = 50, dId2 = 51;
+        const int pId1 = 50, pId2 = 51;
+        const int currId1 = 50, currId2 = 51;
+        const int courseId = 50, termId = 50, sectionId = 50;
+        const int instrId = 50, instrUserId = 5050;
+        const int studId = 50, studUserId = 6060, regId = 50;
+        const int comp1Id = 50, comp2Id = 51;
+
+        // Faculty
+        ctx.Faculties.Add(new Faculty { Id = fId, Name = "Conflict Faculty", Code = "CF" });
+
+        // Two departments (both in same faculty)
+        ctx.Departments.Add(new Department { Id = dId1, Name = "Dept A", Code = "DA", FacultyId = fId });
+        ctx.Departments.Add(new Department { Id = dId2, Name = "Dept B", Code = "DB", FacultyId = fId });
+
+        // Two programs
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = pId1, Name = "Program A", Code = "PA", DepartmentId = dId1,
+            DegreeLevel = DegreeLevel.Bachelor, EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8, TotalRequiredEcts = 240
+        });
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = pId2, Name = "Program B", Code = "PB", DepartmentId = dId2,
+            DegreeLevel = DegreeLevel.Bachelor, EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8, TotalRequiredEcts = 240
+        });
+
+        // Course
+        ctx.Courses.Add(new Course { Id = courseId, Code = "CON301", Name = "Conflict Course", Ects = 3 });
+
+        // Two curricula, each linking the same course → resolver sees two programs
+        ctx.Curricula.Add(new Curriculum { Id = currId1, ProgramId = pId1, Name = "Curr A", Version = "2024" });
+        ctx.Curricula.Add(new Curriculum { Id = currId2, ProgramId = pId2, Name = "Curr B", Version = "2024" });
+        ctx.CurriculumCourses.Add(new CurriculumCourse
+            { CurriculumId = currId1, CourseId = courseId, IsCompulsory = true, SuggestedSemester = 3 });
+        ctx.CurriculumCourses.Add(new CurriculumCourse
+            { CurriculumId = currId2, CourseId = courseId, IsCompulsory = true, SuggestedSemester = 3 });
+
+        // Term
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = termId, Name = "2024-2025 Güz", ShortEnglishName = "Fall 2024",
+            TermType = TermType.Fall, Year = 2024, IsActivated = true,
+            TermStart = new DateTime(2024, 10, 1), TermEnd = new DateTime(2025, 1, 31)
+        });
+
+        // Instructor + section
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = instrUserId, UserName = "instr50@t.edu", NormalizedUserName = "INSTR50@T.EDU",
+            Email = "instr50@t.edu", NormalizedEmail = "INSTR50@T.EDU", FirstName = "I", LastName = "50"
+        });
+        ctx.Instructors.Add(new Instructor
+        {
+            Id = instrId, UserId = instrUserId, DepartmentId = dId1, Title = "Dr.", MaxWeeklyHours = 12
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = sectionId, CourseId = courseId, TermId = termId,
+            InstructorId = instrId, Capacity = 30,
+            Status = CourseSectionStatus.Active, IsFinalized = false
+        });
+
+        // Components: both Type=Other → weight-bounds check is skipped entirely
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp1Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Ödev", Weight = 50m, Order = 1, Type = GradeComponentType.Other
+        });
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp2Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Proje", Weight = 50m, Order = 2, Type = GradeComponentType.Other
+        });
+
+        // NO GradingCriteria row → the section has no manually entered criteria
+
+        // Locked regulation for Program A — AAMin=90 (set 1)
+        ctx.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = 50, ProgramId = pId1, DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall, Year = 2024, IsActive = true,
+            Name = "Locked Reg A", MidtermCount = 1, FinalCount = 1,
+            MinMidtermWeightPercent = 0m, MaxMidtermWeightPercent = 100m,
+            MinFinalWeightPercent = 0m, MaxFinalWeightPercent = 100m,
+            FinalExamFloor = 0m, PassingGrade = 0m,
+            LetterRangesEditable = false,
+            AAMin = 90, BAMin = 80, BBMin = 70, CBMin = 60, CCMin = 55, DCMin = 50, DDMin = 45,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Locked regulation for Program B — AAMin=95 (DIFFERENT → HasUniqueThresholds=false)
+        ctx.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = 51, ProgramId = pId2, DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall, Year = 2024, IsActive = true,
+            Name = "Locked Reg B", MidtermCount = 1, FinalCount = 1,
+            MinMidtermWeightPercent = 0m, MaxMidtermWeightPercent = 100m,
+            MinFinalWeightPercent = 0m, MaxFinalWeightPercent = 100m,
+            FinalExamFloor = 0m, PassingGrade = 0m,
+            LetterRangesEditable = false,
+            AAMin = 95, BAMin = 85, BBMin = 75, CBMin = 65, CCMin = 58, DCMin = 52, DDMin = 47,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Student enrolled in Program A (main program)
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = studUserId, UserName = "s50@t.edu", NormalizedUserName = "S50@T.EDU",
+            Email = "s50@t.edu", NormalizedEmail = "S50@T.EDU", FirstName = "S", LastName = "50"
+        });
+        ctx.Students.Add(new Student
+        {
+            Id = studId, UserId = studUserId, StudentNumber = "20240501",
+            NationalId = "55555555555", Status = StudentStatus.Active,
+            Cgpa = 3.0m, Sgpa = 3.0m, CompletedSemesters = 2
+        });
+        ctx.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = studId, ProgramId = pId1, CurriculumId = currId1,
+            Type = StudentProgramType.Main, IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+        ctx.CourseRegistrations.Add(new CourseRegistration
+        {
+            Id = regId, StudentId = studId, CourseSectionId = sectionId,
+            Status = RegistrationStatus.Active
+        });
+
+        // Valid scores for both components
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 50, CourseRegistrationId = regId, GradeComponentId = comp1Id, Score = 75m
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 51, CourseRegistrationId = regId, GradeComponentId = comp2Id, Score = 75m
+        });
+
+        await ctx.SaveChangesAsync();
+
+        var gpaMock = new Mock<IGpaCalculationService>();
+        gpaMock.Setup(g => g.RecalculateAndUpdateAsync(It.IsAny<int>()))
+               .ReturnsAsync(new GpaResultDto());
+
+        var resolver = new ExamRegulationResolver(ctx);
+        var controller = new GradeController(
+            ctx, gpaMock.Object, new SystemDateTimeProvider(),
+            webModuleControls: new NullWebModuleControlService(),
+            examRegulationResolver: resolver);
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.NameIdentifier, instrUserId.ToString())
+                ], "TestAuth"))
+            }
+        };
+
+        // Act
+        var result = await controller.Finalize(sectionId);
+
+        // Assert: must be a 400 whose error message mentions "çelişen"
+        result.Should().BeOfType<BadRequestObjectResult>(
+            "locked regulations with conflicting thresholds and no section criteria → deadlock → must return 400");
+
+        var badRequest = (BadRequestObjectResult)result;
+
+        // The error value is an anonymous object; serialize with Unicode un-escaped so Turkish
+        // characters are preserved as literals (not \uXXXX escapes).
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        var json = System.Text.Json.JsonSerializer.Serialize(badRequest.Value, jsonOptions);
+        json.Should().Contain("çelişen",
+            "the error must specifically identify the conflicting-thresholds deadlock, not the generic 'girilmeden' message");
+
+        // Explicitly verify it is NOT the generic no-criteria message
+        json.Should().NotContain("girilmeden",
+            "the generic 'girilmeden' message is misleading when the lock itself prevents entry");
+    }
+
     public void Dispose() => _context.Dispose();
 }

@@ -958,6 +958,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         }
         else
         {
+            if (letterPolicy != null && !letterPolicy.Editable && !letterPolicy.HasUniqueThresholds)
+                return BadRequest(new { error = "Bu dersin bağlı programları arasında çelişen harf aralıkları var. Sınav müfredatını (harf aralıklarını) düzeltin." });
+
             return BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." });
         }
 
