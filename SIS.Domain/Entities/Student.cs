@@ -26,4 +26,5 @@ public class Student
     public ICollection<CourseRegistration> Registrations { get; set; } = new List<CourseRegistration>();
     public ICollection<StudentDocument> Documents { get; set; } = new List<StudentDocument>();
     public ICollection<IssuedDocument> IssuedDocuments { get; set; } = new List<IssuedDocument>();
+    public ICollection<StudentScholarshipDetail> ScholarshipDetails { get; set; } = new List<StudentScholarshipDetail>();
 }

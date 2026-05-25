@@ -3319,6 +3319,57 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("StudentPrograms");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentScholarshipDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("RatePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId", "IsActive");
+
+                    b.ToTable("StudentScholarshipDetails", t =>
+                        {
+                            t.HasCheckConstraint("CK_StudentScholarshipDetail_RatePercent", "\"RatePercent\" IS NULL OR (\"RatePercent\" >= 0 AND \"RatePercent\" <= 100)");
+                        });
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.SystemConfig", b =>
                 {
                     b.Property<int>("Id")
@@ -5244,6 +5295,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentScholarshipDetail", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("ScholarshipDetails")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.TermAcademicCalendar", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
@@ -5553,6 +5613,8 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("PersonalInfo");
 
                     b.Navigation("Registrations");
+
+                    b.Navigation("ScholarshipDetails");
 
                     b.Navigation("StudentPrograms");
                 });

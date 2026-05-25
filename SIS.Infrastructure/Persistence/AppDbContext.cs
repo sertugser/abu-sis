@@ -29,6 +29,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
     public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
     public DbSet<IssuedDocument> IssuedDocuments => Set<IssuedDocument>();
+    public DbSet<StudentScholarshipDetail> StudentScholarshipDetails => Set<StudentScholarshipDetail>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -215,6 +216,23 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(d => new { d.StudentId, d.IssuedAt });
 
             e.Property(d => d.DocumentNumber).HasMaxLength(40);
+        });
+
+        // ── StudentScholarshipDetail (1-to-many child of Student) ──
+        builder.Entity<StudentScholarshipDetail>(e =>
+        {
+            e.ToTable(t => t.HasCheckConstraint(
+                "CK_StudentScholarshipDetail_RatePercent",
+                "\"RatePercent\" IS NULL OR (\"RatePercent\" >= 0 AND \"RatePercent\" <= 100)"));
+
+            e.HasOne<Student>()
+             .WithMany(s => s.ScholarshipDetails)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.StudentId, d.IsActive });
+            e.Property(d => d.RatePercent).HasPrecision(5, 2);
+            e.Property(d => d.Source).HasMaxLength(160);
+            e.Property(d => d.Note).HasMaxLength(500);
         });
 
         // ── Instructor ───────────────────────────────────────────
