@@ -99,6 +99,9 @@ public class ExamRegulationController(AppDbContext context) : ControllerBase
         var source = await context.ExamRegulations.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
         if (source == null) return NotFound(new { message = "Kaynak yönerge bulunamadı." });
 
+        if (req.Year < 2000 || req.Year > 2100)
+            return BadRequest(new { message = "Yıl geçerli değil." });
+
         var targetProgramId = req.ProgramId ?? source.ProgramId;
         if (await ScopeExistsAsync(targetProgramId, source.DegreeLevel, source.TermType, req.Year, null, ct))
             return BadRequest(new { message = "Hedef program/dönem/yıl için zaten bir yönerge var." });
@@ -151,6 +154,15 @@ public class ExamRegulationController(AppDbContext context) : ControllerBase
             if (min > max) return $"{label}: en az değer en çok değeri aşamaz.";
         }
         if (req.PassingGrade < 0 || req.PassingGrade > 100) return "Geçme notu 0-100 arasında olmalıdır.";
+        foreach (var (value, label) in new[]
+                 {
+                     (req.RawScoreFloor1, "Ham başarı notu alt limiti"),
+                     (req.RawScoreFloor2, "Ham başarı notu alt limiti 2"),
+                     (req.FinalExamFloor, "Yarıyıl sonu sınav limiti")
+                 })
+        {
+            if (value < 0 || value > 100) return $"{label} 0-100 arasında olmalıdır.";
+        }
         return null;
     }
 

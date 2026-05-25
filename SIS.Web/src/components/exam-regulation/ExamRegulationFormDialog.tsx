@@ -7,9 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAdminPrograms } from '../../hooks/useAdminLookup';
 import { useCreateExamRegulation, useUpdateExamRegulation } from '../../hooks/useExamRegulations';
 import type { ExamRegulation, SaveExamRegulationRequest } from '../../types/examRegulation';
-
-const TERM_TYPES = ['Fall','Spring','Summer','FallResit','SpringResit','SummerResit','SpringOther','SummerOther','Exemption'];
-const TERM_LABELS: Record<string,string> = { Fall:'Güz', Spring:'Bahar', Summer:'Yaz', FallResit:'Güz Bütünleme', SpringResit:'Bahar Bütünleme', SummerResit:'Yaz Bütünleme', SpringOther:'Bahar Diğer', SummerOther:'Yaz Diğer', Exemption:'Muafiyet' };
+import { TERM_TYPES, TERM_LABELS } from '../../lib/examRegulationLabels';
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; editTarget: ExamRegulation | null; }
 
@@ -77,30 +75,30 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             </select>
           </div>
           <div className="space-y-1"><Label>Yıl</Label>
-            <Input type="number" value={form.year} onChange={(e) => set('year', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.year} onChange={(e) => set('year', Number(e.target.value))} /></div>
           <div className="space-y-1 md:col-span-2"><Label>Adı</Label>
             <Input value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
           <div className="flex items-center gap-2"><Switch checked={form.isActive} onCheckedChange={(v) => set('isActive', v)} /><Label>Aktif</Label></div>
           <div className="space-y-1"><Label>Ara Sınav Sayısı</Label>
-            <Input type="number" value={form.midtermCount} onChange={(e) => set('midtermCount', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.midtermCount} onChange={(e) => set('midtermCount', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>YYS Sınav Sayısı</Label>
-            <Input type="number" value={form.finalCount} onChange={(e) => set('finalCount', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.finalCount} onChange={(e) => set('finalCount', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>En Az Ara Sınav Etki %</Label>
-            <Input type="number" value={form.minMidtermWeightPercent} onChange={(e) => set('minMidtermWeightPercent', Number(e.target.value))} /></div>
+            <Input type="number" min={0} max={100} value={form.minMidtermWeightPercent} onChange={(e) => set('minMidtermWeightPercent', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>En Çok Ara Sınav Etki %</Label>
-            <Input type="number" value={form.maxMidtermWeightPercent} onChange={(e) => set('maxMidtermWeightPercent', Number(e.target.value))} /></div>
+            <Input type="number" min={0} max={100} value={form.maxMidtermWeightPercent} onChange={(e) => set('maxMidtermWeightPercent', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>En Az YYS Etki %</Label>
-            <Input type="number" value={form.minFinalWeightPercent} onChange={(e) => set('minFinalWeightPercent', Number(e.target.value))} /></div>
+            <Input type="number" min={0} max={100} value={form.minFinalWeightPercent} onChange={(e) => set('minFinalWeightPercent', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>En Çok YYS Etki %</Label>
-            <Input type="number" value={form.maxFinalWeightPercent} onChange={(e) => set('maxFinalWeightPercent', Number(e.target.value))} /></div>
+            <Input type="number" min={0} max={100} value={form.maxFinalWeightPercent} onChange={(e) => set('maxFinalWeightPercent', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Geçme Notu</Label>
-            <Input type="number" value={form.passingGrade} onChange={(e) => set('passingGrade', Number(e.target.value))} /></div>
+            <Input type="number" min={0} max={100} value={form.passingGrade} onChange={(e) => set('passingGrade', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>YYS Limiti (finalden baraj)</Label>
-            <Input type="number" value={form.finalExamFloor} onChange={(e) => set('finalExamFloor', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.finalExamFloor} onChange={(e) => set('finalExamFloor', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Ham Başarı Alt Limit 1</Label>
-            <Input type="number" value={form.rawScoreFloor1} onChange={(e) => set('rawScoreFloor1', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.rawScoreFloor1} onChange={(e) => set('rawScoreFloor1', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Ham Başarı Alt Limit 2</Label>
-            <Input type="number" value={form.rawScoreFloor2} onChange={(e) => set('rawScoreFloor2', Number(e.target.value))} /></div>
+            <Input type="number" min={0} value={form.rawScoreFloor2} onChange={(e) => set('rawScoreFloor2', Number(e.target.value))} /></div>
         </div>
 
         {mutation.isError && (

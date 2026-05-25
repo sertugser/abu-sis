@@ -95,5 +95,21 @@ public class ExamRegulationControllerTests : IDisposable
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task Clone_Rejects_InvalidYear()
+    {
+        var req = new SaveExamRegulationRequest(
+            ProgramId: 1, DegreeLevel: DegreeLevel.Bachelor, TermType: TermType.Fall, Year: 2024,
+            IsActive: true, Name: "Kaynak", MidtermCount: 1, FinalCount: 1,
+            MinMidtermWeightPercent: 40, MaxMidtermWeightPercent: 60,
+            MinFinalWeightPercent: 40, MaxFinalWeightPercent: 60,
+            PassingGrade: 50, RawScoreFloor1: 0, RawScoreFloor2: 0, FinalExamFloor: 0);
+        var created = await _controller.Create(req, default);
+        var createdId = ((ExamRegulationDto)((OkObjectResult)created).Value!).Id;
+
+        var result = await _controller.Clone(createdId, new CloneExamRegulationRequest(null, 1500), default);
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
     public void Dispose() => _context.Dispose();
 }

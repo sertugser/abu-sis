@@ -1195,37 +1195,33 @@
 | | |
 |---|---|
 | **Route** | `/sinav-mufredati` |
-| **Dosya** | `SIS.Web/src/pages/ExamCurriculumPage.tsx` |
+| **Dosya** | `SIS.Web/src/pages/ExamRegulationManagementPage.tsx` |
 | **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (2):**
-- `useAdminDepartmentsByStructure()`
-- `useAdminFaculties()`
+**Açıklama:** Program bazında sınav yönergesi (Sınav Müfredatı) yönetimi. Her kayıt bir program + dönem tipi + yıl bileşimine ait değerlendirme kurallarını tanımlar (ara sınav/YYS sayısı, ağırlık oranları, geçme notu, ham başarı baraj değerleri).
 
-**API endpoint'leri (22):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${API}/template`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/departments/${departmentId}/deletion-summary`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
-- `GET ${BASE}/programs`
-- `GET ${BASE}/programs/${programId}/deletion-summary`
-- `GET /admin/terms`
-- `GET /curriculum`
-- `GET /curriculum/${curriculumId}/courses`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/departments/bulk`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/faculties/bulk`
-- `POST ${BASE}/programs`
-- `PUT ${API}/template`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
+**Veri kancaları (4):**
+- `useAdminPrograms()`
+- `useExamRegulations(programId?)`
+- `useDeleteExamRegulation()`
+- `useCloneExamRegulation()`
+
+**Controller:** `ExamRegulationController` → `api/admin/exam-regulations`
+
+**API endpoint'leri (6):**
+- `GET api/admin/exam-regulations` — liste (programId query filtresi opsiyonel)
+- `GET api/admin/exam-regulations/{id}` — tek kayıt
+- `POST api/admin/exam-regulations` — oluştur
+- `PUT api/admin/exam-regulations/{id}` — güncelle
+- `DELETE api/admin/exam-regulations/{id}` — sil
+- `POST api/admin/exam-regulations/{id}/clone` — yeni yıl/programa çoğalt
+
+**İzinler:**
+- `menu.sinav-mufredati.view`
+- `menu.sinav-mufredati.create`
+- `menu.sinav-mufredati.edit`
+- `menu.sinav-mufredati.delete`
 
 ---
 

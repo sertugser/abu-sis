@@ -5,9 +5,7 @@ import { useAdminPrograms } from '../hooks/useAdminLookup';
 import { useExamRegulations, useDeleteExamRegulation, useCloneExamRegulation } from '../hooks/useExamRegulations';
 import { ExamRegulationFormDialog } from '../components/exam-regulation/ExamRegulationFormDialog';
 import type { ExamRegulation } from '../types/examRegulation';
-
-const TERM_LABELS: Record<string,string> = { Fall:'Güz', Spring:'Bahar', Summer:'Yaz', FallResit:'Güz Bütünleme', SpringResit:'Bahar Bütünleme', SummerResit:'Yaz Bütünleme', SpringOther:'Bahar Diğer', SummerOther:'Yaz Diğer', Exemption:'Muafiyet' };
-const LEVEL_LABELS: Record<string,string> = { Bachelor:'Lisans', Associate:'Önlisans', Master:'Yüksek Lisans', Doctorate:'Doktora' };
+import { TERM_LABELS, LEVEL_LABELS } from '../lib/examRegulationLabels';
 
 export default function ExamRegulationManagementPage() {
   const programs = useAdminPrograms();
