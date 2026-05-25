@@ -4,13 +4,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
 import { useAdminPrograms } from '../../hooks/useAdminLookup';
 import { useCreateExamRegulation, useUpdateExamRegulation } from '../../hooks/useExamRegulations';
 import type { ExamRegulation, SaveExamRegulationRequest } from '../../types/examRegulation';
-import { TERM_TYPES, TERM_LABELS } from '../../lib/examRegulationLabels';
+import { TERM_TYPES, TERM_LABELS, LEVEL_LABELS } from '../../lib/examRegulationLabels';
 import { GRADE_BADGE_CLASS } from '../../lib/gradeUtils';
 
 const GRADE_CODES = Object.keys(GRADE_BADGE_CLASS) as string[];
+const LEVEL_CODES = Object.keys(LEVEL_LABELS) as string[];
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; editTarget: ExamRegulation | null; }
 
@@ -34,6 +40,28 @@ const emptyForm: SaveExamRegulationRequest = {
   autoTransferExcusedToMakeup: false,
 };
 
+const LETTER_FIELDS = [
+  { key: 'aaMin', label: 'AA' }, { key: 'baMin', label: 'BA' }, { key: 'bbMin', label: 'BB' },
+  { key: 'cbMin', label: 'CB' }, { key: 'ccMin', label: 'CC' }, { key: 'dcMin', label: 'DC' },
+  { key: 'ddMin', label: 'DD' },
+] as const;
+
+const T_LETTER_FIELDS = [
+  { key: 'tAAMin', label: 'T-AA' }, { key: 'tBAMin', label: 'T-BA' }, { key: 'tBBMin', label: 'T-BB' },
+  { key: 'tCBMin', label: 'T-CB' }, { key: 'tCCMin', label: 'T-CC' }, { key: 'tDCMin', label: 'T-DC' },
+  { key: 'tDDMin', label: 'T-DD' },
+] as const;
+
+const RULE_FIELDS = [
+  { key: 'blockFinalIfNoMidterm', label: 'Hiçbir ara sınava girmeyen finale giremez', hint: 'Kapalıyken ara sınava girmeyen de finale girebilir.' },
+  { key: 'failIfNoFinal', label: 'Finale girmeyen doğrudan kalır', hint: 'Kapalıyken geçme notunu tutturan öğrenci finale girmese de geçer.' },
+  { key: 'blockMakeupIfNoFinal', label: 'Finale (mazeretsiz) girmeyen bütünlemeye giremez', hint: '' },
+  { key: 'zeroIfMissedMakeup', label: 'Bütünleme listesinde olup puan girilmeyene 0 ver', hint: '' },
+  { key: 'makeupReplacesFinal', label: 'Bütünleme notu finalin yerine değerlendirilir', hint: 'Aynı ağırlıkla final bileşeninin yerine geçer.' },
+  { key: 'autoTransferFailedToMakeup', label: 'Kalanlar otomatik bütünleme listesine eklenir', hint: '' },
+  { key: 'autoTransferExcusedToMakeup', label: 'Mazeretliler otomatik mazeret listesine eklenir', hint: '' },
+] as const;
+
 export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Props) {
   const programs = useAdminPrograms();
   const createMut = useCreateExamRegulation();
@@ -51,6 +79,13 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
   const set = <K extends keyof SaveExamRegulationRequest>(k: K, v: SaveExamRegulationRequest[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const num = <K extends keyof SaveExamRegulationRequest>(k: K) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => set(k, Number(e.target.value) as SaveExamRegulationRequest[K]);
+
+  const midtermWeightInvalid = form.minMidtermWeightPercent > form.maxMidtermWeightPercent;
+  const finalWeightInvalid = form.minFinalWeightPercent > form.maxFinalWeightPercent;
+  const noProgram = !form.programId;
+
   const submit = () => {
     if (editTarget) updateMut.mutate({ id: editTarget.id, dto: form }, { onSuccess: () => onOpenChange(false) });
     else createMut.mutate(form, { onSuccess: () => onOpenChange(false) });
@@ -58,177 +93,258 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editTarget ? 'Sınav Yönergesi Düzenle' : 'Yeni Sınav Yönergesi'}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1">
-            <Label>Program</Label>
-            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.programId}
-              onChange={(e) => set('programId', Number(e.target.value))}>
-              <option value={0}>Program seçiniz</option>
-              {(programs.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <Label>Öğrenci Tipi</Label>
-            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.degreeLevel}
-              onChange={(e) => set('degreeLevel', e.target.value as SaveExamRegulationRequest['degreeLevel'])}>
-              <option value="Bachelor">Lisans</option>
-              <option value="Associate">Önlisans</option>
-              <option value="Master">Yüksek Lisans</option>
-              <option value="Doctorate">Doktora</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <Label>Dönem Tipi</Label>
-            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.termType}
-              onChange={(e) => set('termType', e.target.value)}>
-              {TERM_TYPES.map((t) => <option key={t} value={t}>{TERM_LABELS[t]}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1"><Label>Yıl</Label>
-            <Input type="number" min={0} value={form.year} onChange={(e) => set('year', Number(e.target.value))} /></div>
-          <div className="space-y-1 md:col-span-2"><Label>Adı</Label>
-            <Input value={form.name} onChange={(e) => set('name', e.target.value)} /></div>
-          <div className="flex items-center gap-2"><Switch checked={form.isActive} onCheckedChange={(v) => set('isActive', v)} /><Label>Aktif</Label></div>
-          <div className="space-y-1"><Label>Ara Sınav Sayısı</Label>
-            <Input type="number" min={0} value={form.midtermCount} onChange={(e) => set('midtermCount', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>YYS Sınav Sayısı</Label>
-            <Input type="number" min={0} value={form.finalCount} onChange={(e) => set('finalCount', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>En Az Ara Sınav Etki %</Label>
-            <Input type="number" min={0} max={100} value={form.minMidtermWeightPercent} onChange={(e) => set('minMidtermWeightPercent', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>En Çok Ara Sınav Etki %</Label>
-            <Input type="number" min={0} max={100} value={form.maxMidtermWeightPercent} onChange={(e) => set('maxMidtermWeightPercent', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>En Az YYS Etki %</Label>
-            <Input type="number" min={0} max={100} value={form.minFinalWeightPercent} onChange={(e) => set('minFinalWeightPercent', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>En Çok YYS Etki %</Label>
-            <Input type="number" min={0} max={100} value={form.maxFinalWeightPercent} onChange={(e) => set('maxFinalWeightPercent', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>Geçme Notu</Label>
-            <Input type="number" min={0} max={100} value={form.passingGrade} onChange={(e) => set('passingGrade', Number(e.target.value))} /></div>
-          <div className="space-y-1">
-            <Label>Baraj Altına Atanacak Harf</Label>
-            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.belowFloorGrade}
-              onChange={(e) => set('belowFloorGrade', e.target.value)}>
-              {GRADE_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1"><Label>YYS Limiti (finalden baraj)</Label>
-            <Input type="number" min={0} value={form.finalExamFloor} onChange={(e) => set('finalExamFloor', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>Ham Başarı Alt Limit 1</Label>
-            <Input type="number" min={0} value={form.rawScoreFloor1} onChange={(e) => set('rawScoreFloor1', Number(e.target.value))} /></div>
-          <div className="space-y-1"><Label>Ham Başarı Alt Limit 2</Label>
-            <Input type="number" min={0} value={form.rawScoreFloor2} onChange={(e) => set('rawScoreFloor2', Number(e.target.value))} /></div>
-          <div className="space-y-1 md:col-span-2">
-            <Label>Değerlendirme Tipi</Label>
-            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.evaluationType}
-              onChange={(e) => set('evaluationType', e.target.value as SaveExamRegulationRequest['evaluationType'])}>
-              <option value="Absolute">Mutlak</option>
-              <option value="Relative">Bağıl</option>
-            </select>
-          </div>
-        </div>
+        <Tabs defaultValue="identity" className="w-full">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+            <TabsTrigger value="identity">Kimlik</TabsTrigger>
+            <TabsTrigger value="exam">Sınav &amp; Ağırlık</TabsTrigger>
+            <TabsTrigger value="passing">Geçme &amp; Baraj</TabsTrigger>
+            <TabsTrigger value="letters">Harf Tablosu</TabsTrigger>
+            <TabsTrigger value="evaluation">Değerlendirme</TabsTrigger>
+            <TabsTrigger value="rules">Kurallar</TabsTrigger>
+          </TabsList>
 
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Harf Aralıkları</h3>
-            <div className="flex items-center gap-2">
-              <Switch checked={form.letterRangesEditable} onCheckedChange={(v) => set('letterRangesEditable', v)} />
-              <Label className="text-sm">Harf Aralığı Değişebilir</Label>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {([
-              { key: 'aaMin' as const, label: 'AA min' },
-              { key: 'baMin' as const, label: 'BA min' },
-              { key: 'bbMin' as const, label: 'BB min' },
-              { key: 'cbMin' as const, label: 'CB min' },
-              { key: 'ccMin' as const, label: 'CC min' },
-              { key: 'dcMin' as const, label: 'DC min' },
-              { key: 'ddMin' as const, label: 'DD min' },
-            ]).map(({ key, label }) => (
-              <div key={key} className="space-y-1">
-                <Label className="font-mono text-xs">{label}</Label>
+          {/* ── Kimlik ── */}
+          <TabsContent value="identity" className="mt-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-sm font-medium">Program</Label>
+                <Select
+                  value={form.programId ? String(form.programId) : ''}
+                  onValueChange={(v) => set('programId', Number(v))}
+                >
+                  <SelectTrigger className={noProgram ? 'border-destructive/60' : ''}>
+                    <SelectValue placeholder="Program seçiniz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(programs.data ?? []).map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {noProgram && <p className="text-xs text-destructive">Program seçilmeli.</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Öğrenci Tipi</Label>
+                <Select
+                  value={form.degreeLevel}
+                  onValueChange={(v) => set('degreeLevel', v as SaveExamRegulationRequest['degreeLevel'])}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LEVEL_CODES.map((c) => <SelectItem key={c} value={c}>{LEVEL_LABELS[c]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Dönem Tipi</Label>
+                <Select value={form.termType} onValueChange={(v) => set('termType', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TERM_TYPES.map((t) => <SelectItem key={t} value={t}>{TERM_LABELS[t]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Yıl</Label>
+                <Input type="number" min={0} value={form.year} onChange={num('year')} />
+              </div>
+
+              <div className="flex items-center gap-2 pt-6">
+                <Switch checked={form.isActive} onCheckedChange={(v) => set('isActive', v)} />
+                <Label className="text-sm font-normal">Aktif</Label>
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <Label className="text-sm font-medium">Adı</Label>
                 <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={form[key]}
-                  onChange={(e) => set(key, Number(e.target.value))}
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  placeholder="örneğin: Lisans Güz Sınav Yönergesi 2026"
                 />
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          </TabsContent>
 
-        {form.evaluationType === 'Relative' && (
-          <div className="space-y-3 pt-2">
-            <h3 className="text-sm font-semibold">Bağıl Değerlendirme (Çan Eğrisi)</h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="space-y-1">
-                <Label className="text-xs">En Az Öğrenci Sayısı</Label>
-                <Input type="number" min={0} value={form.relativeMinStudentCount}
-                  onChange={(e) => set('relativeMinStudentCount', Number(e.target.value))} />
+          {/* ── Sınav & Ağırlık ── */}
+          <TabsContent value="exam" className="mt-4 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Ara Sınav Sayısı</Label>
+                <Input type="number" min={0} value={form.midtermCount} onChange={num('midtermCount')} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Katma Limiti</Label>
-                <Input type="number" min={0} value={form.relativeInclusionLimit}
-                  onChange={(e) => set('relativeInclusionLimit', Number(e.target.value))} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Mutlak Alt Sınır</Label>
-                <Input type="number" min={0} value={form.relativeAbsoluteFloor}
-                  onChange={(e) => set('relativeAbsoluteFloor', Number(e.target.value))} />
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">YYS (Final) Sınav Sayısı</Label>
+                <Input type="number" min={0} value={form.finalCount} onChange={num('finalCount')} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {([
-                { key: 'tAAMin' as const, label: 'T-AA min' },
-                { key: 'tBAMin' as const, label: 'T-BA min' },
-                { key: 'tBBMin' as const, label: 'T-BB min' },
-                { key: 'tCBMin' as const, label: 'T-CB min' },
-                { key: 'tCCMin' as const, label: 'T-CC min' },
-                { key: 'tDCMin' as const, label: 'T-DC min' },
-                { key: 'tDDMin' as const, label: 'T-DD min' },
-              ]).map(({ key, label }) => (
-                <div key={key} className="space-y-1">
+
+            <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm font-medium">Ara Sınav Ağırlık Aralığı (%)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">En Az</Label>
+                  <Input type="number" min={0} max={100} value={form.minMidtermWeightPercent} onChange={num('minMidtermWeightPercent')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">En Çok</Label>
+                  <Input type="number" min={0} max={100} value={form.maxMidtermWeightPercent} onChange={num('maxMidtermWeightPercent')} />
+                </div>
+              </div>
+              {midtermWeightInvalid && <p className="text-xs text-destructive">En az, en çoktan büyük olamaz.</p>}
+            </div>
+
+            <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm font-medium">YYS (Final) Ağırlık Aralığı (%)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">En Az</Label>
+                  <Input type="number" min={0} max={100} value={form.minFinalWeightPercent} onChange={num('minFinalWeightPercent')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">En Çok</Label>
+                  <Input type="number" min={0} max={100} value={form.maxFinalWeightPercent} onChange={num('maxFinalWeightPercent')} />
+                </div>
+              </div>
+              {finalWeightInvalid && <p className="text-xs text-destructive">En az, en çoktan büyük olamaz.</p>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Hoca, sınav ağırlıklarını bu aralıkların dışında belirleyemez.
+            </p>
+          </TabsContent>
+
+          {/* ── Geçme & Baraj ── */}
+          <TabsContent value="passing" className="mt-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Geçme Notu</Label>
+                <Input type="number" min={0} max={100} value={form.passingGrade} onChange={num('passingGrade')} />
+                <p className="text-xs text-muted-foreground">Ağırlıklı ham puanı bunun altında kalan öğrenci kalır.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Baraj Altına Atanacak Harf</Label>
+                <Select value={form.belowFloorGrade} onValueChange={(v) => set('belowFloorGrade', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {GRADE_CODES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">YYS (Final) Barajı</Label>
+                <Input type="number" min={0} value={form.finalExamFloor} onChange={num('finalExamFloor')} />
+                <p className="text-xs text-muted-foreground">Final puanı bunun altındaysa baraj uygulanır (0 = pasif).</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 md:col-span-2">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Ham Başarı Alt Limit 1</Label>
+                  <Input type="number" min={0} value={form.rawScoreFloor1} onChange={num('rawScoreFloor1')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Ham Başarı Alt Limit 2</Label>
+                  <Input type="number" min={0} value={form.rawScoreFloor2} onChange={num('rawScoreFloor2')} />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Harf Tablosu ── */}
+          <TabsContent value="letters" className="mt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Her harf notu için ham puan alt sınırı.</p>
+              <div className="flex items-center gap-2">
+                <Switch checked={form.letterRangesEditable} onCheckedChange={(v) => set('letterRangesEditable', v)} />
+                <Label className="text-sm font-normal">Hoca harf aralığını değiştirebilir</Label>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+              {LETTER_FIELDS.map(({ key, label }) => (
+                <div key={key} className="space-y-1.5">
                   <Label className="font-mono text-xs">{label}</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form[key]}
-                    onChange={(e) => set(key, Number(e.target.value))}
-                  />
+                  <Input type="number" min={0} max={100} value={form[key]} onChange={num(key)} />
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Çan eğrisi: sınıfın ortalaması ve dağılımına göre harf verir. Öğrenci sayısı &apos;En Az Öğrenci Sayısı&apos; altındaysa otomatik mutlak değerlendirmeye döner.
-            </p>
-          </div>
-        )}
+          </TabsContent>
 
-        <div className="space-y-3 pt-2">
-          <h3 className="text-sm font-semibold">Sınav Giriş Kuralları</h3>
-          <div className="space-y-2">
-            {([
-              { key: 'blockFinalIfNoMidterm' as const, label: 'Hiçbir ara sınava girmeyen finale giremez' },
-              { key: 'failIfNoFinal' as const, label: 'Finale girmeyen kalır' },
-              { key: 'blockMakeupIfNoFinal' as const, label: 'Finale girmeyen bütünlemeye giremez' },
-              { key: 'zeroIfMissedMakeup' as const, label: 'Bütünlemeye girmeyene 0 ver' },
-              { key: 'makeupReplacesFinal' as const, label: 'Bütünleme finalin yerine değerlendirilir' },
-              { key: 'autoTransferFailedToMakeup' as const, label: 'Kalanlar otomatik bütünleme listesine' },
-              { key: 'autoTransferExcusedToMakeup' as const, label: 'Mazeretliler otomatik mazeret listesine' },
-            ]).map(({ key, label }) => (
-              <div key={key} className="flex items-center gap-2">
-                <Switch checked={form[key]} onCheckedChange={(v) => set(key, v)} />
-                <Label className="text-sm font-normal">{label}</Label>
+          {/* ── Değerlendirme ── */}
+          <TabsContent value="evaluation" className="mt-4 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Değerlendirme Tipi</Label>
+              <Select
+                value={form.evaluationType}
+                onValueChange={(v) => set('evaluationType', v as SaveExamRegulationRequest['evaluationType'])}
+              >
+                <SelectTrigger className="md:w-1/2"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Absolute">Mutlak</SelectItem>
+                  <SelectItem value="Relative">Bağıl (Çan Eğrisi)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.evaluationType === 'Relative' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">En Az Öğrenci Sayısı</Label>
+                    <Input type="number" min={0} value={form.relativeMinStudentCount} onChange={num('relativeMinStudentCount')} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Katma Limiti</Label>
+                    <Input type="number" min={0} value={form.relativeInclusionLimit} onChange={num('relativeInclusionLimit')} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Mutlak Alt Sınır</Label>
+                    <Input type="number" min={0} value={form.relativeAbsoluteFloor} onChange={num('relativeAbsoluteFloor')} />
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-medium">T-Skor Harf Sınırları</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                    {T_LETTER_FIELDS.map(({ key, label }) => (
+                      <div key={key} className="space-y-1.5">
+                        <Label className="font-mono text-xs">{label}</Label>
+                        <Input type="number" min={0} value={form[key]} onChange={num(key)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Çan eğrisi sınıfın ortalaması ve dağılımına göre harf verir. Öğrenci sayısı
+                  &apos;En Az Öğrenci Sayısı&apos; altındaysa otomatik mutlak değerlendirmeye döner.
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Mutlak değerlendirmede harfler doğrudan <span className="font-medium text-foreground">Harf Tablosu</span> sekmesindeki
+                ham puan sınırlarına göre verilir.
+              </p>
+            )}
+          </TabsContent>
+
+          {/* ── Kurallar ── */}
+          <TabsContent value="rules" className="mt-4">
+            <div className="divide-y divide-border/60">
+              {RULE_FIELDS.map(({ key, label, hint }) => (
+                <div key={key} className="flex items-start justify-between gap-4 py-3">
+                  <div>
+                    <Label className="text-sm font-normal">{label}</Label>
+                    {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+                  </div>
+                  <Switch checked={form[key]} onCheckedChange={(v) => set(key, v)} className="mt-0.5 shrink-0" />
+                </div>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {mutation.isError && (
           <p className="text-sm text-destructive">
@@ -238,7 +354,10 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
-          <Button onClick={submit} disabled={mutation.isPending}>Kaydet</Button>
+          <Button onClick={submit} disabled={mutation.isPending || noProgram}>
+            {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Kaydet
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
