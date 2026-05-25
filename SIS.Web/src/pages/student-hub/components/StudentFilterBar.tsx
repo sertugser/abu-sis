@@ -1,4 +1,4 @@
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, UserPlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -11,6 +11,8 @@ import { STUDENT_STATUS_LABELS } from '../../../lib/constants';
 import type { StudentFilterState } from './studentFilter';
 
 const SELECT_CLASS = 'border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground';
+// Basic-row selects share a consistent min width so the toolbar stays symmetric.
+const BASIC_SELECT_CLASS = `${SELECT_CLASS} min-w-[150px]`;
 const LABEL_CLASS = 'text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
 
 interface StudentFilterBarProps {
@@ -19,6 +21,8 @@ interface StudentFilterBarProps {
   onClear: () => void;
   advancedOpen: boolean;
   onToggleAdvanced: () => void;
+  successMessage?: string;
+  onCreateStudent: () => void;
 }
 
 export default function StudentFilterBar({
@@ -27,6 +31,8 @@ export default function StudentFilterBar({
   onClear,
   advancedOpen,
   onToggleAdvanced,
+  successMessage,
+  onCreateStudent,
 }: StudentFilterBarProps) {
   const { data: departments = [] } = useAdminDepartments();
   const { data: programs = [] } = useAdminPrograms(filters.departmentId);
@@ -58,7 +64,7 @@ export default function StudentFilterBar({
               curriculumId: undefined,
             })
           }
-          className={SELECT_CLASS}
+          className={BASIC_SELECT_CLASS}
         >
           <option value="">Tüm Bölümler</option>
           {departments.map(d => (
@@ -75,7 +81,7 @@ export default function StudentFilterBar({
               curriculumId: undefined,
             })
           }
-          className={SELECT_CLASS}
+          className={BASIC_SELECT_CLASS}
         >
           <option value="">Tüm Programlar</option>
           {programs.map(p => (
@@ -87,7 +93,7 @@ export default function StudentFilterBar({
           aria-label="Durum"
           value={filters.status}
           onChange={e => onChange({ status: e.target.value })}
-          className={SELECT_CLASS}
+          className={BASIC_SELECT_CLASS}
         >
           <option value="">Tüm Durumlar</option>
           {Object.entries(STUDENT_STATUS_LABELS).map(([k, v]) => (
@@ -99,17 +105,27 @@ export default function StudentFilterBar({
           aria-label="Danışman durumu"
           value={filters.advisorFilter}
           onChange={e => onChange({ advisorFilter: e.target.value })}
-          className={SELECT_CLASS}
+          className={BASIC_SELECT_CLASS}
         >
           <option value="">Danışman: hepsi</option>
           <option value="true">Danışmanı var</option>
           <option value="false">Danışmanı yok</option>
         </select>
 
-        <Button variant="outline" size="sm" onClick={onToggleAdvanced}>
-          <SlidersHorizontal className="h-4 w-4 mr-2" />
-          Gelişmiş filtreler
-        </Button>
+        {successMessage && (
+          <span className="text-sm font-medium text-green-700">{successMessage}</span>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" onClick={onToggleAdvanced}>
+            <SlidersHorizontal className="h-4 w-4 mr-2" />
+            Gelişmiş filtreler
+          </Button>
+          <Button onClick={onCreateStudent}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Yeni Öğrenci Ekle
+          </Button>
+        </div>
       </div>
 
       {/* Advanced grid */}

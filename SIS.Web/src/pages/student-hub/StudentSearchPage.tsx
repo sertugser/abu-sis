@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAdminStudents } from '../../hooks/useAdminStudents';
@@ -86,32 +86,15 @@ export default function StudentSearchPage() {
 
   return (
     <div className="rounded-xl border border-border bg-white overflow-hidden shadow-sm">
-      {/* (a) Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-base font-semibold text-foreground">Öğrenciler</h2>
-          {data && (
-            <span className="text-sm text-muted-foreground">Toplam {data.totalCount}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {successMessage && (
-            <span className="text-sm font-medium text-green-700">{successMessage}</span>
-          )}
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Yeni Öğrenci Ekle
-          </Button>
-        </div>
-      </div>
-
-      {/* (b) Filters */}
+      {/* (a) Filters + actions on a single row */}
       <StudentFilterBar
         filters={filters}
         onChange={patchFilters}
         onClear={clearFilters}
         advancedOpen={advancedOpen}
         onToggleAdvanced={() => setAdvancedOpen(o => !o)}
+        successMessage={successMessage}
+        onCreateStudent={() => setCreateModalOpen(true)}
       />
 
       {/* (c) Results table */}
