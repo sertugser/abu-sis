@@ -185,5 +185,93 @@ public class ExamRegulationControllerTests : IDisposable
             .And.Subject.Should().Match(r => r is OkObjectResult || r is BadRequestObjectResult);
     }
 
+    [Fact]
+    public async Task Create_PersistsRelativeFields_AndGetReturnsThem()
+    {
+        var req = new SaveExamRegulationRequest(
+            ProgramId: 1, DegreeLevel: DegreeLevel.Bachelor, TermType: TermType.Fall, Year: 2027,
+            IsActive: true, Name: "Bağıl Yönerge", MidtermCount: 2, FinalCount: 1,
+            MinMidtermWeightPercent: 40, MaxMidtermWeightPercent: 60,
+            MinFinalWeightPercent: 40, MaxFinalWeightPercent: 60,
+            PassingGrade: 50, RawScoreFloor1: 0, RawScoreFloor2: 0, FinalExamFloor: 0,
+            AAMin: 91, BAMin: 81, BBMin: 71, CBMin: 61, CCMin: 55, DCMin: 50, DDMin: 45,
+            LetterRangesEditable: true,
+            EvaluationType: GradeEvaluationType.Relative,
+            RelativeMinStudentCount: 15,
+            RelativeInclusionLimit: 30m,
+            RelativeAbsoluteFloor: 25m,
+            TAAMin: 72, TBAMin: 64, TBBMin: 58, TCBMin: 51, TCCMin: 46, TDCMin: 41, TDDMin: 36);
+
+        var created = await _controller.Create(req, default);
+        var createdDto = ((ExamRegulationDto)((OkObjectResult)created).Value!);
+
+        var getResult = await _controller.Get(createdDto.Id, default);
+        var ok = getResult.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeOfType<ExamRegulationDto>().Subject;
+
+        dto.EvaluationType.Should().Be("Relative");
+        dto.RelativeMinStudentCount.Should().Be(15);
+        dto.RelativeInclusionLimit.Should().Be(30m);
+        dto.RelativeAbsoluteFloor.Should().Be(25m);
+        dto.TAAMin.Should().Be(72);
+        dto.TBAMin.Should().Be(64);
+        dto.TBBMin.Should().Be(58);
+        dto.TCBMin.Should().Be(51);
+        dto.TCCMin.Should().Be(46);
+        dto.TDCMin.Should().Be(41);
+        dto.TDDMin.Should().Be(36);
+    }
+
+    [Fact]
+    public async Task Create_Rejects_WhenRelativeTThresholdsNotDescending()
+    {
+        var req = new SaveExamRegulationRequest(
+            ProgramId: 1, DegreeLevel: DegreeLevel.Bachelor, TermType: TermType.Fall, Year: 2028,
+            IsActive: true, Name: "Bozuk T-Skor", MidtermCount: 1, FinalCount: 1,
+            MinMidtermWeightPercent: 40, MaxMidtermWeightPercent: 60,
+            MinFinalWeightPercent: 40, MaxFinalWeightPercent: 60,
+            PassingGrade: 50, RawScoreFloor1: 0, RawScoreFloor2: 0, FinalExamFloor: 0,
+            AAMin: 91, BAMin: 81, BBMin: 71, CBMin: 61, CCMin: 55, DCMin: 50, DDMin: 45,
+            LetterRangesEditable: true,
+            EvaluationType: GradeEvaluationType.Relative,
+            TAAMin: 30, TBAMin: 64, TBBMin: 58, TCBMin: 51, TCCMin: 46, TDCMin: 41, TDDMin: 70);
+
+        var result = await _controller.Create(req, default);
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task Clone_PreservesRelativeFields()
+    {
+        var req = new SaveExamRegulationRequest(
+            ProgramId: 1, DegreeLevel: DegreeLevel.Bachelor, TermType: TermType.Fall, Year: 2029,
+            IsActive: true, Name: "Bağıl Kaynak", MidtermCount: 2, FinalCount: 1,
+            MinMidtermWeightPercent: 40, MaxMidtermWeightPercent: 60,
+            MinFinalWeightPercent: 40, MaxFinalWeightPercent: 60,
+            PassingGrade: 50, RawScoreFloor1: 0, RawScoreFloor2: 0, FinalExamFloor: 0,
+            AAMin: 91, BAMin: 81, BBMin: 71, CBMin: 61, CCMin: 55, DCMin: 50, DDMin: 45,
+            LetterRangesEditable: true,
+            EvaluationType: GradeEvaluationType.Relative,
+            RelativeMinStudentCount: 20,
+            TAAMin: 72, TBAMin: 64, TBBMin: 58, TCBMin: 51, TCCMin: 46, TDCMin: 41, TDDMin: 36);
+
+        var created = await _controller.Create(req, default);
+        var sourceId = ((ExamRegulationDto)((OkObjectResult)created).Value!).Id;
+
+        var cloneResult = await _controller.Clone(sourceId, new CloneExamRegulationRequest(null, 2030), default);
+        var ok = cloneResult.Should().BeOfType<OkObjectResult>().Subject;
+        var cloneDto = ok.Value.Should().BeOfType<ExamRegulationDto>().Subject;
+
+        cloneDto.EvaluationType.Should().Be("Relative");
+        cloneDto.RelativeMinStudentCount.Should().Be(20);
+        cloneDto.TAAMin.Should().Be(72);
+        cloneDto.TBAMin.Should().Be(64);
+        cloneDto.TBBMin.Should().Be(58);
+        cloneDto.TCBMin.Should().Be(51);
+        cloneDto.TCCMin.Should().Be(46);
+        cloneDto.TDCMin.Should().Be(41);
+        cloneDto.TDDMin.Should().Be(36);
+    }
+
     public void Dispose() => _context.Dispose();
 }

@@ -158,6 +158,17 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
             DDMin = source.DDMin,
             LetterRangesEditable = source.LetterRangesEditable,
             BelowFloorGrade = source.BelowFloorGrade,
+            EvaluationType = source.EvaluationType,
+            RelativeMinStudentCount = source.RelativeMinStudentCount,
+            RelativeInclusionLimit = source.RelativeInclusionLimit,
+            RelativeAbsoluteFloor = source.RelativeAbsoluteFloor,
+            TAAMin = source.TAAMin,
+            TBAMin = source.TBAMin,
+            TBBMin = source.TBBMin,
+            TCBMin = source.TCBMin,
+            TCCMin = source.TCCMin,
+            TDCMin = source.TDCMin,
+            TDDMin = source.TDDMin,
             CreatedAt = DateTime.UtcNow
         };
         context.ExamRegulations.Add(clone);
@@ -208,6 +219,10 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         if (!(req.AAMin > req.BAMin && req.BAMin > req.BBMin && req.BBMin > req.CBMin &&
               req.CBMin > req.CCMin && req.CCMin > req.DCMin && req.DCMin > req.DDMin && req.DDMin > 0))
             return "Harf aralıkları büyükten küçüğe sıralı ve pozitif olmalıdır.";
+        if (req.EvaluationType == GradeEvaluationType.Relative &&
+            !(req.TAAMin > req.TBAMin && req.TBAMin > req.TBBMin && req.TBBMin > req.TCBMin &&
+              req.TCBMin > req.TCCMin && req.TCCMin > req.TDCMin && req.TDCMin > req.TDDMin && req.TDDMin > 0))
+            return "T-skor eşikleri büyükten küçüğe sıralı ve pozitif olmalıdır.";
         return null;
     }
 
@@ -238,6 +253,17 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         e.DDMin = req.DDMin;
         e.LetterRangesEditable = req.LetterRangesEditable;
         e.BelowFloorGrade = req.BelowFloorGrade;
+        e.EvaluationType = req.EvaluationType;
+        e.RelativeMinStudentCount = req.RelativeMinStudentCount;
+        e.RelativeInclusionLimit = req.RelativeInclusionLimit;
+        e.RelativeAbsoluteFloor = req.RelativeAbsoluteFloor;
+        e.TAAMin = req.TAAMin;
+        e.TBAMin = req.TBAMin;
+        e.TBBMin = req.TBBMin;
+        e.TCBMin = req.TCBMin;
+        e.TCCMin = req.TCCMin;
+        e.TDCMin = req.TDCMin;
+        e.TDDMin = req.TDDMin;
     }
 
     private static ExamRegulationDto ToDto(ExamRegulation r) => new(
@@ -247,7 +273,10 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         r.MinFinalWeightPercent, r.MaxFinalWeightPercent,
         r.PassingGrade, r.RawScoreFloor1, r.RawScoreFloor2, r.FinalExamFloor,
         r.AAMin, r.BAMin, r.BBMin, r.CBMin, r.CCMin, r.DCMin, r.DDMin, r.LetterRangesEditable,
-        r.BelowFloorGrade.ToString());
+        r.BelowFloorGrade.ToString(),
+        r.EvaluationType.ToString(),
+        r.RelativeMinStudentCount, r.RelativeInclusionLimit, r.RelativeAbsoluteFloor,
+        r.TAAMin, r.TBAMin, r.TBBMin, r.TCBMin, r.TCCMin, r.TDCMin, r.TDDMin);
 }
 
 public record ExamRegulationDto(
@@ -258,7 +287,12 @@ public record ExamRegulationDto(
     decimal PassingGrade, decimal RawScoreFloor1, decimal RawScoreFloor2, decimal FinalExamFloor,
     int AAMin, int BAMin, int BBMin, int CBMin, int CCMin, int DCMin, int DDMin,
     bool LetterRangesEditable,
-    string BelowFloorGrade);
+    string BelowFloorGrade,
+    string EvaluationType,
+    int RelativeMinStudentCount,
+    decimal RelativeInclusionLimit,
+    decimal RelativeAbsoluteFloor,
+    int TAAMin, int TBAMin, int TBBMin, int TCBMin, int TCCMin, int TDCMin, int TDDMin);
 
 public record SaveExamRegulationRequest(
     int ProgramId, DegreeLevel DegreeLevel, TermType TermType, int Year,
@@ -268,7 +302,13 @@ public record SaveExamRegulationRequest(
     decimal PassingGrade, decimal RawScoreFloor1, decimal RawScoreFloor2, decimal FinalExamFloor,
     int AAMin = 91, int BAMin = 81, int BBMin = 71, int CBMin = 61,
     int CCMin = 55, int DCMin = 50, int DDMin = 45, bool LetterRangesEditable = true,
-    GradeCode BelowFloorGrade = GradeCode.FF);
+    GradeCode BelowFloorGrade = GradeCode.FF,
+    GradeEvaluationType EvaluationType = GradeEvaluationType.Absolute,
+    int RelativeMinStudentCount = 10,
+    decimal RelativeInclusionLimit = 0,
+    decimal RelativeAbsoluteFloor = 0,
+    int TAAMin = 70, int TBAMin = 63, int TBBMin = 57, int TCBMin = 50,
+    int TCCMin = 45, int TDCMin = 40, int TDDMin = 35);
 
 public record CloneExamRegulationRequest(int? ProgramId, int Year);
 
