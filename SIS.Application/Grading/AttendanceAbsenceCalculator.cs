@@ -51,6 +51,8 @@ public static class AttendanceAbsenceCalculator
     /// <summary>
     /// Calculates the maximum allowed absence hours given the total hours and limit percentage.
     /// Uses ceiling so the threshold is strict (any hours above this count is a failure).
+    /// Intentional: limit uses Math.Ceiling and failure is strictly-greater-than (a student may
+    /// miss UP TO the limit hours) — preserved from the original attendance display logic for consistency.
     /// </summary>
     public static int CalculateLimitHours(int totalHours, decimal limitPercent)
     {
@@ -62,6 +64,8 @@ public static class AttendanceAbsenceCalculator
 
     /// <summary>
     /// Returns true when absence hours exceed the limit in either theory or lab.
+    /// Intentional: failure is strictly-greater-than (a student may miss UP TO the limit hours)
+    /// — preserved from the original attendance display logic for consistency.
     /// </summary>
     public static bool IsFailedByAbsence(
         int theoryAbsenceHours, int labAbsenceHours,

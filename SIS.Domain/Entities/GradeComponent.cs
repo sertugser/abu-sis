@@ -13,7 +13,19 @@ public class GradeComponent
     public AcademicTerm AcademicTerm { get; set; } = null!;
 
     public string Name { get; set; } = string.Empty;   // "Vize", "Final", "Ödev 1", "Lab"
+
+    /// <summary>
+    /// Legacy free-text label (e.g. "Midterm", "Final", "Lab"). Kept for display/export purposes only.
+    /// Do NOT use for grade enforcement logic — use <see cref="Type"/> instead.
+    /// </summary>
     public string ExamType { get; set; } = "Other";    // Midterm, Final, Makeup, Assignment, Project, Lab, Quiz, Other
+
+    /// <summary>
+    /// Authoritative classification used by GradeController.Finalize for weight-bounds and
+    /// final-floor enforcement. Defaults to <see cref="GradeComponentType.Other"/> (the
+    /// post-migration default). When all components remain Other the weight-bounds check is
+    /// skipped to preserve legacy behavior for unclassified courses.
+    /// </summary>
     public GradeComponentType Type { get; set; } = GradeComponentType.Other;
 
     public decimal Weight { get; set; }                // 30.00 = %30

@@ -275,5 +275,65 @@ public class ExamRegulationResolverTests : IDisposable
         bounds.IsEmpty.Should().BeTrue();
     }
 
+    /// <summary>
+    /// Two students in different Main programs: student 1 in ProgramA (has a matching regulation),
+    /// student 2 in ProgramB (no regulation) → dict maps each correctly.
+    /// </summary>
+    [Fact]
+    public async Task ResolveForStudentsAsync_ReturnsPerStudentRegulations()
+    {
+        // Arrange
+        const int student2Id = 2;
+        const int program2Id = 20;
+        const int curriculum2Id = 20;
+
+        SeedFacultyDeptProgram(ProgramAId);
+
+        // Second program — different dept/faculty hierarchy not needed, just another program
+        _context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = program2Id, Name = "Program B", Code = "PB", DepartmentId = DeptId,
+            DegreeLevel = DegreeLevel.Bachelor, EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8, TotalRequiredEcts = 240
+        });
+        _context.Curricula.Add(new Curriculum
+        {
+            Id = curriculum2Id, ProgramId = program2Id, Name = "Müfredat B2", Version = "2024"
+        });
+
+        SeedTerm();
+        SeedStudentWithMainProgram(ProgramAId, CurriculumAId);  // StudentId in ProgramA
+
+        // Second student in Program B
+        _context.Students.Add(new Student
+        {
+            Id = student2Id, UserId = 101,
+            StudentNumber = "2024002", NationalId = "33333333333",
+            Status = StudentStatus.Active, Cgpa = 3.0m, Sgpa = 3.0m, CompletedSemesters = 1
+        });
+        _context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = student2Id, ProgramId = program2Id, CurriculumId = curriculum2Id,
+            Type = StudentProgramType.Main, IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+
+        // Only ProgramA has a regulation; ProgramB has none
+        SeedExamRegulation(RegAId, ProgramAId);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var dict = await _resolver.ResolveForStudentsAsync(
+            new[] { StudentId, student2Id }, TermId, default);
+
+        // Assert
+        dict.Should().ContainKey(StudentId);
+        dict[StudentId].Should().NotBeNull("student 1 is in ProgramA which has a matching regulation");
+        dict[StudentId]!.Id.Should().Be(RegAId);
+
+        dict.Should().ContainKey(student2Id);
+        dict[student2Id].Should().BeNull("student 2 is in ProgramB which has no regulation");
+    }
+
     public void Dispose() => _context.Dispose();
 }

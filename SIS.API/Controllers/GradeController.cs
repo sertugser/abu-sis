@@ -917,7 +917,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         var bounds = await _examRegulationResolver.ResolveCourseWeightBoundsAsync(
             section.CourseId, section.TermId, default);
 
-        if (bounds != null)
+        // Skip weight-bounds enforcement when no component has been classified as Midterm or Final
+        // (midtermSum==0 && finalSum==0 means all components are Type=Other — the default after
+        // migration). Enforcing bounds in that state would block finalize with a misleading message.
+        // When at least one component IS classified, both midterm AND final bounds are enforced.
+        if (bounds != null && (midtermSum > 0 || finalSum > 0))
         {
             if (bounds.IsEmpty)
                 return BadRequest(new { error = "Bu dersin programları arasında çelişen sınav ağırlık sınırları var. Sınav müfredatını düzeltin." });
@@ -1048,6 +1052,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         // 4. Her öğrenci için harf notu hesapla (NA olanlar zaten işaretlendi, atla)
         var results = new List<object>(naResults);
 
+        // Bulk-resolve exam regulations for all non-NA students in 3 queries (no per-student N+1)
+        var nonNaStudentIds = nonNaRegistrations.Select(r => r.StudentId).Distinct().ToList();
+        var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
+            nonNaStudentIds, section.TermId, default);
+
         foreach (var reg in nonNaRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
@@ -1064,9 +1073,8 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
             var letterGrade = criteria.ResolveGrade(roundedScore);
 
-            // Sınav yönergesi: final barajı + geçme notu kontrolü
-            var studentReg = await _examRegulationResolver.ResolveForStudentAsync(
-                reg.StudentId, section.TermId, default);
+            // Sınav yönergesi: final barajı + geçme notu kontrolü (bulk dict lookup, no N+1)
+            examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
 
             if (studentReg != null)
             {

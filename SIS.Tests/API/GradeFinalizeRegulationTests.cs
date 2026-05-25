@@ -396,5 +396,152 @@ public class GradeFinalizeRegulationTests : IDisposable
         registration.Grade.Should().Be(GradeCode.CB);
     }
 
+    /// <summary>
+    /// A section WITH an ExamRegulation (MinMidterm=40) but ALL GradeComponents typed as Other
+    /// (midtermSum==0, finalSum==0) → Finalize must SUCCEED, not return 400.
+    /// Preserves legacy behavior for courses whose components were never classified.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_DoesNotBlock_WhenNoComponentsClassified()
+    {
+        // Arrange: two components, both Type=Other (the migration default)
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var ctx = new AppDbContext(options);
+
+        const int fId = 10, dId = 10, pId = 10, currId = 10;
+        const int courseId = 10, termId = 10, sectionId = 10;
+        const int instrId = 10, instrUserId = 1010;
+        const int studId = 10, studUserId = 2020, regId = 10;
+        const int comp1Id = 10, comp2Id = 11, gcId = 10;
+
+        ctx.Faculties.Add(new Faculty { Id = fId, Name = "F", Code = "F" });
+        ctx.Departments.Add(new Department { Id = dId, Name = "D", Code = "D", FacultyId = fId });
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = pId, Name = "P", Code = "P", DepartmentId = dId,
+            DegreeLevel = DegreeLevel.Bachelor, EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8, TotalRequiredEcts = 240
+        });
+        ctx.Courses.Add(new Course { Id = courseId, Code = "NCC101", Name = "No Classification", Ects = 3 });
+        ctx.Curricula.Add(new Curriculum { Id = currId, ProgramId = pId, Name = "M", Version = "2024" });
+        ctx.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = currId, CourseId = courseId, IsCompulsory = true, SuggestedSemester = 1
+        });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = termId, Name = "2024-2025 Güz", ShortEnglishName = "Fall 2024",
+            TermType = TermType.Fall, Year = 2024, IsActivated = true,
+            TermStart = new DateTime(2024, 10, 1), TermEnd = new DateTime(2025, 1, 31)
+        });
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = instrUserId, UserName = "instr@t.edu", NormalizedUserName = "INSTR@T.EDU",
+            Email = "instr@t.edu", NormalizedEmail = "INSTR@T.EDU", FirstName = "I", LastName = "T"
+        });
+        ctx.Instructors.Add(new Instructor
+        {
+            Id = instrId, UserId = instrUserId, DepartmentId = dId, Title = "Dr.", MaxWeeklyHours = 12
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = sectionId, CourseId = courseId, TermId = termId,
+            InstructorId = instrId, Capacity = 30,
+            Status = CourseSectionStatus.Active, IsFinalized = false
+        });
+
+        // Both components are Type=Other (default after migration — never classified)
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp1Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Ödev", Weight = 40m, Order = 1, Type = GradeComponentType.Other
+        });
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp2Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Proje", Weight = 60m, Order = 2, Type = GradeComponentType.Other
+        });
+
+        // GradingCriteria with defaults (AA≥91 … DD≥45)
+        ctx.GradingCriteria.Add(new GradingCriteria
+        {
+            Id = gcId, CourseId = courseId, AcademicTermId = termId
+        });
+
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = studUserId, UserName = "s@t.edu", NormalizedUserName = "S@T.EDU",
+            Email = "s@t.edu", NormalizedEmail = "S@T.EDU", FirstName = "S", LastName = "T"
+        });
+        ctx.Students.Add(new Student
+        {
+            Id = studId, UserId = studUserId, StudentNumber = "2024010",
+            NationalId = "22222222222", Status = StudentStatus.Active,
+            Cgpa = 3.0m, Sgpa = 3.0m, CompletedSemesters = 1
+        });
+        ctx.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = studId, ProgramId = pId, CurriculumId = currId,
+            Type = StudentProgramType.Main, IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+        ctx.CourseRegistrations.Add(new CourseRegistration
+        {
+            Id = regId, StudentId = studId,
+            CourseSectionId = sectionId, Status = RegistrationStatus.Active
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 10, CourseRegistrationId = regId, GradeComponentId = comp1Id, Score = 80m
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 11, CourseRegistrationId = regId, GradeComponentId = comp2Id, Score = 75m
+        });
+
+        // ExamRegulation WITH MinMidterm=40 — would block if midtermSum (0) were checked
+        ctx.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = 10, ProgramId = pId, DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall, Year = 2024, IsActive = true,
+            Name = "Yönerge NC", MidtermCount = 1, FinalCount = 1,
+            MinMidtermWeightPercent = 40m, MaxMidtermWeightPercent = 60m,
+            MinFinalWeightPercent = 40m, MaxFinalWeightPercent = 60m,
+            FinalExamFloor = 0m, PassingGrade = 0m,
+            CreatedAt = DateTime.UtcNow
+        });
+        await ctx.SaveChangesAsync();
+
+        var gpaMock = new Mock<IGpaCalculationService>();
+        gpaMock.Setup(g => g.RecalculateAndUpdateAsync(It.IsAny<int>()))
+               .ReturnsAsync(new GpaResultDto());
+
+        var resolver = new ExamRegulationResolver(ctx);
+        var controller = new GradeController(
+            ctx, gpaMock.Object, new SystemDateTimeProvider(),
+            webModuleControls: new NullWebModuleControlService(),
+            examRegulationResolver: resolver);
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.NameIdentifier, instrUserId.ToString())
+                ], "TestAuth"))
+            }
+        };
+
+        // Act
+        var result = await controller.Finalize(sectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>(
+            "all components are Type=Other (midtermSum==0, finalSum==0) → weight-bounds check must be skipped");
+    }
+
     public void Dispose() => _context.Dispose();
 }
