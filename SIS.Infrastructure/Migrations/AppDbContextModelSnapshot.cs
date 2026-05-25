@@ -2210,6 +2210,12 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("AAMin")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AutoTransferExcusedToMakeup")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AutoTransferFailedToMakeup")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("BAMin")
                         .HasColumnType("integer");
 
@@ -2218,6 +2224,12 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("BelowFloorGrade")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("BlockFinalIfNoMidterm")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("BlockMakeupIfNoFinal")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("CBMin")
                         .HasColumnType("integer");
@@ -2240,6 +2252,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("EvaluationType")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("FailIfNoFinal")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("FinalCount")
                         .HasColumnType("integer");
 
@@ -2251,6 +2266,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LetterRangesEditable")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("MakeupReplacesFinal")
                         .HasColumnType("boolean");
 
                     b.Property<decimal>("MaxFinalWeightPercent")
@@ -2330,6 +2348,9 @@ namespace SIS.Infrastructure.Migrations
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ZeroIfMissedMakeup")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

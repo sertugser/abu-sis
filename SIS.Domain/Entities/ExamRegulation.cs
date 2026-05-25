@@ -57,6 +57,15 @@ public class ExamRegulation
     public int TDCMin { get; set; } = 40;
     public int TDDMin { get; set; } = 35;
 
+    // Sınav giriş/değerlendirme uygunluk kuralları (hepsi opt-in, default kapalı)
+    public bool BlockFinalIfNoMidterm { get; set; }       // hiç vizeye girmeyen finalden yararlanamaz
+    public bool FailIfNoFinal { get; set; }               // finale (mazeretsiz) girmeyen kalır
+    public bool BlockMakeupIfNoFinal { get; set; }        // finale girmeyen bütünlemeye giremez
+    public bool ZeroIfMissedMakeup { get; set; }          // bütünlemeye girmeyene 0
+    public bool MakeupReplacesFinal { get; set; }         // bütünleme finalin yerine aynı ağırlıkla
+    public bool AutoTransferFailedToMakeup { get; set; }  // FF'ler otomatik bütünleme listesine
+    public bool AutoTransferExcusedToMakeup { get; set; } // mazeretliler otomatik mazeret listesine
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
