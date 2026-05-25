@@ -933,12 +933,33 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 return BadRequest(new { error = $"Toplam final ağırlığı %{bounds.MinFinal:0.##}-%{bounds.MaxFinal:0.##} arasında olmalı (şu an %{finalSum:0.##})." });
         }
 
-        // 2. Harf notu aralıkları sonuçlandırmadan önce kaydedilmiş olmalı.
+        // 2. Harf notu aralıkları: yönerge kilitliyse ya da section criteria yoksa regulation eşikleri kullanılır.
         var criteria = await _context.GradingCriteria
             .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
 
-        if (criteria == null)
+        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
+            section.CourseId, section.TermId, default);
+
+        GradingCriteria effectiveCriteria;
+        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
+        {
+            // Regulation-driven: build a transient GradingCriteria from the policy thresholds.
+            // Do NOT persist — used only for letter resolution in this finalize run.
+            effectiveCriteria = new GradingCriteria
+            {
+                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
+                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
+                DDMin = letterPolicy.DDMin
+            };
+        }
+        else if (criteria != null)
+        {
+            effectiveCriteria = criteria;
+        }
+        else
+        {
             return BadRequest(new { error = "Harf notu aralıkları girilmeden ders sonuçlandırılamaz." });
+        }
 
         // 3. Section'daki aktif öğrencileri al
         var registrations = await _context.CourseRegistrations
@@ -1071,7 +1092,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             }
 
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
-            var letterGrade = criteria.ResolveGrade(roundedScore);
+            var letterGrade = effectiveCriteria.ResolveGrade(roundedScore);
 
             // Sınav yönergesi: final barajı + geçme notu kontrolü (bulk dict lookup, no N+1)
             examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
@@ -1200,18 +1221,38 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         var criteria = await _context.GradingCriteria
             .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
 
-        var isDefault = criteria == null;
-        criteria ??= new GradingCriteria();
+        var policy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
+            section.CourseId, section.TermId, default);
+
+        var editable = policy == null || policy.Editable;
+
+        // When the regulation locks thresholds AND supplies unique thresholds, surface those
+        // to the frontend so the displayed values match what finalize will use.
+        GradingCriteria effective;
+        if (policy != null && !policy.Editable && policy.HasUniqueThresholds)
+        {
+            effective = new GradingCriteria
+            {
+                AAMin = policy.AAMin, BAMin = policy.BAMin, BBMin = policy.BBMin,
+                CBMin = policy.CBMin, CCMin = policy.CCMin, DCMin = policy.DCMin,
+                DDMin = policy.DDMin
+            };
+        }
+        else
+        {
+            effective = criteria ?? new GradingCriteria();
+        }
 
         return Ok(new
         {
-            criteria.AAMin,
-            criteria.BAMin,
-            criteria.BBMin,
-            criteria.CBMin,
-            criteria.CCMin,
-            criteria.DCMin,
-            criteria.DDMin
+            effective.AAMin,
+            effective.BAMin,
+            effective.BBMin,
+            effective.CBMin,
+            effective.CCMin,
+            effective.DCMin,
+            effective.DDMin,
+            Editable = editable
         });
     }
 
@@ -1231,6 +1272,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         // Aralıkların tutarlılığını kontrol et (AA > BA > BB > ... > DD)
         if (!await CanMutateSharedGradeConfigurationAsync(section))
             return Forbid();
+
+        // Sınav yönergesi harf aralıklarını kilitlemişse güncelleme engellenir.
+        var policy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
+            section.CourseId, section.TermId, default);
+        if (policy != null && !policy.Editable)
+            return BadRequest(new { error = "Bu dersin sınav yönergesinde harf aralıkları kilitli, değiştirilemez." });
 
         if (dto.AAMin <= dto.BAMin || dto.BAMin <= dto.BBMin || dto.BBMin <= dto.CBMin
             || dto.CBMin <= dto.CCMin || dto.CCMin <= dto.DCMin || dto.DCMin <= dto.DDMin

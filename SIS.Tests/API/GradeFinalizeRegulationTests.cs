@@ -264,6 +264,41 @@ public class GradeFinalizeRegulationTests : IDisposable
         _context.SaveChanges();
     }
 
+    /// <summary>
+    /// Seeds an exam regulation with letter-range governance fields.
+    /// Weight bounds are set permissively (0-100) so weight-bounds enforcement never blocks.
+    /// </summary>
+    private void SeedExamRegulationWithLetterPolicy(
+        bool letterRangesEditable,
+        int aaMin = 90, int baMin = 80, int bbMin = 70,
+        int cbMin = 60, int ccMin = 55, int dcMin = 50, int ddMin = 40)
+    {
+        _context.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = ExamRegulationId,
+            ProgramId = ProgramId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActive = true,
+            Name = "Letter Policy Yönerge",
+            MidtermCount = 1,
+            FinalCount = 1,
+            // Permissive bounds so weight-bounds check is never the blocking factor
+            MinMidtermWeightPercent = 0m,
+            MaxMidtermWeightPercent = 100m,
+            MinFinalWeightPercent = 0m,
+            MaxFinalWeightPercent = 100m,
+            FinalExamFloor = 0m,
+            PassingGrade = 0m,
+            LetterRangesEditable = letterRangesEditable,
+            AAMin = aaMin, BAMin = baMin, BBMin = bbMin,
+            CBMin = cbMin, CCMin = ccMin, DCMin = dcMin, DDMin = ddMin,
+            CreatedAt = DateTime.UtcNow
+        });
+        _context.SaveChanges();
+    }
+
     private GradeController CreateController()
     {
         var resolver = new ExamRegulationResolver(_context);
@@ -541,6 +576,280 @@ public class GradeFinalizeRegulationTests : IDisposable
         // Assert
         result.Should().BeOfType<OkObjectResult>(
             "all components are Type=Other (midtermSum==0, finalSum==0) → weight-bounds check must be skipped");
+    }
+
+    // ── Letter-range governance (new) ────────────────────────────────────────
+
+    /// <summary>
+    /// UpdateGradingCriteria must return 400 when the regulation has LetterRangesEditable=false.
+    /// </summary>
+    [Fact]
+    public async Task UpdateGradingCriteria_Blocked_WhenRegulationLocksLetterRanges()
+    {
+        // Arrange
+        SeedBaseScenario();
+        SeedExamRegulationWithLetterPolicy(letterRangesEditable: false);
+
+        var controller = CreateController();
+        var dto = new GradeController.GradingCriteriaDto
+        {
+            AAMin = 90, BAMin = 80, BBMin = 70,
+            CBMin = 60, CCMin = 55, DCMin = 50, DDMin = 45
+        };
+
+        // Act
+        var result = await controller.UpdateGradingCriteria(SectionId, dto);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>(
+            "regulation has LetterRangesEditable=false → editing must be blocked");
+    }
+
+    /// <summary>
+    /// UpdateGradingCriteria must succeed when the regulation has LetterRangesEditable=true.
+    /// </summary>
+    [Fact]
+    public async Task UpdateGradingCriteria_Allowed_WhenRegulationEditable()
+    {
+        // Arrange
+        SeedBaseScenario();
+        SeedExamRegulationWithLetterPolicy(letterRangesEditable: true);
+
+        var controller = CreateController();
+        var dto = new GradeController.GradingCriteriaDto
+        {
+            AAMin = 92, BAMin = 82, BBMin = 72,
+            CBMin = 62, CCMin = 56, DCMin = 51, DDMin = 46
+        };
+
+        // Act
+        var result = await controller.UpdateGradingCriteria(SectionId, dto);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>(
+            "regulation has LetterRangesEditable=true → update must succeed");
+    }
+
+    /// <summary>
+    /// Finalize must use regulation thresholds when the regulation is locked AND no section
+    /// GradingCriteria row exists.
+    /// Regulation thresholds: AAMin=90 … DDMin=50.
+    /// Components are both Type=Other so weight-bounds enforcement is skipped.
+    /// Student scores: midterm=92, final=92 → weightedScore=92 → AA (≥90).
+    /// Second assertion: midterm=55, final=55 → weightedScore=55 → FF (DDMin=50 → 55≥50 = DD… wait)
+    /// Actually: DDMin=50 → score=55 ≥ 50 → DD; DDMin=50, score=45 < 50 → FF.
+    /// So for the "below DDMin" test use scores that give roundedScore=45 (< DDMin=50).
+    /// midterm=45, final=45 → weightedScore=45 → FF.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_UsesRegulationThresholds_WhenLockedAndNoSectionCriteria()
+    {
+        // Arrange: isolated DB, Type=Other components (skip weight-bounds check),
+        // no GradingCriteria row, locked regulation with AAMin=90 / DDMin=50.
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var ctx = new AppDbContext(options);
+
+        const int fId = 20, dId = 20, pId = 20, currId = 20;
+        const int courseId = 20, termId = 20, sectionId = 20;
+        const int instrId = 20, instrUserId = 3030;
+        const int studId1 = 20, studUserId1 = 4040;
+        const int studId2 = 21, studUserId2 = 4041;
+        const int reg1Id = 20, reg2Id = 21;
+        const int comp1Id = 20, comp2Id = 21;
+
+        ctx.Faculties.Add(new Faculty { Id = fId, Name = "F2", Code = "F2" });
+        ctx.Departments.Add(new Department { Id = dId, Name = "D2", Code = "D2", FacultyId = fId });
+        ctx.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = pId, Name = "P2", Code = "P2", DepartmentId = dId,
+            DegreeLevel = DegreeLevel.Bachelor, EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8, TotalRequiredEcts = 240
+        });
+        ctx.Courses.Add(new Course { Id = courseId, Code = "LKD201", Name = "Locked Course", Ects = 3 });
+        ctx.Curricula.Add(new Curriculum { Id = currId, ProgramId = pId, Name = "M2", Version = "2024" });
+        ctx.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = currId, CourseId = courseId, IsCompulsory = true, SuggestedSemester = 1
+        });
+        ctx.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = termId, Name = "2024-2025 Güz", ShortEnglishName = "Fall 2024",
+            TermType = TermType.Fall, Year = 2024, IsActivated = true,
+            TermStart = new DateTime(2024, 10, 1), TermEnd = new DateTime(2025, 1, 31)
+        });
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = instrUserId, UserName = "ins2@t.edu", NormalizedUserName = "INS2@T.EDU",
+            Email = "ins2@t.edu", NormalizedEmail = "INS2@T.EDU", FirstName = "I", LastName = "2"
+        });
+        ctx.Instructors.Add(new Instructor
+        {
+            Id = instrId, UserId = instrUserId, DepartmentId = dId, Title = "Dr.", MaxWeeklyHours = 12
+        });
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = sectionId, CourseId = courseId, TermId = termId,
+            InstructorId = instrId, Capacity = 30,
+            Status = CourseSectionStatus.Active, IsFinalized = false
+        });
+
+        // Both components Type=Other (skip weight-bounds)
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp1Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Ödev", Weight = 40m, Order = 1, Type = GradeComponentType.Other
+        });
+        ctx.GradeComponents.Add(new GradeComponent
+        {
+            Id = comp2Id, CourseId = courseId, AcademicTermId = termId,
+            Name = "Proje", Weight = 60m, Order = 2, Type = GradeComponentType.Other
+        });
+
+        // NO GradingCriteria row → regulation thresholds must be used
+
+        // Locked regulation: AAMin=90 … DDMin=50
+        ctx.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = 20, ProgramId = pId, DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall, Year = 2024, IsActive = true,
+            Name = "Locked Yönerge",
+            MidtermCount = 1, FinalCount = 1,
+            MinMidtermWeightPercent = 0m, MaxMidtermWeightPercent = 100m,
+            MinFinalWeightPercent = 0m, MaxFinalWeightPercent = 100m,
+            FinalExamFloor = 0m, PassingGrade = 0m,
+            LetterRangesEditable = false,
+            AAMin = 90, BAMin = 80, BBMin = 70, CBMin = 60, CCMin = 55, DCMin = 50, DDMin = 50,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Student 1: both component scores = 92 → weightedScore=92 → AA (≥90)
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = studUserId1, UserName = "s1@t.edu", NormalizedUserName = "S1@T.EDU",
+            Email = "s1@t.edu", NormalizedEmail = "S1@T.EDU", FirstName = "S", LastName = "1"
+        });
+        ctx.Students.Add(new Student
+        {
+            Id = studId1, UserId = studUserId1, StudentNumber = "20240201",
+            NationalId = "33333333333", Status = StudentStatus.Active,
+            Cgpa = 3.0m, Sgpa = 3.0m, CompletedSemesters = 1
+        });
+        ctx.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = studId1, ProgramId = pId, CurriculumId = currId,
+            Type = StudentProgramType.Main, IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+        ctx.CourseRegistrations.Add(new CourseRegistration
+        {
+            Id = reg1Id, StudentId = studId1, CourseSectionId = sectionId,
+            Status = RegistrationStatus.Active
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 20, CourseRegistrationId = reg1Id, GradeComponentId = comp1Id, Score = 92m
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 21, CourseRegistrationId = reg1Id, GradeComponentId = comp2Id, Score = 92m
+        });
+
+        // Student 2: both component scores = 45 → weightedScore=45 → FF (< DDMin=50)
+        ctx.Users.Add(new ApplicationUser
+        {
+            Id = studUserId2, UserName = "s2@t.edu", NormalizedUserName = "S2@T.EDU",
+            Email = "s2@t.edu", NormalizedEmail = "S2@T.EDU", FirstName = "S", LastName = "2"
+        });
+        ctx.Students.Add(new Student
+        {
+            Id = studId2, UserId = studUserId2, StudentNumber = "20240202",
+            NationalId = "44444444444", Status = StudentStatus.Active,
+            Cgpa = 2.0m, Sgpa = 2.0m, CompletedSemesters = 1
+        });
+        ctx.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = studId2, ProgramId = pId, CurriculumId = currId,
+            Type = StudentProgramType.Main, IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+        ctx.CourseRegistrations.Add(new CourseRegistration
+        {
+            Id = reg2Id, StudentId = studId2, CourseSectionId = sectionId,
+            Status = RegistrationStatus.Active
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 22, CourseRegistrationId = reg2Id, GradeComponentId = comp1Id, Score = 45m
+        });
+        ctx.StudentGrades.Add(new StudentGrade
+        {
+            Id = 23, CourseRegistrationId = reg2Id, GradeComponentId = comp2Id, Score = 45m
+        });
+
+        await ctx.SaveChangesAsync();
+
+        var gpaMock = new Mock<IGpaCalculationService>();
+        gpaMock.Setup(g => g.RecalculateAndUpdateAsync(It.IsAny<int>()))
+               .ReturnsAsync(new GpaResultDto());
+
+        var resolver = new ExamRegulationResolver(ctx);
+        var controller = new GradeController(
+            ctx, gpaMock.Object, new SystemDateTimeProvider(),
+            webModuleControls: new NullWebModuleControlService(),
+            examRegulationResolver: resolver);
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.NameIdentifier, instrUserId.ToString())
+                ], "TestAuth"))
+            }
+        };
+
+        // Act
+        var result = await controller.Finalize(sectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>(
+            "locked regulation with HasUniqueThresholds=true and no section criteria → must use regulation thresholds");
+
+        var reg1 = await ctx.CourseRegistrations.FindAsync(reg1Id);
+        reg1!.Grade.Should().Be(GradeCode.AA,
+            "student 1 scored 92 which is ≥ AAMin=90 per regulation thresholds");
+
+        var reg2 = await ctx.CourseRegistrations.FindAsync(reg2Id);
+        reg2!.Grade.Should().Be(GradeCode.FF,
+            "student 2 scored 45 which is < DDMin=50 per regulation thresholds");
+    }
+
+    /// <summary>
+    /// Finalize must use section GradingCriteria (existing behavior) when no regulation exists.
+    /// midterm=70, final=70 → weightedScore=70 → CB via default GradingCriteria (BBMin=71, CBMin=61).
+    /// </summary>
+    [Fact]
+    public async Task Finalize_UsesSectionCriteria_WhenNoRegulation()
+    {
+        // Arrange: no regulation seeded — existing path
+        SeedBaseScenario(midtermScore: 70m, finalScore: 70m);
+        // No SeedExamRegulationWithLetterPolicy call
+
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.Finalize(SectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>("no regulation → normal finalization with section criteria");
+
+        var registration = await _context.CourseRegistrations.FindAsync(RegistrationId);
+        // weightedScore = 70*0.4 + 70*0.6 = 70 → CB (default: BBMin=71 > 70 ≥ CBMin=61)
+        registration!.Grade.Should().Be(GradeCode.CB,
+            "no regulation → section GradingCriteria used; score=70 → CB");
     }
 
     public void Dispose() => _context.Dispose();
