@@ -95,19 +95,22 @@ public class MockYoksisReportingService : IExternalStudentReportingService
     /// </summary>
     private async Task EnsureModeAndStudentAsync(int studentId, CancellationToken ct)
     {
+        // Evaluate the mode before any DB query: a disabled/live integration
+        // must close immediately without leaking whether the student exists
+        // (mirrors MockNviIdentityService ordering).
         var mode = await _config.GetStringAsync(ConfigKey, "Mock", ct);
-
-        var studentExists = await _context.Students
-            .AsNoTracking()
-            .AnyAsync(s => s.Id == studentId, ct);
-        if (!studentExists)
-            throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
 
         if (string.Equals(mode, "Disabled", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("YÖKSİS entegrasyonu kapalı.");
 
         if (string.Equals(mode, "Live", StringComparison.OrdinalIgnoreCase))
             throw new NotImplementedException("YÖKSİS canlı entegrasyonu henüz yapılandırılmadı.");
+
+        var studentExists = await _context.Students
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == studentId, ct);
+        if (!studentExists)
+            throw new KeyNotFoundException($"Öğrenci bulunamadı: {studentId}");
     }
 
     private static string BuildRecordNo(int studentId, DateTime now) =>
