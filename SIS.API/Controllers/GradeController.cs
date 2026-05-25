@@ -1362,6 +1362,432 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     }
 
     // ══════════════════════════════════════════════════════════
+    //  BÜTÜNLEME (RESIT MAKEUP) AKIŞI
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// GET api/instructor/section/{sectionId}/makeup/butunleme
+    /// Bütünleme listesini döner: FF notu almış ve bütünlemeye hak kazanmış öğrenciler.
+    ///
+    /// Filtre kuralları (sınav yönergesinden, per-student):
+    ///   F = AutoTransferFailedToMakeup — false ise öğrenci listeye girmez
+    ///   B = BlockMakeupIfNoFinal — true ise finale girmeyen (Absent) öğrenci hariç tutulur
+    /// </summary>
+    [HttpGet("section/{sectionId}/makeup/butunleme")]
+    [RequirePermission("menu.not-girisi.view")]
+    public async Task<IActionResult> GetButunlemeRoster(int sectionId)
+    {
+        var section = await GetAuthorizedSectionAsync(sectionId);
+        if (section == null)
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        if (!section.IsFinalized)
+            return BadRequest(new { error = "Bütünleme sadece sonuçlandırılmış section'larda uygulanabilir." });
+
+        // Find the Final-type component for this course/term
+        var components = await _context.GradeComponents
+            .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
+            .OrderBy(gc => gc.Order)
+            .ToListAsync();
+
+        var finalComponents = components.Where(c => c.Type == GradeComponentType.Final).ToList();
+        var finalComponentId = finalComponents.FirstOrDefault()?.Id;
+
+        // Get all active registrations with Grade=FF (not NA — NA is attendance-fail)
+        var ffRegistrations = await _context.CourseRegistrations
+            .Include(cr => cr.Student)
+            .Where(cr => cr.CourseSectionId == sectionId
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn
+                && cr.Grade == GradeCode.FF)
+            .ToListAsync();
+
+        if (!ffRegistrations.Any())
+        {
+            return Ok(new
+            {
+                SectionId = sectionId,
+                FinalComponentId = finalComponentId,
+                Students = Array.Empty<object>()
+            });
+        }
+
+        var ffStudentIds = ffRegistrations.Select(r => r.StudentId).ToList();
+
+        // Bulk-resolve exam regulations per student
+        var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
+            ffStudentIds, section.TermId, default);
+
+        // Load StudentGrade rows for these registrations
+        var ffRegistrationIds = ffRegistrations.Select(r => r.Id).ToList();
+        var allGrades = await _context.StudentGrades
+            .Where(sg => ffRegistrationIds.Contains(sg.CourseRegistrationId))
+            .ToListAsync();
+
+        var gradesByRegistration = allGrades
+            .GroupBy(sg => sg.CourseRegistrationId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Load user display names
+        var studentUserIds = ffRegistrations.Select(r => r.Student.UserId).ToList();
+        var userMap = await _context.Users
+            .Where(u => studentUserIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id);
+
+        var eligibleStudents = new List<object>();
+
+        foreach (var reg in ffRegistrations)
+        {
+            examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
+
+            // F = AutoTransferFailedToMakeup: if false for this student, skip
+            if (studentReg == null || !studentReg.AutoTransferFailedToMakeup)
+                continue;
+
+            var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
+
+            // B = BlockMakeupIfNoFinal: if true and student's Final attendance is Absent, exclude
+            if (studentReg.BlockMakeupIfNoFinal && finalComponents.Count > 0)
+            {
+                var absentFromFinal = finalComponents.Any(fc =>
+                {
+                    var g = studentGrades.FirstOrDefault(gi => gi.GradeComponentId == fc.Id);
+                    return g == null || g.ExamAttendance == ExamAttendance.Absent;
+                });
+                if (absentFromFinal)
+                    continue;
+            }
+
+            var user = userMap.GetValueOrDefault(reg.Student.UserId);
+
+            // Build per-component score summary for display
+            var vizeScores = components
+                .Where(c => c.Type == GradeComponentType.Midterm)
+                .Select(c => new
+                {
+                    ComponentId = c.Id,
+                    ComponentName = c.Name,
+                    Score = studentGrades.FirstOrDefault(g => g.GradeComponentId == c.Id)?.Score
+                })
+                .ToList();
+
+            var finalGradeRows = finalComponents.Select(fc =>
+            {
+                var g = studentGrades.FirstOrDefault(gi => gi.GradeComponentId == fc.Id);
+                return new
+                {
+                    ComponentId = fc.Id,
+                    ComponentName = fc.Name,
+                    Score = g?.Score,
+                    MakeupScore = g?.MakeupScore
+                };
+            }).ToList();
+
+            eligibleStudents.Add(new
+            {
+                StudentId = reg.StudentId,
+                StudentNumber = reg.Student.StudentNumber,
+                FirstName = user?.FirstName ?? string.Empty,
+                LastName = user?.LastName ?? string.Empty,
+                CurrentGrade = reg.Grade?.ToString(),
+                VizeScores = vizeScores,
+                FinalScores = finalGradeRows
+            });
+        }
+
+        return Ok(new
+        {
+            SectionId = sectionId,
+            FinalComponentId = finalComponentId,
+            Students = eligibleStudents
+        });
+    }
+
+    /// <summary>
+    /// PUT api/instructor/section/{sectionId}/makeup/butunleme-scores
+    /// Bütünleme puanlarını kaydeder: Final bileşenindeki StudentGrade.MakeupScore güncellenir.
+    /// Orijinal Score değişmez. Puan 0-100 arasında olmalıdır.
+    /// </summary>
+    [HttpPut("section/{sectionId}/makeup/butunleme-scores")]
+    [RequirePermission("menu.not-girisi.edit")]
+    public async Task<IActionResult> SetButunlemeScores(int sectionId, [FromBody] ButunlemeScoresRequest dto)
+    {
+        var section = await GetAuthorizedSectionAsync(sectionId);
+        if (section == null)
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        if (!section.IsFinalized)
+            return BadRequest(new { error = "Bütünleme sadece sonuçlandırılmış section'larda uygulanabilir." });
+
+        var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
+        if (termIsCancelled == true)
+            return BadRequest(new { error = "İptal edilmiş dönemde bütünleme puanı girilemez." });
+
+        if (dto.Items == null || dto.Items.Count == 0)
+            return BadRequest(new { error = "Puan listesi boş olamaz." });
+
+        // Find the Final-type component
+        var finalComponent = await _context.GradeComponents
+            .Where(gc => gc.CourseId == section.CourseId
+                && gc.AcademicTermId == section.TermId
+                && gc.Type == GradeComponentType.Final)
+            .OrderBy(gc => gc.Order)
+            .FirstOrDefaultAsync();
+
+        if (finalComponent == null)
+            return BadRequest(new { error = "Bu ders için Final türünde bileşen bulunamadı." });
+
+        // Validate scores
+        foreach (var item in dto.Items)
+        {
+            if (item.MakeupScore < 0 || item.MakeupScore > 100)
+                return BadRequest(new { error = $"Öğrenci {item.StudentId} için bütünleme puanı 0-100 arasında olmalıdır." });
+        }
+
+        // Get eligible FF registrations for this section
+        var ffRegistrations = await _context.CourseRegistrations
+            .Where(cr => cr.CourseSectionId == sectionId
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn
+                && cr.Grade == GradeCode.FF)
+            .ToListAsync();
+
+        var ffRegistrationMap = ffRegistrations.ToDictionary(r => r.StudentId);
+        var ffRegistrationIds = ffRegistrations.Select(r => r.Id).ToList();
+
+        // Load existing StudentGrade rows for Final component
+        var existingGradeRows = await _context.StudentGrades
+            .Where(sg => sg.GradeComponentId == finalComponent.Id
+                && ffRegistrationIds.Contains(sg.CourseRegistrationId))
+            .ToDictionaryAsync(sg => sg.CourseRegistrationId);
+
+        int updated = 0;
+        int created = 0;
+
+        foreach (var item in dto.Items)
+        {
+            if (!ffRegistrationMap.TryGetValue(item.StudentId, out var reg))
+                continue; // only process FF students in this section
+
+            if (existingGradeRows.TryGetValue(reg.Id, out var existing))
+            {
+                existing.MakeupScore = item.MakeupScore;
+                updated++;
+            }
+            else
+            {
+                // Final StudentGrade row might not exist (edge case: student was Absent → no row)
+                // Create a new row with MakeupScore set; Score remains null
+                _context.StudentGrades.Add(new StudentGrade
+                {
+                    CourseRegistrationId = reg.Id,
+                    GradeComponentId = finalComponent.Id,
+                    Score = null,
+                    MakeupScore = item.MakeupScore,
+                    ExamAttendance = ExamAttendance.NotMarked
+                });
+                created++;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = $"Bütünleme puanları kaydedildi: {updated} güncellendi, {created} eklendi.",
+            FinalComponentId = finalComponent.Id
+        });
+    }
+
+    /// <summary>
+    /// POST api/instructor/section/{sectionId}/makeup/butunleme-finalize
+    /// Bütünleme sonuçlarını kesinleştirir:
+    ///   - FF olan ve bütünlemeye uygun her öğrenci için:
+    ///     E (MakeupReplacesFinal) açıksa: büt puanı Final'ın yerine geçirerek notu yeniden hesaplar
+    ///     D (ZeroIfMissedMakeup) açıksa: büt puanı girilmemişse 0 kabul edilir
+    ///   - Yeni harf notu CourseRegistration.Grade'e yazılır
+    ///   - Her öğrencinin GPA'sı güncellenir
+    /// </summary>
+    [HttpPost("section/{sectionId}/makeup/butunleme-finalize")]
+    [RequirePermission("menu.not-girisi.edit")]
+    public async Task<IActionResult> FinalizeButunleme(int sectionId)
+    {
+        var section = await GetAuthorizedSectionAsync(sectionId);
+        if (section == null)
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        if (!section.IsFinalized)
+            return BadRequest(new { error = "Bütünleme sadece sonuçlandırılmış section'larda uygulanabilir." });
+
+        var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
+        if (termIsCancelled == true)
+            return BadRequest(new { error = "İptal edilmiş dönemde bütünleme sonuçlandırılamaz." });
+
+        // Load components
+        var components = await _context.GradeComponents
+            .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
+            .OrderBy(gc => gc.Order)
+            .ToListAsync();
+
+        var finalComponents = components.Where(c => c.Type == GradeComponentType.Final).ToList();
+
+        // Resolve grading criteria (mirrors Finalize)
+        var criteria = await _context.GradingCriteria
+            .FirstOrDefaultAsync(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId);
+
+        var letterPolicy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
+            section.CourseId, section.TermId, default);
+
+        GradingCriteria effectiveCriteria;
+        if (letterPolicy != null && letterPolicy.HasUniqueThresholds && (!letterPolicy.Editable || criteria == null))
+        {
+            effectiveCriteria = new GradingCriteria
+            {
+                AAMin = letterPolicy.AAMin, BAMin = letterPolicy.BAMin, BBMin = letterPolicy.BBMin,
+                CBMin = letterPolicy.CBMin, CCMin = letterPolicy.CCMin, DCMin = letterPolicy.DCMin,
+                DDMin = letterPolicy.DDMin
+            };
+        }
+        else if (criteria != null)
+        {
+            effectiveCriteria = criteria;
+        }
+        else
+        {
+            return BadRequest(new { error = "Harf notu aralıkları tanımlanmadan bütünleme sonuçlandırılamaz." });
+        }
+
+        // Get FF registrations eligible for bütünleme
+        var ffRegistrations = await _context.CourseRegistrations
+            .Include(cr => cr.Student)
+            .Where(cr => cr.CourseSectionId == sectionId
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn
+                && cr.Grade == GradeCode.FF)
+            .ToListAsync();
+
+        if (!ffRegistrations.Any())
+        {
+            return Ok(new
+            {
+                message = "Bütünleme uygulanacak FF öğrenci bulunamadı.",
+                Results = Array.Empty<object>()
+            });
+        }
+
+        var ffStudentIds = ffRegistrations.Select(r => r.StudentId).Distinct().ToList();
+
+        // Bulk-resolve exam regulations
+        var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
+            ffStudentIds, section.TermId, default);
+
+        var ffRegistrationIds = ffRegistrations.Select(r => r.Id).ToList();
+        var allGrades = await _context.StudentGrades
+            .Where(sg => ffRegistrationIds.Contains(sg.CourseRegistrationId))
+            .ToListAsync();
+
+        var gradesByRegistration = allGrades
+            .GroupBy(sg => sg.CourseRegistrationId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var results = new List<object>();
+        var affectedStudentIds = new List<int>();
+
+        foreach (var reg in ffRegistrations)
+        {
+            examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
+
+            // F: only process if AutoTransferFailedToMakeup is on
+            if (studentReg == null || !studentReg.AutoTransferFailedToMakeup)
+                continue;
+
+            // B: BlockMakeupIfNoFinal — if student's final attendance is Absent, skip
+            var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
+            if (studentReg.BlockMakeupIfNoFinal && finalComponents.Count > 0)
+            {
+                var absentFromFinal = finalComponents.Any(fc =>
+                {
+                    var g = studentGrades.FirstOrDefault(gi => gi.GradeComponentId == fc.Id);
+                    return g == null || g.ExamAttendance == ExamAttendance.Absent;
+                });
+                if (absentFromFinal)
+                    continue;
+            }
+
+            // E: MakeupReplacesFinal — gates whether büt score replaces final
+            // Known limitation: if E is off, scores are stored but recompute is skipped.
+            if (!studentReg.MakeupReplacesFinal)
+                continue;
+
+            // D: ZeroIfMissedMakeup — if büt score missing, treat as 0 on the Final component row(s)
+            if (studentReg.ZeroIfMissedMakeup)
+            {
+                foreach (var fc in finalComponents)
+                {
+                    var gradeRow = studentGrades.FirstOrDefault(g => g.GradeComponentId == fc.Id);
+                    if (gradeRow != null && gradeRow.MakeupScore == null)
+                    {
+                        gradeRow.MakeupScore = 0m;
+                    }
+                    else if (gradeRow == null)
+                    {
+                        // Create a row with MakeupScore=0
+                        var newRow = new StudentGrade
+                        {
+                            CourseRegistrationId = reg.Id,
+                            GradeComponentId = fc.Id,
+                            Score = null,
+                            MakeupScore = 0m,
+                            ExamAttendance = ExamAttendance.NotMarked
+                        };
+                        _context.StudentGrades.Add(newRow);
+                        studentGrades.Add(newRow);
+                    }
+                }
+            }
+
+            var oldGrade = reg.Grade;
+
+            // Recompute with useMakeupScore=true — büt replaces final
+            var (weightedScore, roundedScore) = ComputeStudentWeightedScore(
+                components, studentGrades, studentReg, useMakeupScore: true);
+
+            var baseLetter = effectiveCriteria.ResolveGrade(roundedScore);
+            var finalRaw = ComputeStudentFinalRaw(components, studentGrades, useMakeupScore: true);
+            var newGrade = ApplyGradeRules(baseLetter, roundedScore, finalRaw, studentGrades, components, studentReg);
+
+            reg.Grade = newGrade;
+            reg.UpdatedAt = DateTime.UtcNow;
+            affectedStudentIds.Add(reg.StudentId);
+
+            results.Add(new
+            {
+                StudentId = reg.StudentId,
+                OldGrade = oldGrade?.ToString(),
+                NewGrade = newGrade.ToString(),
+                WeightedAverage = Math.Round(weightedScore, 2)
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Recalculate GPA for each affected student
+        foreach (var studentId in affectedStudentIds.Distinct())
+        {
+            await _gpaService.RecalculateAndUpdateAsync(studentId);
+        }
+
+        return Ok(new
+        {
+            message = $"Bütünleme sonuçlandırıldı. {results.Count} öğrencinin notu güncellendi.",
+            Results = results
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════
     //  ÇAN EĞRİSİ (GradingCriteria — ders+dönem bazında)
     // ══════════════════════════════════════════════════════════
 
@@ -1787,5 +2213,18 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     {
         public int StudentId { get; set; }
         public ExamAttendance Attendance { get; set; }
+    }
+
+    // ── Bütünleme DTOs ──────────────────────────────────────
+
+    public class ButunlemeScoresRequest
+    {
+        public List<ButunlemeScoreItem> Items { get; set; } = new();
+    }
+
+    public class ButunlemeScoreItem
+    {
+        public int StudentId { get; set; }
+        public decimal MakeupScore { get; set; }
     }
 }

@@ -24,6 +24,8 @@ BulkAdvisorAssignmentPreviewRequestDto
 BulkAdvisorAssignmentRequestDto
 BulkAdvisorSettingsUpdateRequestDto
 BulkAssignInstructorRequest
+# Bütünleme (resit makeup) score entry: two numeric fields (StudentId int, MakeupScore decimal 0-100) with inline controller validation
+ButunlemeScoresRequest
 BulkClassroomTermAssignmentDto
 BulkCurriculumAssignmentRequestDto
 BulkOpenCoursesRequest
