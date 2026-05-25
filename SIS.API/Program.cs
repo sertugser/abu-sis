@@ -244,6 +244,7 @@ builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
+builder.Services.AddScoped<SIS.Application.Grading.IExamRegulationResolver, SIS.Infrastructure.Services.ExamRegulationResolver>();
 builder.Services.AddScoped<EnrollmentForecastService>();
 builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
