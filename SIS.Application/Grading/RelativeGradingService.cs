@@ -30,8 +30,11 @@ public sealed record RelativeGradeInput(int RegistrationId, decimal RawScore);
 /// <param name="TDCMin">Minimum T-score (inclusive) for DC grade.</param>
 /// <param name="TDDMin">Minimum T-score (inclusive) for DD grade.</param>
 /// <param name="BelowFloorGrade">
-///   Grade assigned when a student is below the inclusion limit, the absolute
-///   floor, or when T-score falls below TDDMin.
+///   Grade assigned when a student fails an absolute floor or is below the
+///   inclusion limit — i.e., they did not meaningfully participate in the curve.
+///   This does NOT apply to students who participated in the curve but ranked
+///   below TDDMin; those students receive <see cref="GradeCode.FF"/> (the
+///   natural bottom of the T-score table), regardless of this setting.
 ///   Typically FF or DD depending on exam regulation configuration.
 /// </param>
 public sealed record RelativeGradeParams(
@@ -75,7 +78,8 @@ public sealed record RelativeGradeOutcome(
 ///    c. Else T = 50 + 10 * (RawScore − μ) / σ  (computed in double).
 ///       Map T to letter via thresholds (highest threshold wins first):
 ///       T>=TAAMin→AA, >=TBAMin→BA, >=TBBMin→BB, >=TCBMin→CB,
-///       >=TCCMin→CC, >=TDCMin→DC, >=TDDMin→DD, else BelowFloorGrade.
+///       >=TCCMin→CC, >=TDCMin→DC, >=TDDMin→DD, else FF.
+///       Note: BelowFloorGrade is used ONLY in (a) and (b), never in (c).
 /// </summary>
 public static class RelativeGradingService
 {
@@ -168,6 +172,10 @@ public static class RelativeGradingService
         if (t >= p.TCCMin) return GradeCode.CC;
         if (t >= p.TDCMin) return GradeCode.DC;
         if (t >= p.TDDMin) return GradeCode.DD;
-        return p.BelowFloorGrade;
+        // A student who participated in the curve (above all floors / inclusion
+        // limits) but ranked below TDDMin gets FF — the natural bottom of the
+        // T-score table. BelowFloorGrade is reserved for the two early-return
+        // floor/inclusion cases in AssignLetter, not for the curve bottom.
+        return GradeCode.FF;
     }
 }

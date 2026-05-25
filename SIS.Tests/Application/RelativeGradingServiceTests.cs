@@ -259,6 +259,70 @@ public class RelativeGradingServiceTests
             because: "T=50 is exactly at TCBMin=50 boundary → CB");
     }
 
+    // ─── Test 8: Curve bottom is always FF, not the configurable BelowFloorGrade ──
+
+    [Fact]
+    public void Evaluate_AssignsFF_NotBelowFloorGrade_WhenParticipatedButLowestOnCurve()
+    {
+        // Arrange
+        // Population: {70×6, 50×1, 30×1}  →  n=8, μ=62.5, σ≈13.919
+        //
+        // Hand-computed:
+        //   μ  = (6×70 + 50 + 30) / 8 = 500 / 8 = 62.5
+        //   σ² = [6×(70-62.5)² + (50-62.5)² + (30-62.5)²] / 8
+        //      = [6×56.25 + 156.25 + 1056.25] / 8
+        //      = [337.5 + 156.25 + 1056.25] / 8
+        //      = 1550 / 8 = 193.75
+        //   σ  = √193.75 ≈ 13.919
+        //
+        //   T(score=50) = 50 + 10×(50 − 62.5) / 13.919
+        //               = 50 + 10×(−12.5 / 13.919)
+        //               = 50 − 8.98 ≈ 41.02
+        //   T=41.02 → TDCMin=40 ≤ T < TCCMin=45 → DC
+        //
+        //   T(score=30) = 50 + 10×(30 − 62.5) / 13.919
+        //               = 50 + 10×(−32.5 / 13.919)
+        //               = 50 − 23.36 ≈ 26.64
+        //   T=26.64 < TDDMin=35 → bottom bucket of the curve
+        //
+        // AbsoluteFloor=0 and InclusionLimit=0 → score=30 IS in the included set
+        // (the student participated in the curve). BelowFloorGrade is set to DD
+        // (deliberately non-FF) to prove the curve bottom must not use it.
+        var students = new List<RelativeGradeInput>(8);
+        for (int i = 0; i < 6; i++)
+            students.Add(new RelativeGradeInput(i, 70m));       // T ≈ 55 → CB
+        students.Add(new RelativeGradeInput(6, 50m));           // T ≈ 37 → DD (above TDDMin=35)
+        students.Add(new RelativeGradeInput(7, 30m));           // T ≈ 26.64 → below TDDMin=35
+
+        var p = new RelativeGradeParams(
+            MinStudentCount: 2,
+            InclusionLimit: 0m,       // no exclusion — all students participate
+            AbsoluteFloor: 0m,        // no absolute floor — floor path NOT triggered
+            TAAMin: 70, TBAMin: 63, TBBMin: 57,
+            TCBMin: 50, TCCMin: 45, TDCMin: 40, TDDMin: 35,
+            BelowFloorGrade: GradeCode.DD);  // non-FF, to catch the bug
+
+        // Act
+        var result = RelativeGradingService.Evaluate(students, p);
+
+        // Assert — curve ran without fallback
+        result.FellBackToAbsolute.Should().BeFalse();
+
+        // The lowest-ranked student (score=30, T≈26.64 < TDDMin=35) participated
+        // in the curve. The natural bottom of the T-score table is FF.
+        // BelowFloorGrade (DD) must NOT be used here.
+        result.Letters[7].Should().Be(GradeCode.FF,
+            because: "a student who participated in the curve but scored below TDDMin " +
+                     "gets FF (the curve's natural bottom), not the configurable BelowFloorGrade");
+
+        // Student at score=50 (T≈41.02) is above TDDMin=35 → DC (TDCMin=40 ≤ T < TCCMin=45)
+        result.Letters[6].Should().Be(GradeCode.DC,
+            because: "T≈41.02, TDCMin=40 ≤ T < TCCMin=45 → DC from the T-score table");
+
+        // All 8 students must have a grade
+        result.Letters.Should().HaveCount(8);
+    }
+
     // ─── Bonus: result dictionary covers ALL students (included + excluded) ─────
 
     [Fact]
