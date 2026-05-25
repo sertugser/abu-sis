@@ -289,6 +289,7 @@ public static class PermissionSeed
         ("menu.ogrenci-rehberi.generate-documents",      PermissionCategory.Menu, "Öğrenci belgesi üretme"),
         ("menu.ogrenci-rehberi.edit-scholarship",        PermissionCategory.Menu, "Öğrenci burs bilgisi düzenleme"),
         ("menu.ogrenci-rehberi.edit-placement",          PermissionCategory.Menu, "Öğrenci yerleştirme bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.integration",             PermissionCategory.Menu, "Öğrenci NVİ/YÖKSİS entegrasyon sorguları"),
 
         // Sidebar placeholder sayfaları (Faz 4 — backend stub)
         ("menu.ogrenci-no-degistirme.view",              PermissionCategory.Menu, "Öğrenci no değiştirme sayfası"),

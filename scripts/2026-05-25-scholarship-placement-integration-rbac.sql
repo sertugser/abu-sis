@@ -24,4 +24,15 @@ WHERE r."Name" = 'AdministrativeStaff'
   AND p."Key" = 'menu.ogrenci-rehberi.edit-placement'
   AND NOT EXISTS (SELECT 1 FROM "RolePermissions" rp WHERE rp."RoleId" = r."Id" AND rp."PermissionId" = p."Id");
 
+-- menu.ogrenci-rehberi.integration
+INSERT INTO "Permissions" ("Key", "Category", "Description", "CreatedAt")
+SELECT 'menu.ogrenci-rehberi.integration', 0, 'Öğrenci NVİ/YÖKSİS entegrasyon sorguları', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM "Permissions" WHERE "Key" = 'menu.ogrenci-rehberi.integration');
+INSERT INTO "RolePermissions" ("RoleId", "PermissionId", "GrantedAt")
+SELECT r."Id", p."Id", NOW()
+FROM "AspNetRoles" r, "Permissions" p
+WHERE r."Name" = 'AdministrativeStaff'
+  AND p."Key" = 'menu.ogrenci-rehberi.integration'
+  AND NOT EXISTS (SELECT 1 FROM "RolePermissions" rp WHERE rp."RoleId" = r."Id" AND rp."PermissionId" = p."Id");
+
 COMMIT;
