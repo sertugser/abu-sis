@@ -17,6 +17,10 @@ export interface AdminStudentListItem {
   programCode: string;
   departmentName: string;
   advisorName?: string;
+  nationalId?: string | null;
+  isScholarshipStudent?: boolean;
+  enrollmentDate?: string | null;
+  classYear?: number | null;
   transcriptAccessible?: boolean;
   transcriptAccessMessage?: string;
 }

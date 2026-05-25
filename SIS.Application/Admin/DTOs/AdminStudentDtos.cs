@@ -12,7 +12,11 @@ public record AdminStudentListItemDto(
     string ProgramName,
     string ProgramCode,
     string DepartmentName,
-    string? AdvisorName
+    string? AdvisorName,
+    string? NationalId,
+    bool IsScholarshipStudent,
+    DateTime? EnrollmentDate,
+    int? ClassYear
 );
 
 public record AdminStudentDetailDto(

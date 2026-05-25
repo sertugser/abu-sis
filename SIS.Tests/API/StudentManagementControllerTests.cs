@@ -30,7 +30,7 @@ public class StudentManagementControllerTests
             .ReturnsAsync(new PagedResult<AdminStudentListItemDto>(
                 new List<AdminStudentListItemDto>
                 {
-                    new(5, "2024001", "Ali", "Veli", "ali@ankarabilim.edu.tr", 3.12m, 4, "Active", "Yazılım", "YZM", "Yazılım Mühendisliği", "Dr. Ada")
+                    new(5, "2024001", "Ali", "Veli", "ali@ankarabilim.edu.tr", 3.12m, 4, "Active", "Yazılım", "YZM", "Yazılım Mühendisliği", "Dr. Ada", null, false, null, 3)
                 },
                 1,
                 1,

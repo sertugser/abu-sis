@@ -164,7 +164,11 @@ public class AdminStudentService : IAdminStudentService
                 activeProgram?.Program?.Name ?? "-",
                 activeProgram?.Program?.Code ?? "-",
                 activeProgram?.Program?.Department?.Name ?? "-",
-                advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : null
+                advisorUser != null ? $"{advisorUser.FirstName} {advisorUser.LastName}" : null,
+                s.NationalId,
+                s.IsScholarshipStudent,
+                activeProgram?.EnrollmentDate,
+                Math.Min(4, s.CompletedSemesters / 2 + 1)
             );
         }).ToList();
 
