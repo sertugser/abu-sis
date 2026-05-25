@@ -304,6 +304,7 @@ const setAttendanceMut = useSetExamAttendance(id);
   const [showImportDialog, setShowImportDialog] = useState(false);
 const [selectedFile, setSelectedFile] = useState<File | null>(null);
 const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>(null);
+  const [optimisticAttendance, setOptimisticAttendance] = useState<Record<number, ExamAttendance>>({});
 
   const isFinalized = gradesData?.isFinalized ?? false;
   const currentCriteria = criteria ?? {
@@ -511,10 +512,19 @@ const handleApplyImport = () => {
 
   const handleAttendanceChange = (studentId: number, attendance: ExamAttendance) => {
     if (!activeComponentId || isFinalized) return;
-    setAttendanceMut.mutate({
-      componentId: activeComponentId,
-      items: [{ studentId, attendance }],
-    });
+    setOptimisticAttendance(prev => ({ ...prev, [studentId]: attendance }));
+    setAttendanceMut.mutate(
+      { componentId: activeComponentId, items: [{ studentId, attendance }] },
+      {
+        onSettled: () => {
+          setOptimisticAttendance(prev => {
+            const next = { ...prev };
+            delete next[studentId];
+            return next;
+          });
+        },
+      },
+    );
   };
 
   /* ── Filter students ── */
@@ -770,8 +780,10 @@ const handleApplyImport = () => {
                          scoreNum >= 0 &&
                          scoreNum <= 100;
 
-                      const attendance: ExamAttendance =
+                      const serverAttendance: ExamAttendance =
                         (activeComponentId && student.examAttendances?.[activeComponentId]) || 'NotMarked';
+                      const attendance: ExamAttendance =
+                        optimisticAttendance[student.studentId] ?? serverAttendance;
                       const isAbsent = attendance === 'Absent';
                       const isExcused = attendance === 'Excused';
                       const scoreDisabled = isAbsent || isExcused;
@@ -811,7 +823,7 @@ const handleApplyImport = () => {
                                 onChange={(e) =>
                                   handleAttendanceChange(student.studentId, e.target.value as ExamAttendance)
                                 }
-                                disabled={setAttendanceMut.isPending}
+                                disabled={student.studentId in optimisticAttendance}
                                 className={`h-8 rounded-md border text-xs font-medium px-2 pr-6 appearance-none bg-background cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 ${
                                   isAbsent  ? 'border-red-300 text-red-600 bg-red-50' :
                                   isExcused ? 'border-amber-300 text-amber-600 bg-amber-50' :
@@ -1028,7 +1040,8 @@ const handleApplyImport = () => {
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
                 <p className="text-sm text-foreground leading-relaxed">
                   Bu işlem tüm öğrencilerin ağırlıklı ortalamalarını hesaplayıp harf notlarını belirleyecektir.
-                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.
+                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.{' '}
+                  Mazeretli (sınava mazeretli girmeyen) öğrenciler <span className="font-mono font-bold text-amber-600">I</span> (Eksik) alır; mazeret sınavı sonrası yeniden sonuçlandırılır.
                   {!hideStatistics && (
                     <> Tüm öğrencilerin <span className="font-semibold">CGPA/SGPA</span> değerleri güncellenecektir.</>
                   )}

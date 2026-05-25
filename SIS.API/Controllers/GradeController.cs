@@ -329,7 +329,8 @@ public class GradeController : ControllerBase
         var registrations = await _context.CourseRegistrations
             .Where(cr => cr.CourseSectionId == sectionId
                 && cr.Status != RegistrationStatus.Dropped
-                && cr.Status != RegistrationStatus.Draft)
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn)
             .ToListAsync();
 
         var registrationMap = registrations.ToDictionary(r => r.StudentId);
@@ -419,7 +420,8 @@ public async Task<IActionResult> ExportTemplate(int sectionId, [FromQuery] int c
         .Include(cr => cr.Student)
         .Where(cr => cr.CourseSectionId == sectionId
             && cr.Status != RegistrationStatus.Dropped
-            && cr.Status != RegistrationStatus.Draft)
+            && cr.Status != RegistrationStatus.Draft
+            && cr.Status != RegistrationStatus.Withdrawn)
         .ToListAsync();
 
     var studentUserIds = registrations.Select(r => r.Student.UserId).ToList();
@@ -560,7 +562,8 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
         .Include(cr => cr.Student)
         .Where(cr => cr.CourseSectionId == sectionId
             && cr.Status != RegistrationStatus.Dropped
-            && cr.Status != RegistrationStatus.Draft)
+            && cr.Status != RegistrationStatus.Draft
+            && cr.Status != RegistrationStatus.Withdrawn)
         .ToListAsync();
 
     var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
@@ -770,7 +773,8 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     var registrations = await _context.CourseRegistrations
         .Where(cr => cr.CourseSectionId == sectionId
             && cr.Status != RegistrationStatus.Dropped
-            && cr.Status != RegistrationStatus.Draft)
+            && cr.Status != RegistrationStatus.Draft
+            && cr.Status != RegistrationStatus.Withdrawn)
         .ToListAsync();
 
     var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
