@@ -43,6 +43,20 @@ public class ExamRegulation
     public int DDMin { get; set; } = 45;
     public bool LetterRangesEditable { get; set; } = true; // "Harf Aralığı Değişebilir mi"
 
+    // Bağıl değerlendirme (çan eğrisi) — Faz 3a çekirdek
+    public GradeEvaluationType EvaluationType { get; set; } = GradeEvaluationType.Absolute;
+    public int RelativeMinStudentCount { get; set; } = 10;     // Altında → mutlağa dön
+    public decimal RelativeInclusionLimit { get; set; } = 0m;  // Bu ham puanın altı istatistiğe katılmaz (0 = herkes dahil)
+    public decimal RelativeAbsoluteFloor { get; set; } = 0m;   // Bu ham puanın altı çan ne derse desin baraj altı (0 = kapalı)
+    // Bağıl harf tablosu — T-skor alt sınırları (bu T-skor ve üzeri o harfi alır)
+    public int TAAMin { get; set; } = 70;
+    public int TBAMin { get; set; } = 63;
+    public int TBBMin { get; set; } = 57;
+    public int TCBMin { get; set; } = 50;
+    public int TCCMin { get; set; } = 45;
+    public int TDCMin { get; set; } = 40;
+    public int TDDMin { get; set; } = 35;
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

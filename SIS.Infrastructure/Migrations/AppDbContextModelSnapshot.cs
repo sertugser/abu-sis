@@ -2237,6 +2237,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("DegreeLevel")
                         .HasColumnType("integer");
 
+                    b.Property<int>("EvaluationType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("FinalCount")
                         .HasColumnType("integer");
 
@@ -2288,6 +2291,36 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<decimal>("RawScoreFloor2")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("RelativeAbsoluteFloor")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RelativeInclusionLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("RelativeMinStudentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TAAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TBAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TBBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TCBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TCCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TDCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TDDMin")
+                        .HasColumnType("integer");
 
                     b.Property<int>("TermType")
                         .HasColumnType("integer");
