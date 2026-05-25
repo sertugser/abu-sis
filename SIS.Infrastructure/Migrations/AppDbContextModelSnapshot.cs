@@ -2199,6 +2199,86 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("EvaluationResponses");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ExamRegulation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DegreeLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FinalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("FinalExamFloor")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MaxFinalWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("MaxMidtermWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("MidtermCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("MinFinalWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("MinMidtermWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("PassingGrade")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RawScoreFloor1")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("RawScoreFloor2")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("TermType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId", "DegreeLevel", "TermType", "Year")
+                        .IsUnique();
+
+                    b.ToTable("ExamRegulations");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Faculty", b =>
                 {
                     b.Property<int>("Id")
@@ -5011,6 +5091,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("EvaluationPeriod");
 
                     b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.ExamRegulation", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.FacultyScheduleApproval", b =>
