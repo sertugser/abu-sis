@@ -15,56 +15,56 @@ namespace SIS.Infrastructure.Migrations
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 91);
 
             migrationBuilder.AddColumn<int>(
                 name: "BAMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 81);
 
             migrationBuilder.AddColumn<int>(
                 name: "BBMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 71);
 
             migrationBuilder.AddColumn<int>(
                 name: "CBMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 61);
 
             migrationBuilder.AddColumn<int>(
                 name: "CCMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 55);
 
             migrationBuilder.AddColumn<int>(
                 name: "DCMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 50);
 
             migrationBuilder.AddColumn<int>(
                 name: "DDMin",
                 table: "ExamRegulations",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 45);
 
             migrationBuilder.AddColumn<bool>(
                 name: "LetterRangesEditable",
                 table: "ExamRegulations",
                 type: "boolean",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: true);
         }
 
         /// <inheritdoc />

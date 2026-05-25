@@ -1229,10 +1229,11 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 
         var editable = policy == null || policy.Editable;
 
-        // When the regulation locks thresholds AND supplies unique thresholds, surface those
-        // to the frontend so the displayed values match what finalize will use.
+        // When the regulation supplies unique thresholds AND either it locks editing or no
+        // section GradingCriteria row exists yet, surface the regulation thresholds so the
+        // displayed values match what finalize will use (mirrors Finalize's own selection logic).
         GradingCriteria effective;
-        if (policy != null && !policy.Editable && policy.HasUniqueThresholds)
+        if (policy != null && policy.HasUniqueThresholds && (!policy.Editable || criteria == null))
         {
             effective = new GradingCriteria
             {

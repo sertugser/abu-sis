@@ -633,13 +633,11 @@ public class GradeFinalizeRegulationTests : IDisposable
     /// <summary>
     /// Finalize must use regulation thresholds when the regulation is locked AND no section
     /// GradingCriteria row exists.
-    /// Regulation thresholds: AAMin=90 … DDMin=50.
+    /// Regulation thresholds: AAMin=90, BAMin=80, BBMin=70, CBMin=60, CCMin=55, DCMin=50, DDMin=45
+    /// (strictly descending — valid).
     /// Components are both Type=Other so weight-bounds enforcement is skipped.
-    /// Student scores: midterm=92, final=92 → weightedScore=92 → AA (≥90).
-    /// Second assertion: midterm=55, final=55 → weightedScore=55 → FF (DDMin=50 → 55≥50 = DD… wait)
-    /// Actually: DDMin=50 → score=55 ≥ 50 → DD; DDMin=50, score=45 < 50 → FF.
-    /// So for the "below DDMin" test use scores that give roundedScore=45 (< DDMin=50).
-    /// midterm=45, final=45 → weightedScore=45 → FF.
+    /// Student 1: scores=92 → weightedScore=92 → AA (≥90 per regulation).
+    /// Student 2: scores=44 → weightedScore=44 → FF (44 < DDMin=45 per regulation).
     /// </summary>
     [Fact]
     public async Task Finalize_UsesRegulationThresholds_WhenLockedAndNoSectionCriteria()
@@ -709,7 +707,7 @@ public class GradeFinalizeRegulationTests : IDisposable
 
         // NO GradingCriteria row → regulation thresholds must be used
 
-        // Locked regulation: AAMin=90 … DDMin=50
+        // Locked regulation: AAMin=90 … DDMin=45 (strictly descending, valid)
         ctx.ExamRegulations.Add(new ExamRegulation
         {
             Id = 20, ProgramId = pId, DegreeLevel = DegreeLevel.Bachelor,
@@ -720,7 +718,7 @@ public class GradeFinalizeRegulationTests : IDisposable
             MinFinalWeightPercent = 0m, MaxFinalWeightPercent = 100m,
             FinalExamFloor = 0m, PassingGrade = 0m,
             LetterRangesEditable = false,
-            AAMin = 90, BAMin = 80, BBMin = 70, CBMin = 60, CCMin = 55, DCMin = 50, DDMin = 50,
+            AAMin = 90, BAMin = 80, BBMin = 70, CBMin = 60, CCMin = 55, DCMin = 50, DDMin = 45,
             CreatedAt = DateTime.UtcNow
         });
 
@@ -756,7 +754,7 @@ public class GradeFinalizeRegulationTests : IDisposable
             Id = 21, CourseRegistrationId = reg1Id, GradeComponentId = comp2Id, Score = 92m
         });
 
-        // Student 2: both component scores = 45 → weightedScore=45 → FF (< DDMin=50)
+        // Student 2: both component scores = 44 → weightedScore=44 → FF (< DDMin=45)
         ctx.Users.Add(new ApplicationUser
         {
             Id = studUserId2, UserName = "s2@t.edu", NormalizedUserName = "S2@T.EDU",
@@ -781,11 +779,11 @@ public class GradeFinalizeRegulationTests : IDisposable
         });
         ctx.StudentGrades.Add(new StudentGrade
         {
-            Id = 22, CourseRegistrationId = reg2Id, GradeComponentId = comp1Id, Score = 45m
+            Id = 22, CourseRegistrationId = reg2Id, GradeComponentId = comp1Id, Score = 44m
         });
         ctx.StudentGrades.Add(new StudentGrade
         {
-            Id = 23, CourseRegistrationId = reg2Id, GradeComponentId = comp2Id, Score = 45m
+            Id = 23, CourseRegistrationId = reg2Id, GradeComponentId = comp2Id, Score = 44m
         });
 
         await ctx.SaveChangesAsync();
@@ -824,7 +822,7 @@ public class GradeFinalizeRegulationTests : IDisposable
 
         var reg2 = await ctx.CourseRegistrations.FindAsync(reg2Id);
         reg2!.Grade.Should().Be(GradeCode.FF,
-            "student 2 scored 45 which is < DDMin=50 per regulation thresholds");
+            "student 2 scored 44 which is < DDMin=45 per regulation thresholds");
     }
 
     /// <summary>
@@ -1054,6 +1052,62 @@ public class GradeFinalizeRegulationTests : IDisposable
         // Explicitly verify it is NOT the generic no-criteria message
         json.Should().NotContain("girilmeden",
             "the generic 'girilmeden' message is misleading when the lock itself prevents entry");
+    }
+
+    /// <summary>
+    /// GetGradingCriteria must return regulation thresholds when the regulation has
+    /// HasUniqueThresholds=true and LetterRangesEditable=true, but NO section GradingCriteria
+    /// row exists yet. This mirrors the Finalize path: (!policy.Editable || criteria == null).
+    /// The response must surface the regulation thresholds (not 91/81/71/61/55/50/45 defaults)
+    /// and must set Editable=true so the instructor knows they can override.
+    /// </summary>
+    [Fact]
+    public async Task GetGradingCriteria_ReturnsRegulationThresholds_WhenEditableButNoSectionCriteria()
+    {
+        // Arrange: regulation with HasUniqueThresholds=true, LetterRangesEditable=true.
+        // No GradingCriteria row → criteria == null.
+        // Under the fixed condition (!policy.Editable || criteria == null):
+        //   Editable=true, criteria=null → criteria==null branch is TRUE → use regulation thresholds.
+        // Under the OLD condition (!policy.Editable && HasUniqueThresholds):
+        //   Editable=true → !policy.Editable=false → condition is FALSE → falls back to defaults.
+        SeedBaseScenario(); // seeds GradingCriteria row with Id=GradingCriteriaId
+
+        // Remove the seeded GradingCriteria row so criteria == null
+        var seedCriteria = await _context.GradingCriteria.FindAsync(GradingCriteriaId);
+        if (seedCriteria != null)
+        {
+            _context.GradingCriteria.Remove(seedCriteria);
+            await _context.SaveChangesAsync();
+        }
+
+        // Seed a regulation that is editable but has unique thresholds
+        SeedExamRegulationWithLetterPolicy(
+            letterRangesEditable: true,
+            aaMin: 93, baMin: 83, bbMin: 73, cbMin: 63, ccMin: 57, dcMin: 52, ddMin: 47);
+
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.GetGradingCriteria(SectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>(
+            "GetGradingCriteria must succeed when regulation exists");
+
+        var ok = (OkObjectResult)result;
+        var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
+        var doc = System.Text.Json.JsonDocument.Parse(json).RootElement;
+
+        doc.GetProperty("AAMin").GetInt32().Should().Be(93,
+            "with Editable=true and no section criteria, regulation AAMin=93 must be surfaced (not default 91)");
+        doc.GetProperty("BAMin").GetInt32().Should().Be(83);
+        doc.GetProperty("BBMin").GetInt32().Should().Be(73);
+        doc.GetProperty("CBMin").GetInt32().Should().Be(63);
+        doc.GetProperty("CCMin").GetInt32().Should().Be(57);
+        doc.GetProperty("DCMin").GetInt32().Should().Be(52);
+        doc.GetProperty("DDMin").GetInt32().Should().Be(47);
+        doc.GetProperty("Editable").GetBoolean().Should().BeTrue(
+            "regulation is editable → instructor must be able to override");
     }
 
     public void Dispose() => _context.Dispose();
