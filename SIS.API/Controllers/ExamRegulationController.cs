@@ -157,6 +157,7 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
             DCMin = source.DCMin,
             DDMin = source.DDMin,
             LetterRangesEditable = source.LetterRangesEditable,
+            BelowFloorGrade = source.BelowFloorGrade,
             CreatedAt = DateTime.UtcNow
         };
         context.ExamRegulations.Add(clone);
@@ -236,6 +237,7 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         e.DCMin = req.DCMin;
         e.DDMin = req.DDMin;
         e.LetterRangesEditable = req.LetterRangesEditable;
+        e.BelowFloorGrade = req.BelowFloorGrade;
     }
 
     private static ExamRegulationDto ToDto(ExamRegulation r) => new(
@@ -244,7 +246,8 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         r.MinMidtermWeightPercent, r.MaxMidtermWeightPercent,
         r.MinFinalWeightPercent, r.MaxFinalWeightPercent,
         r.PassingGrade, r.RawScoreFloor1, r.RawScoreFloor2, r.FinalExamFloor,
-        r.AAMin, r.BAMin, r.BBMin, r.CBMin, r.CCMin, r.DCMin, r.DDMin, r.LetterRangesEditable);
+        r.AAMin, r.BAMin, r.BBMin, r.CBMin, r.CCMin, r.DCMin, r.DDMin, r.LetterRangesEditable,
+        r.BelowFloorGrade.ToString());
 }
 
 public record ExamRegulationDto(
@@ -254,7 +257,8 @@ public record ExamRegulationDto(
     decimal MinFinalWeightPercent, decimal MaxFinalWeightPercent,
     decimal PassingGrade, decimal RawScoreFloor1, decimal RawScoreFloor2, decimal FinalExamFloor,
     int AAMin, int BAMin, int BBMin, int CBMin, int CCMin, int DCMin, int DDMin,
-    bool LetterRangesEditable);
+    bool LetterRangesEditable,
+    string BelowFloorGrade);
 
 public record SaveExamRegulationRequest(
     int ProgramId, DegreeLevel DegreeLevel, TermType TermType, int Year,
@@ -263,7 +267,8 @@ public record SaveExamRegulationRequest(
     decimal MinFinalWeightPercent, decimal MaxFinalWeightPercent,
     decimal PassingGrade, decimal RawScoreFloor1, decimal RawScoreFloor2, decimal FinalExamFloor,
     int AAMin = 91, int BAMin = 81, int BBMin = 71, int CBMin = 61,
-    int CCMin = 55, int DCMin = 50, int DDMin = 45, bool LetterRangesEditable = true);
+    int CCMin = 55, int DCMin = 50, int DDMin = 45, bool LetterRangesEditable = true,
+    GradeCode BelowFloorGrade = GradeCode.FF);
 
 public record CloneExamRegulationRequest(int? ProgramId, int Year);
 

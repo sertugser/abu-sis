@@ -1110,5 +1110,101 @@ public class GradeFinalizeRegulationTests : IDisposable
             "regulation is editable → instructor must be able to override");
     }
 
+    /// <summary>
+    /// When BelowFloorGrade is configured on the regulation (e.g. DD), a student whose
+    /// rounded weighted average falls below PassingGrade must receive that configured grade
+    /// instead of the hardcoded FF.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_AssignsConfiguredBelowFloorGrade_WhenBelowPassingGrade()
+    {
+        // Arrange: midterm=40, final=48 → weightedScore = 40*0.4 + 48*0.6 = 16 + 28.8 = 44.8 → rounded=45
+        // PassingGrade=50 → 45 < 50 → should assign BelowFloorGrade, not hardcoded FF
+        // BelowFloorGrade = DD (distinct from FF so we can tell the difference)
+        SeedBaseScenario(midtermScore: 40m, finalScore: 48m);
+
+        _context.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = ExamRegulationId,
+            ProgramId = ProgramId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActive = true,
+            Name = "BelowFloor Test Yönerge",
+            MidtermCount = 1,
+            FinalCount = 1,
+            MinMidtermWeightPercent = 40m,
+            MaxMidtermWeightPercent = 60m,
+            MinFinalWeightPercent = 40m,
+            MaxFinalWeightPercent = 60m,
+            FinalExamFloor = 0m,    // floor disabled so only passing-grade path triggers
+            PassingGrade = 50m,
+            BelowFloorGrade = GradeCode.DD,  // configured: assign DD, not FF
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.Finalize(SectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>("finalize itself succeeds");
+
+        var registration = await _context.CourseRegistrations.FindAsync(RegistrationId);
+        registration!.Grade.Should().Be(GradeCode.DD,
+            "roundedScore 45 < PassingGrade 50 → BelowFloorGrade=DD must be assigned");
+        registration.Grade.Should().NotBe(GradeCode.FF,
+            "hardcoded FF must not be used when BelowFloorGrade is configured as DD");
+    }
+
+    /// <summary>
+    /// When BelowFloorGrade is left at the default (FF), existing tests are unaffected —
+    /// a student below FinalExamFloor still receives FF.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_AssignsFF_WhenBelowFloorGradeIsDefault_AndFinalScoreBelowFloor()
+    {
+        // midterm=70, final=40 → finalAvg=40 < FinalExamFloor=50
+        // BelowFloorGrade defaults to FF → grade must be FF
+        SeedBaseScenario(midtermScore: 70m, finalScore: 40m);
+
+        _context.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = ExamRegulationId,
+            ProgramId = ProgramId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActive = true,
+            Name = "Default BelowFloor Yönerge",
+            MidtermCount = 1,
+            FinalCount = 1,
+            MinMidtermWeightPercent = 40m,
+            MaxMidtermWeightPercent = 60m,
+            MinFinalWeightPercent = 40m,
+            MaxFinalWeightPercent = 60m,
+            FinalExamFloor = 50m,
+            PassingGrade = 0m,
+            // BelowFloorGrade not set → defaults to GradeCode.FF
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var controller = CreateController();
+
+        // Act
+        var result = await controller.Finalize(SectionId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+
+        var registration = await _context.CourseRegistrations.FindAsync(RegistrationId);
+        registration!.Grade.Should().Be(GradeCode.FF,
+            "default BelowFloorGrade=FF → behavior unchanged from before");
+    }
+
     public void Dispose() => _context.Dispose();
 }

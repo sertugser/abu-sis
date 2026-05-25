@@ -1114,12 +1114,12 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                         .Average();
 
                     if (finalAvg < studentReg.FinalExamFloor)
-                        letterGrade = GradeCode.FF;
+                        letterGrade = studentReg.BelowFloorGrade;
                 }
 
-                // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → FF
+                // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → BelowFloorGrade (varsayılan: FF)
                 if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
-                    letterGrade = GradeCode.FF;
+                    letterGrade = studentReg.BelowFloorGrade;
             }
 
             reg.Grade = letterGrade;
