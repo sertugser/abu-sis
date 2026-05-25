@@ -13,4 +13,15 @@ WHERE r."Name" = 'AdministrativeStaff'
   AND p."Key" = 'menu.ogrenci-rehberi.edit-scholarship'
   AND NOT EXISTS (SELECT 1 FROM "RolePermissions" rp WHERE rp."RoleId" = r."Id" AND rp."PermissionId" = p."Id");
 
+-- menu.ogrenci-rehberi.edit-placement
+INSERT INTO "Permissions" ("Key", "Category", "Description", "CreatedAt")
+SELECT 'menu.ogrenci-rehberi.edit-placement', 0, 'Öğrenci yerleştirme bilgisi düzenleme', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM "Permissions" WHERE "Key" = 'menu.ogrenci-rehberi.edit-placement');
+INSERT INTO "RolePermissions" ("RoleId", "PermissionId", "GrantedAt")
+SELECT r."Id", p."Id", NOW()
+FROM "AspNetRoles" r, "Permissions" p
+WHERE r."Name" = 'AdministrativeStaff'
+  AND p."Key" = 'menu.ogrenci-rehberi.edit-placement'
+  AND NOT EXISTS (SELECT 1 FROM "RolePermissions" rp WHERE rp."RoleId" = r."Id" AND rp."PermissionId" = p."Id");
+
 COMMIT;

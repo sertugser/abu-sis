@@ -271,6 +271,7 @@ public static class RolePermissionSeed
                 "menu.ogrenci-rehberi.edit-documents",
                 "menu.ogrenci-rehberi.generate-documents",
                 "menu.ogrenci-rehberi.edit-scholarship",
+                "menu.ogrenci-rehberi.edit-placement",
                 "menu.ogrenci-no-degistirme.change",
 
                 // ── Sınıf Atlatma (öğrenci kartı paneli) ──
