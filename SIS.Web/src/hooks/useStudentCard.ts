@@ -492,3 +492,90 @@ export function useRollbackPromotion() {
     onSuccess: (_d, { studentId }) => invalidatePromotionQueries(qc, studentId),
   });
 }
+
+export interface ScholarshipDetail {
+  id: number;
+  type: string;
+  typeLabel: string;
+  ratePercent: number | null;
+  source: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+  note: string | null;
+}
+
+export interface UpsertScholarship {
+  type: string;
+  ratePercent: number | null;
+  source: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+  note: string | null;
+}
+
+const SCHOLARSHIPS_KEY = (studentId: number) =>
+  ['admin', 'student-card', 'scholarships', studentId] as const;
+
+export function useScholarships(studentId: number | null) {
+  return useQuery({
+    queryKey: SCHOLARSHIPS_KEY(studentId ?? 0),
+    queryFn: async () =>
+      (await apiClient.get<ScholarshipDetail[]>(`${BASE}/${studentId}/scholarships`)).data,
+    enabled: studentId != null,
+  });
+}
+
+export function useCreateScholarship() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId, dto }: { studentId: number; dto: UpsertScholarship }) => {
+      try {
+        await apiClient.post(`${BASE}/${studentId}/scholarships`, dto);
+      } catch (err) {
+        throw asBackendError(err, 'Burs kaydı eklenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: SCHOLARSHIPS_KEY(studentId) }),
+  });
+}
+
+export function useUpdateScholarship() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      studentId,
+      id,
+      dto,
+    }: {
+      studentId: number;
+      id: number;
+      dto: UpsertScholarship;
+    }) => {
+      try {
+        await apiClient.put(`${BASE}/${studentId}/scholarships/${id}`, dto);
+      } catch (err) {
+        throw asBackendError(err, 'Burs kaydı güncellenemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: SCHOLARSHIPS_KEY(studentId) }),
+  });
+}
+
+export function useDeleteScholarship() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ studentId, id }: { studentId: number; id: number }) => {
+      try {
+        await apiClient.delete(`${BASE}/${studentId}/scholarships/${id}`);
+      } catch (err) {
+        throw asBackendError(err, 'Burs kaydı silinemedi.');
+      }
+    },
+    onSuccess: (_d, { studentId }) =>
+      qc.invalidateQueries({ queryKey: SCHOLARSHIPS_KEY(studentId) }),
+  });
+}
