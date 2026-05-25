@@ -220,7 +220,8 @@ public class GradeController : ControllerBase
             .Include(cr => cr.Student)
             .Where(cr => cr.CourseSectionId == sectionId
                 && cr.Status != RegistrationStatus.Dropped
-                && cr.Status != RegistrationStatus.Draft)
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn)
             .ToListAsync();
 
         var studentUserIds = registrations.Select(r => r.Student.UserId).ToList();
@@ -267,7 +268,11 @@ public class GradeController : ControllerBase
                 WeightedAverage = weightedAverage,
                 Scores = components.ToDictionary(
                     c => c.Id.ToString(),
-                    c => studentGrades.FirstOrDefault(g => g.GradeComponentId == c.Id)?.Score)
+                    c => studentGrades.FirstOrDefault(g => g.GradeComponentId == c.Id)?.Score),
+                ExamAttendances = components.ToDictionary(
+                    c => c.Id.ToString(),
+                    c => (studentGrades.FirstOrDefault(g => g.GradeComponentId == c.Id)?.ExamAttendance
+                          ?? ExamAttendance.NotMarked).ToString())
             };
         })
         .OrderBy(s => s.LastName)
@@ -860,6 +865,95 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         Skipped = skipped
     });
 }
+    // ══════════════════════════════════════════════════════════
+    //  SINAV YOKLAMASI
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// PUT api/instructor/section/{sectionId}/exam-attendance
+    /// Bir bileşen için öğrencilerin sınav yoklamasını toplu işaretler.
+    /// </summary>
+    [HttpPut("section/{sectionId}/exam-attendance")]
+    [RequirePermission("menu.not-girisi.edit")]
+    public async Task<IActionResult> SetExamAttendance(int sectionId, [FromBody] SetExamAttendanceRequest dto, CancellationToken ct)
+    {
+        var section = await GetAuthorizedSectionAsync(sectionId);
+        if (section == null)
+            return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+        if (section.IsFinalized)
+            return BadRequest(new { error = "Sonuçlandırılmış derste değiştirilemez. Önce sonuçlandırmayı iptal edin." });
+
+        if (!await CanMutateSharedGradeConfigurationAsync(section))
+            return Forbid();
+
+        var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
+        if (termIsCancelled == true)
+            return BadRequest(new { error = "İptal edilmiş dönemde yoklama değiştirilemez." });
+
+        // Bileşenin bu dersin bu dönemi için geçerli olduğunu doğrula
+        var component = await _context.GradeComponents
+            .FirstOrDefaultAsync(gc => gc.Id == dto.ComponentId
+                && gc.CourseId == section.CourseId
+                && gc.AcademicTermId == section.TermId, ct);
+
+        if (component == null)
+            return BadRequest(new { error = "Bileşen bu section için geçerli değil." });
+
+        // Bu section'daki aktif kayıtları al (çekilenler hariç)
+        var registrations = await _context.CourseRegistrations
+            .Where(cr => cr.CourseSectionId == sectionId
+                && cr.Status != RegistrationStatus.Dropped
+                && cr.Status != RegistrationStatus.Draft
+                && cr.Status != RegistrationStatus.Withdrawn)
+            .ToListAsync(ct);
+
+        var registrationMap = registrations.ToDictionary(r => r.StudentId);
+
+        var registrationIds = registrations.Select(r => r.Id).ToList();
+
+        // Mevcut StudentGrade satırlarını al (bu bileşen için)
+        var existingGrades = await _context.StudentGrades
+            .Where(sg => sg.GradeComponentId == dto.ComponentId
+                && registrationIds.Contains(sg.CourseRegistrationId))
+            .ToDictionaryAsync(sg => sg.CourseRegistrationId, ct);
+
+        int updatedCount = 0;
+
+        foreach (var item in dto.Items)
+        {
+            if (!registrationMap.TryGetValue(item.StudentId, out var registration))
+                continue; // Bu section'da aktif kaydı olmayan öğrenciyi atla
+
+            if (existingGrades.TryGetValue(registration.Id, out var existing))
+            {
+                existing.ExamAttendance = item.Attendance;
+            }
+            else
+            {
+                // Satır yok — oluştur; Score null kalır, sadece yoklama set edilir
+                _context.StudentGrades.Add(new StudentGrade
+                {
+                    CourseRegistrationId = registration.Id,
+                    GradeComponentId = dto.ComponentId,
+                    Score = null,
+                    ExamAttendance = item.Attendance
+                });
+            }
+
+            updatedCount++;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            message = $"{updatedCount} öğrencinin sınav yoklaması güncellendi.",
+            ComponentId = dto.ComponentId,
+            UpdatedCount = updatedCount
+        });
+    }
+
     // ══════════════════════════════════════════════════════════
     //  SONUÇLANDIRMA
     // ══════════════════════════════════════════════════════════
@@ -1497,4 +1591,16 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
 {
     public IFormFile File { get; set; } = null!;
 }
+
+    public class SetExamAttendanceRequest
+    {
+        public int ComponentId { get; set; }
+        public List<ExamAttendanceItem> Items { get; set; } = new();
+    }
+
+    public class ExamAttendanceItem
+    {
+        public int StudentId { get; set; }
+        public ExamAttendance Attendance { get; set; }
+    }
 }

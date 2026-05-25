@@ -82,6 +82,7 @@ SaveExamRegulationRequest
 SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto
+SetExamAttendanceRequest
 SetUserStatusDto
 SimulateConstraintChangeRequest
 SimulateMoveRequest
