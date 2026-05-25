@@ -8,6 +8,9 @@ import { useAdminPrograms } from '../../hooks/useAdminLookup';
 import { useCreateExamRegulation, useUpdateExamRegulation } from '../../hooks/useExamRegulations';
 import type { ExamRegulation, SaveExamRegulationRequest } from '../../types/examRegulation';
 import { TERM_TYPES, TERM_LABELS } from '../../lib/examRegulationLabels';
+import { GRADE_BADGE_CLASS } from '../../lib/gradeUtils';
+
+const GRADE_CODES = Object.keys(GRADE_BADGE_CLASS) as string[];
 
 interface Props { open: boolean; onOpenChange: (v: boolean) => void; editTarget: ExamRegulation | null; }
 
@@ -18,7 +21,7 @@ const emptyForm: SaveExamRegulationRequest = {
   minFinalWeightPercent: 40, maxFinalWeightPercent: 60,
   passingGrade: 50, rawScoreFloor1: 0, rawScoreFloor2: 0, finalExamFloor: 0,
   aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
-  letterRangesEditable: true,
+  letterRangesEditable: true, belowFloorGrade: 'FF',
 };
 
 export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Props) {
@@ -95,6 +98,13 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             <Input type="number" min={0} max={100} value={form.maxFinalWeightPercent} onChange={(e) => set('maxFinalWeightPercent', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Geçme Notu</Label>
             <Input type="number" min={0} max={100} value={form.passingGrade} onChange={(e) => set('passingGrade', Number(e.target.value))} /></div>
+          <div className="space-y-1">
+            <Label>Baraj Altına Atanacak Harf</Label>
+            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.belowFloorGrade}
+              onChange={(e) => set('belowFloorGrade', e.target.value)}>
+              {GRADE_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+          </div>
           <div className="space-y-1"><Label>YYS Limiti (finalden baraj)</Label>
             <Input type="number" min={0} value={form.finalExamFloor} onChange={(e) => set('finalExamFloor', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Ham Başarı Alt Limit 1</Label>

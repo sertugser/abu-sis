@@ -27,6 +27,7 @@ export interface ExamRegulation {
   dcMin: number;
   ddMin: number;
   letterRangesEditable: boolean;
+  belowFloorGrade: string;
 }
 
 export type SaveExamRegulationRequest = Omit<ExamRegulation, 'id' | 'programName'>;
