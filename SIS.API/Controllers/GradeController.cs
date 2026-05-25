@@ -1223,6 +1223,26 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         foreach (var reg in gradedRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
+
+            // Rule A — BlockFinalIfNoMidterm (opt-in): if the student's regulation has this flag
+            // enabled AND the student attended NO midterm component, treat all Final-type component
+            // scores as 0 for the weighted computation (they cannot benefit from the final).
+            // "Attended a midterm" = ExamAttendance==Present OR (NotMarked AND Score!=null).
+            examRegByStudent.TryGetValue(reg.StudentId, out var studentRegForPrePass);
+            var blockFinalScores = false;
+            if (studentRegForPrePass != null && studentRegForPrePass.BlockFinalIfNoMidterm)
+            {
+                var midtermComponents = components.Where(c => c.Type == GradeComponentType.Midterm).ToList();
+                var attendedAnyMidterm = midtermComponents.Any(mc =>
+                {
+                    var g = studentGrades.FirstOrDefault(sg => sg.GradeComponentId == mc.Id);
+                    if (g == null) return false;
+                    return g.ExamAttendance == ExamAttendance.Present
+                        || (g.ExamAttendance == ExamAttendance.NotMarked && g.Score != null);
+                });
+                blockFinalScores = !attendedAnyMidterm;
+            }
+
             decimal weightedScore = 0;
             foreach (var comp in components)
             {
@@ -1232,6 +1252,9 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 var score = gradeRow.ExamAttendance == ExamAttendance.Absent
                     ? 0m
                     : gradeRow.Score!.Value;
+                // Rule A: override Final-type score to 0 when BlockFinalIfNoMidterm fired.
+                if (blockFinalScores && comp.Type == GradeComponentType.Final)
+                    score = 0m;
                 weightedScore += score * comp.Weight / 100m;
             }
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
@@ -1305,6 +1328,26 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 // Geçme notu: ağırlıklı ortalama geçme notunun altındaysa → BelowFloorGrade (varsayılan: FF)
                 if (studentReg.PassingGrade > 0 && roundedScore < studentReg.PassingGrade)
                     letterGrade = studentReg.BelowFloorGrade;
+
+                // Rule C — FailIfNoFinal (opt-in): if the student's regulation has this flag
+                // enabled AND the student's Final component attendance is Absent (unexcused
+                // non-attendance), assign BelowFloorGrade regardless of the numeric average.
+                // Excused students are already assigned GradeCode.I above and excluded from
+                // gradedRegistrations, so only truly absent students reach this point.
+                if (studentReg.FailIfNoFinal)
+                {
+                    var failFinalComps = components
+                        .Where(c => c.Type == GradeComponentType.Final)
+                        .ToList();
+                    var absentFromFinal = failFinalComps.Count > 0
+                        && failFinalComps.Any(fc =>
+                        {
+                            var g = studentGrades.First(gi => gi.GradeComponentId == fc.Id);
+                            return g.ExamAttendance == ExamAttendance.Absent;
+                        });
+                    if (absentFromFinal)
+                        letterGrade = studentReg.BelowFloorGrade;
+                }
             }
 
             reg.Grade = letterGrade;
