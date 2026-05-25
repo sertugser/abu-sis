@@ -3,6 +3,7 @@ import apiClient from './axios';
 import type {
   FinalizeResponse,
   GradeComponent,
+  GradeComponentType,
   GradeSubmitDto,
   GradesResponse,
   GradingCriteria,
@@ -18,7 +19,7 @@ export async function getComponents(sectionId: number): Promise<GradeComponent[]
 
 export async function addComponent(
   sectionId: number,
-  component: { name: string; weight: number; order: number }
+  component: { name: string; weight: number; order: number; type: GradeComponentType }
 ): Promise<void> {
   await apiClient.post(`/instructor/section/${sectionId}/components`, component);
 }

@@ -15,6 +15,7 @@ import {
   updateGradingCriteria,
 } from '../api/grade.api';
 import type {
+  GradeComponentType,
   GradeSubmitDto,
   GradingCriteria,
 } from '../types/grade';
@@ -46,7 +47,7 @@ export function useGradingCriteria(sectionId: number) {
 export function useAddComponent(sectionId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (component: { name: string; weight: number; order: number }) =>
+    mutationFn: (component: { name: string; weight: number; order: number; type: GradeComponentType }) =>
       addComponent(sectionId, component),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });

@@ -1,10 +1,13 @@
 // SIS.Web/src/types/grade.ts
 
+export type GradeComponentType = 'Other' | 'Midterm' | 'Final';
+
 export interface GradeComponent {
   id: number;
   name: string;
   weight: number;
   order: number;
+  type: GradeComponentType;
 }
 
 export interface StudentScore {

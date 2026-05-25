@@ -5,6 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -44,10 +51,24 @@ import {
   useApplyImport,
 } from '../hooks/useGradeData';
 import type {
+  GradeComponentType,
   GradingCriteria,
   FinalizePreviewItem,
   ImportPreviewResponse,
 } from '../types/grade';
+
+/* ── Bileşen türü etiketleri ── */
+const COMPONENT_TYPE_LABELS: Record<GradeComponentType, string> = {
+  Other: 'Diğer',
+  Midterm: 'Ara Sınav',
+  Final: 'Final',
+};
+
+const COMPONENT_TYPE_BADGE_CLASS: Record<GradeComponentType, string> = {
+  Other: 'bg-slate-100 text-slate-600',
+  Midterm: 'bg-blue-50 text-blue-600',
+  Final: 'bg-purple-50 text-purple-700',
+};
 
 /* ── Harf notu stilleri ── */
 const GRADE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -108,7 +129,7 @@ const applyImportMut = useApplyImport(id);
   const [scores, setScores] = useState<Record<number, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [newComponent, setNewComponent] = useState({ name: '', weight: '' });
+  const [newComponent, setNewComponent] = useState<{ name: string; weight: string; type: GradeComponentType }>({ name: '', weight: '', type: 'Other' });
   const [showCriteriaDialog, setShowCriteriaDialog] = useState(false);
   const [editCriteria, setEditCriteria] = useState<GradingCriteria | null>(null);
   const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
@@ -217,11 +238,11 @@ const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>
   const handleAddComponent = () => {
     if (!newComponent.name || !newComponent.weight) return;
     addComponentMut.mutate(
-      { name: newComponent.name, weight: Number(newComponent.weight), order: 0 },
+      { name: newComponent.name, weight: Number(newComponent.weight), order: 0, type: newComponent.type },
       {
         onSuccess: () => {
           setShowAddDialog(false);
-          setNewComponent({ name: '', weight: '' });
+          setNewComponent({ name: '', weight: '', type: 'Other' });
         },
       }
     );
@@ -442,6 +463,15 @@ const handleApplyImport = () => {
               <span className={`font-mono text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                 %{comp.weight}
               </span>
+              {comp.type && comp.type !== 'Other' && (
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  isActive
+                    ? 'bg-primary-foreground/15 text-primary-foreground/80'
+                    : COMPONENT_TYPE_BADGE_CLASS[comp.type]
+                }`}>
+                  {COMPONENT_TYPE_LABELS[comp.type]}
+                </span>
+              )}
               {!isFinalized && (
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteComponentMut.mutate(comp.id); }}
@@ -631,6 +661,22 @@ const handleApplyImport = () => {
                 value={newComponent.name}
                 onChange={(e) => setNewComponent(prev => ({ ...prev, name: e.target.value }))}
               />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tür</Label>
+              <Select
+                value={newComponent.type}
+                onValueChange={(val) => setNewComponent(prev => ({ ...prev, type: val as GradeComponentType }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Other">Diğer</SelectItem>
+                  <SelectItem value="Midterm">Ara Sınav</SelectItem>
+                  <SelectItem value="Final">Final</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Ağırlık (%)</Label>
