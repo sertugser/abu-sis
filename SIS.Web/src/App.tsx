@@ -59,6 +59,7 @@ import DocumentsPanel from './pages/student-hub/panels/DocumentsPanel';
 import IssuedDocumentsPanel from './pages/student-hub/panels/IssuedDocumentsPanel';
 import ScholarshipPanel from './pages/student-hub/panels/ScholarshipPanel';
 import PlacementPanel from './pages/student-hub/panels/PlacementPanel';
+import IntegrationPanel from './pages/student-hub/panels/IntegrationPanel';
 import InstructorDirectoryPage from './pages/InstructorDirectoryPage';
 import TermManagementPage from './pages/TermManagementPage';
 import FacultyDefinitionsPage from './pages/FacultyDefinitionsPage';
@@ -251,6 +252,7 @@ export default function App() {
                       <Route path="verilen-belgeler" element={<IssuedDocumentsPanel />} />
                       <Route path="burs" element={<ScholarshipPanel />} />
                       <Route path="yerlestirme" element={<PlacementPanel />} />
+                      <Route path="entegrasyon" element={<IntegrationPanel />} />
                       <Route path="ders-kaydi" element={<RegistrationsPanel />} />
                       <Route path="notlar" element={<GradesPanel />} />
                       <Route path="donem-ortalamalari" element={<TermGpaPanel />} />

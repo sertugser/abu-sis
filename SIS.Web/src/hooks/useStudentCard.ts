@@ -622,3 +622,106 @@ export function useUpdatePlacement() {
       qc.invalidateQueries({ queryKey: PLACEMENT_KEY(studentId) }),
   });
 }
+
+// ─── NVİ / YÖKSİS / ÖSYM integration (mock-capable) ────────────────────────────
+// These calls are user-triggered actions (button clicks), so they are modelled as
+// mutations rather than queries — they must NOT auto-run on mount.
+
+/** NVİ identity verification result. `isMock` true when the mock provider answered. */
+export interface IdentityVerificationResult {
+  isMock: boolean;
+  matched: boolean;
+  fullName: string | null;
+  birthDate: string | null;
+  birthPlace: string | null;
+  addressProvince: string | null;
+  addressDistrict: string | null;
+  mode: string;
+  queriedAt: string;
+  message: string | null;
+}
+
+/** YÖKSİS enrollment-notification status result. */
+export interface YoksisStatusResult {
+  isMock: boolean;
+  status: string;
+  yoksisRecordNo: string | null;
+  queriedAt: string;
+  mode: string;
+  message: string | null;
+}
+
+/** ÖSYM placement preview result (server does NOT save it; the panel saves via placement PUT). */
+export interface OsymPlacementResult {
+  isMock: boolean;
+  entranceType: string;
+  scoreType: string | null;
+  score: number | null;
+  rankOrder: number | null;
+  quotaType: string | null;
+  placementYear: number | null;
+  placedProgramName: string | null;
+  queriedAt: string;
+  mode: string;
+  message: string | null;
+}
+
+export function useVerifyNvi() {
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        const { data } = await apiClient.post<IdentityVerificationResult>(
+          `${BASE}/${studentId}/integration/nvi/verify`,
+        );
+        return data;
+      } catch (err) {
+        throw asBackendError(err, 'NVİ sorgusu yapılamadı.');
+      }
+    },
+  });
+}
+
+export function useYoksisStatus() {
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        const { data } = await apiClient.get<YoksisStatusResult>(
+          `${BASE}/${studentId}/integration/yoksis/status`,
+        );
+        return data;
+      } catch (err) {
+        throw asBackendError(err, 'YÖKSİS durumu alınamadı.');
+      }
+    },
+  });
+}
+
+export function useSubmitYoksis() {
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        const { data } = await apiClient.post<YoksisStatusResult>(
+          `${BASE}/${studentId}/integration/yoksis/submit`,
+        );
+        return data;
+      } catch (err) {
+        throw asBackendError(err, 'YÖKSİS bildirimi yapılamadı.');
+      }
+    },
+  });
+}
+
+export function useFetchOsymPlacement() {
+  return useMutation({
+    mutationFn: async ({ studentId }: { studentId: number }) => {
+      try {
+        const { data } = await apiClient.post<OsymPlacementResult>(
+          `${BASE}/${studentId}/integration/osym/fetch-placement`,
+        );
+        return data;
+      } catch (err) {
+        throw asBackendError(err, 'ÖSYM yerleştirme sorgusu yapılamadı.');
+      }
+    },
+  });
+}

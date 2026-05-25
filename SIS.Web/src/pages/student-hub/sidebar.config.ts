@@ -18,6 +18,7 @@ export const CARD_NAV: CardNavGroup[] = [
   { title: 'Kayıt Bilgileri', items: [
     { segment: 'burs', label: 'Burs Bilgileri', enabled: true },
     { segment: 'yerlestirme', label: 'Yerleştirme Bilgileri', enabled: true },
+    { segment: 'entegrasyon', label: 'Entegrasyon (NVİ/YÖKSİS)', enabled: true },
   ]},
   { title: 'Ders İşlemleri', items: [
     { segment: 'transkript', label: 'Transkript', enabled: true },
