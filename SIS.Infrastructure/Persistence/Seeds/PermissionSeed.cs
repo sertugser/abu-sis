@@ -300,15 +300,11 @@ public static class PermissionSeed
         ("menu.sinif-atlatma-islemleri.export",          PermissionCategory.Menu, "Promotion sonuçlarını export"),
         ("menu.toplu-danisman-atama.view",               PermissionCategory.Menu, "Toplu danışman atama sayfası"),
         ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
-        ("menu.toplu-staj-danisman-atama.view",          PermissionCategory.Menu, "Toplu staj danışman atama sayfası"),
         ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
         ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Toplu müfredat ataması"),
-        ("menu.toplu-ders-kaydi.view",                   PermissionCategory.Menu, "Toplu ders kaydı sayfası"),
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
         ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
-        // menu.subeler-arasi-ogrenci-transfer.view — 2026-05-12'de silindi; işlev SectioningPage'e taşındı (menu.subelendirme-islemleri.transfer)
-        ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -366,8 +362,6 @@ public static class PermissionSeed
         ("menu.personel-listesi.create",                 PermissionCategory.Menu, "Yeni personel oluşturma"),
         ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası"),
         ("menu.kullanici-rapor-gruplari.view",           PermissionCategory.Menu, "Kullanıcı rapor grupları sayfası"),
-        ("menu.kullanici-grup-sinirlandirmalar.view",    PermissionCategory.Menu, "Kullanıcı grup sınırlandırmalar sayfası"),
-        ("menu.kullanici-rapor-tasarim-gruplari.view",   PermissionCategory.Menu, "Kullanıcı rapor tasarım grupları sayfası"),
         ("menu.kullanici-vekalet-islemleri.view",        PermissionCategory.Menu, "Kullanıcı vekalet işlemleri sayfası"),
         ("menu.kullanici-vekalet-islemleri.manage",      PermissionCategory.Menu, "Vekâlet oluşturma/iptal etme (audit'li)"),
         ("menu.audit-log.view",                          PermissionCategory.Menu, "Denetim kayıtları listesi/stats/anomalies"),
@@ -376,8 +370,6 @@ public static class PermissionSeed
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 11.2: Yönetim → Genel Ayarlar
         // ═══════════════════════════════════════════════════════════════════════════
-        ("menu.universite-bilgileri.view",               PermissionCategory.Menu, "Üniversite bilgileri sayfası"),
-        ("menu.kurumsal-entegrasyon-tanimlari.view",     PermissionCategory.Menu, "Kurumsal entegrasyon tanımları sayfası"),
         ("menu.belge-sinirlandirmalar.view",             PermissionCategory.Menu, "Belge sınırlandırmalar sayfası"),
         ("menu.web-modul-ayarlari.view",                 PermissionCategory.Menu, "Web modül ayarları sayfası"),
         ("menu.web-modul-ayarlari.edit",                 PermissionCategory.Menu, "Web modül ayarları düzenleme"),
@@ -387,8 +379,6 @@ public static class PermissionSeed
         ("menu.system-config.edit",                      PermissionCategory.Menu, "Sistem konfigürasyonu düzenleme"),
         ("menu.system-config.export",                    PermissionCategory.Menu, "Sistem konfigürasyonu export"),
         ("menu.system-config.import",                    PermissionCategory.Menu, "Sistem konfigürasyonu import"),
-        ("menu.ebys-imza-yetkilileri.view",              PermissionCategory.Menu, "EBYS imza yetkilileri sayfası"),
-        ("menu.fakulte-imza-yukleme.view",               PermissionCategory.Menu, "Fakülte imza yükleme sayfası"),
 
         // ─── system.* (Phase 1) ─────────────────────────────────────────────
         // Sidebar'da görünmeyen, sadece SystemAdministrator'ın admin UI'da kullandığı permission'lar.

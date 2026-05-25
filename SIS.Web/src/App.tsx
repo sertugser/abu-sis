@@ -73,27 +73,18 @@ import MufredatSinifDonemTanimlariPage from './pages/MufredatSinifDonemTanimlari
 import StudentNumberChangePage from './pages/StudentNumberChangePage';
 import StudentPromotionPage from './pages/StudentPromotionPage';
 import BulkAdvisorAssignmentPage from './pages/BulkAdvisorAssignmentPage';
-import BulkInternshipAdvisorAssignmentPage from './pages/BulkInternshipAdvisorAssignmentPage';
 import BulkCurriculumAssignmentPage from './pages/BulkCurriculumAssignmentPage';
-import BulkCourseRegistrationPage from './pages/BulkCourseRegistrationPage';
 import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
-import CourseTransferPage from './pages/CourseTransferPage';
 import LetterGradeEditPage from './pages/LetterGradeEditPage';
 // ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
 import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
 import UserReportGroupsPage from './pages/UserReportGroupsPage';
 import MyReportsPage from './pages/MyReportsPage';
-import UserGroupRestrictionsPage from './pages/UserGroupRestrictionsPage';
-import UserReportDesignGroupsPage from './pages/UserReportDesignGroupsPage';
 import UserDelegationPage from './pages/UserDelegationPage';
 import PasswordChangePage from './pages/PasswordChangePage';
 // ── Yönetim → Genel Ayarlar (placeholder) ──
-import UniversityInfoPage from './pages/UniversityInfoPage';
-import InstitutionalIntegrationPage from './pages/InstitutionalIntegrationPage';
 import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
 import WebModuleSettingsPage from './pages/WebModuleSettingsPage';
-import EbysSignatureAuthoritiesPage from './pages/EbysSignatureAuthoritiesPage';
-import FacultySignatureUploadPage from './pages/FacultySignatureUploadPage';
 import MenuManagementPage from './pages/MenuManagementPage';
 import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
@@ -306,20 +297,11 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.toplu-danisman-atama.view" />}>
                     <Route path="toplu-danisman-atama" element={<BulkAdvisorAssignmentPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.toplu-staj-danisman-atama.view" />}>
-                    <Route path="toplu-staj-danisman-atama" element={<BulkInternshipAdvisorAssignmentPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.toplu-mufredat-atama.view" />}>
                     <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.toplu-ders-kaydi.view" />}>
-                    <Route path="toplu-ders-kaydi" element={<BulkCourseRegistrationPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
                     <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.dersler-arasi-ogrenci-transfer.view" />}>
-                    <Route path="dersler-arasi-ogrenci-transfer" element={<CourseTransferPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
                     <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
@@ -331,12 +313,6 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-gruplari.view" />}>
                     <Route path="kullanici-rapor-gruplari" element={<UserReportGroupsPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.kullanici-grup-sinirlandirmalar.view" />}>
-                    <Route path="kullanici-grup-sinirlandirmalar" element={<UserGroupRestrictionsPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-tasarim-gruplari.view" />}>
-                    <Route path="kullanici-rapor-tasarim-gruplari" element={<UserReportDesignGroupsPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.kullanici-vekalet-islemleri.view" />}>
                     <Route path="kullanici-vekalet-islemleri" element={<UserDelegationPage />} />
                   </Route>
@@ -344,23 +320,11 @@ export default function App() {
                     <Route path="sifre-degistir" element={<PasswordChangePage />} />
                   </Route>
                   {/* ── Yönetim → Genel Ayarlar (placeholder, SystemAdmin) ── */}
-                  <Route element={<RoleProtectedRoute permission="menu.universite-bilgileri.view" />}>
-                    <Route path="universite-bilgileri" element={<UniversityInfoPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.kurumsal-entegrasyon-tanimlari.view" />}>
-                    <Route path="kurumsal-entegrasyon-tanimlari" element={<InstitutionalIntegrationPage />} />
-                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.belge-sinirlandirmalar.view" />}>
                     <Route path="belge-sinirlandirmalar" element={<DocumentRestrictionsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.web-modul-ayarlari.view" />}>
                     <Route path="web-modul-ayarlari" element={<WebModuleSettingsPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.ebys-imza-yetkilileri.view" />}>
-                    <Route path="ebys-imza-yetkilileri" element={<EbysSignatureAuthoritiesPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.fakulte-imza-yukleme.view" />}>
-                    <Route path="fakulte-imza-yukleme-islemleri" element={<FacultySignatureUploadPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.menu-yonetimi.view" />}>
                     <Route path="menu-yonetimi" element={<MenuManagementPage />} />
