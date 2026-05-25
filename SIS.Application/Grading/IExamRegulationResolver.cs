@@ -16,9 +16,20 @@ public interface IExamRegulationResolver
         IReadOnlyCollection<int> studentIds, int academicTermId, CancellationToken ct);
 
     Task<WeightBounds?> ResolveCourseWeightBoundsAsync(int courseId, int academicTermId, CancellationToken ct);
+
+    /// <summary>
+    /// Resolves the letter-grade thresholds for a course by gathering all DegreeLevel-matched,
+    /// term-matched active regulations for the programs whose curricula include the course.
+    /// Returns null when no matching regulations exist.
+    /// </summary>
+    Task<LetterPolicy?> ResolveCourseLetterPolicyAsync(int courseId, int academicTermId, CancellationToken ct);
 }
 
 public sealed record WeightBounds(
     decimal MinMidterm, decimal MaxMidterm,
     decimal MinFinal, decimal MaxFinal,
     bool IsEmpty);
+
+public sealed record LetterPolicy(
+    int AAMin, int BAMin, int BBMin, int CBMin, int CCMin, int DCMin, int DDMin,
+    bool Editable, bool HasUniqueThresholds);

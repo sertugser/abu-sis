@@ -104,6 +104,50 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
     public async Task<WeightBounds?> ResolveCourseWeightBoundsAsync(
         int courseId, int academicTermId, CancellationToken ct)
     {
+        var regsFiltered = await GetCourseRegulationsAsync(courseId, academicTermId, ct);
+        if (regsFiltered == null) return null;
+
+        var minMid = regsFiltered.Max(r => r.MinMidtermWeightPercent);
+        var maxMid = regsFiltered.Min(r => r.MaxMidtermWeightPercent);
+        var minFin = regsFiltered.Max(r => r.MinFinalWeightPercent);
+        var maxFin = regsFiltered.Min(r => r.MaxFinalWeightPercent);
+        var empty = minMid > maxMid || minFin > maxFin;
+
+        return new WeightBounds(minMid, maxMid, minFin, maxFin, empty);
+    }
+
+    public async Task<LetterPolicy?> ResolveCourseLetterPolicyAsync(
+        int courseId, int academicTermId, CancellationToken ct)
+    {
+        var regs = await GetCourseRegulationsAsync(courseId, academicTermId, ct);
+        if (regs == null) return null;
+
+        var editable = regs.All(r => r.LetterRangesEditable);
+
+        var distinctTuples = regs
+            .Select(r => (r.AAMin, r.BAMin, r.BBMin, r.CBMin, r.CCMin, r.DCMin, r.DDMin))
+            .Distinct()
+            .ToList();
+
+        var first = regs[0];
+        var hasUnique = distinctTuples.Count == 1;
+
+        return new LetterPolicy(
+            first.AAMin, first.BAMin, first.BBMin, first.CBMin,
+            first.CCMin, first.DCMin, first.DDMin,
+            editable, hasUnique);
+    }
+
+    // ── private helpers ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the DegreeLevel-matched, term-matched active regulations for all programs
+    /// whose curricula include <paramref name="courseId"/>, or null when the term is not
+    /// found, no programs include the course, or no regulations match.
+    /// </summary>
+    private async Task<List<ExamRegulation>?> GetCourseRegulationsAsync(
+        int courseId, int academicTermId, CancellationToken ct)
+    {
         var term = await context.AcademicTerms.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == academicTermId, ct);
         if (term == null) return null;
@@ -130,14 +174,7 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
         var regsFiltered = regs
             .Where(r => programInfos.Any(p => p.ProgramId == r.ProgramId && p.DegreeLevel == r.DegreeLevel))
             .ToList();
-        if (regsFiltered.Count == 0) return null;
 
-        var minMid = regsFiltered.Max(r => r.MinMidtermWeightPercent);
-        var maxMid = regsFiltered.Min(r => r.MaxMidtermWeightPercent);
-        var minFin = regsFiltered.Max(r => r.MinFinalWeightPercent);
-        var maxFin = regsFiltered.Min(r => r.MaxFinalWeightPercent);
-        var empty = minMid > maxMid || minFin > maxFin;
-
-        return new WeightBounds(minMid, maxMid, minFin, maxFin, empty);
+        return regsFiltered.Count == 0 ? null : regsFiltered;
     }
 }

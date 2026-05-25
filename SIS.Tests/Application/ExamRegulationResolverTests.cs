@@ -146,6 +146,38 @@ public class ExamRegulationResolverTests : IDisposable
         });
     }
 
+    private void SeedExamRegulationWithLetters(int id, int programId,
+        int aaMin = 91, int baMin = 81, int bbMin = 71, int cbMin = 61,
+        int ccMin = 55, int dcMin = 50, int ddMin = 45,
+        bool letterRangesEditable = true)
+    {
+        _context.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = id,
+            ProgramId = programId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActive = true,
+            Name = $"Yönerge {id}",
+            MidtermCount = 1,
+            FinalCount = 1,
+            MinMidtermWeightPercent = 40m,
+            MaxMidtermWeightPercent = 60m,
+            MinFinalWeightPercent = 40m,
+            MaxFinalWeightPercent = 60m,
+            AAMin = aaMin,
+            BAMin = baMin,
+            BBMin = bbMin,
+            CBMin = cbMin,
+            CCMin = ccMin,
+            DCMin = dcMin,
+            DDMin = ddMin,
+            LetterRangesEditable = letterRangesEditable,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
     // ── tests ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -333,6 +365,119 @@ public class ExamRegulationResolverTests : IDisposable
 
         dict.Should().ContainKey(student2Id);
         dict[student2Id].Should().BeNull("student 2 is in ProgramB which has no regulation");
+    }
+
+    // ── ResolveCourseLetterPolicyAsync tests ─────────────────────────────────
+
+    [Fact]
+    public async Task ResolveCourseLetterPolicyAsync_ReturnsThresholdsAndFlag_ForSingleProgram()
+    {
+        // Arrange
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        SeedExamRegulationWithLetters(RegAId, ProgramAId,
+            aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
+            letterRangesEditable: false);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseLetterPolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.AAMin.Should().Be(91);
+        result.BAMin.Should().Be(81);
+        result.BBMin.Should().Be(71);
+        result.CBMin.Should().Be(61);
+        result.CCMin.Should().Be(55);
+        result.DCMin.Should().Be(50);
+        result.DDMin.Should().Be(45);
+        result.Editable.Should().BeFalse();
+        result.HasUniqueThresholds.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResolveCourseLetterPolicyAsync_EditableFalse_WhenAnyRegulationLocked()
+    {
+        // Arrange — regA: Editable=true, regB: Editable=false, same thresholds
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedFacultyDeptProgram(ProgramBId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+
+        _context.Curricula.Add(new Curriculum { Id = CurriculumBId, ProgramId = ProgramBId, Name = "Müfredat B", Version = "2024" });
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumBId,
+            CourseId = CourseId,
+            IsCompulsory = true,
+            SuggestedSemester = 1
+        });
+
+        SeedTerm();
+        SeedExamRegulationWithLetters(RegAId, ProgramAId,
+            aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
+            letterRangesEditable: true);
+        SeedExamRegulationWithLetters(RegBId, ProgramBId,
+            aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
+            letterRangesEditable: false);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseLetterPolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.Editable.Should().BeFalse("any locked regulation locks the whole policy");
+        result.HasUniqueThresholds.Should().BeTrue("both regulations have identical thresholds");
+    }
+
+    [Fact]
+    public async Task ResolveCourseLetterPolicyAsync_HasUniqueThresholdsFalse_WhenThresholdsDiffer()
+    {
+        // Arrange — two programs with DIFFERENT thresholds
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedFacultyDeptProgram(ProgramBId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+
+        _context.Curricula.Add(new Curriculum { Id = CurriculumBId, ProgramId = ProgramBId, Name = "Müfredat B", Version = "2024" });
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumBId,
+            CourseId = CourseId,
+            IsCompulsory = true,
+            SuggestedSemester = 1
+        });
+
+        SeedTerm();
+        SeedExamRegulationWithLetters(RegAId, ProgramAId,
+            aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45);
+        SeedExamRegulationWithLetters(RegBId, ProgramBId,
+            aaMin: 90, baMin: 80, bbMin: 70, cbMin: 60, ccMin: 50, dcMin: 45, ddMin: 40);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseLetterPolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.HasUniqueThresholds.Should().BeFalse("the two regulations have different thresholds");
+    }
+
+    [Fact]
+    public async Task ResolveCourseLetterPolicyAsync_ReturnsNull_WhenNoRegulation()
+    {
+        // Arrange — course seeded but no ExamRegulation
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseLetterPolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().BeNull();
     }
 
     public void Dispose() => _context.Dispose();
