@@ -1081,28 +1081,68 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         var examRegByStudent = await _examRegulationResolver.ResolveForStudentsAsync(
             nonNaStudentIds, section.TermId, default);
 
+        // ── Pre-pass: compute roundedScore for every non-NA registration ────────
+        // roundedScores: regId → (weightedScore, roundedScore, studentGrades list)
+        var roundedScores = new Dictionary<int, (decimal WeightedScore, int RoundedScore, List<StudentGrade> Grades)>(nonNaRegistrations.Count);
         foreach (var reg in nonNaRegistrations)
         {
             var studentGrades = gradesByRegistration.GetValueOrDefault(reg.Id, new List<StudentGrade>());
-
-            // Ağırlıklı ortalama hesapla
             decimal weightedScore = 0;
-
             foreach (var comp in components)
             {
                 var score = studentGrades.First(g => g.GradeComponentId == comp.Id).Score!.Value;
                 weightedScore += score * comp.Weight / 100m;
             }
-
             var roundedScore = (int)Math.Round(weightedScore, 0, MidpointRounding.AwayFromZero);
-            var letterGrade = effectiveCriteria.ResolveGrade(roundedScore);
+            roundedScores[reg.Id] = (weightedScore, roundedScore, studentGrades);
+        }
+
+        // ── Resolve relative policy and decide letter source ─────────────────────
+        var relPolicy = await _examRegulationResolver.ResolveCourseRelativePolicyAsync(
+            section.CourseId, section.TermId, default);
+
+        // Build relative letters dict if the policy applies and enough students are present.
+        IReadOnlyDictionary<int, GradeCode>? relativeLetters = null;
+        if (relPolicy != null && !relPolicy.IsConflicting && relPolicy.EvaluationType == GradeEvaluationType.Relative)
+        {
+            var inputs = nonNaRegistrations
+                .Select(r => new RelativeGradeInput(r.Id, (decimal)roundedScores[r.Id].RoundedScore))
+                .ToList();
+
+            var outcome = RelativeGradingService.Evaluate(inputs, new RelativeGradeParams(
+                MinStudentCount: relPolicy.MinStudentCount,
+                InclusionLimit: relPolicy.InclusionLimit,
+                AbsoluteFloor: relPolicy.AbsoluteFloor,
+                TAAMin: relPolicy.TAAMin,
+                TBAMin: relPolicy.TBAMin,
+                TBBMin: relPolicy.TBBMin,
+                TCBMin: relPolicy.TCBMin,
+                TCCMin: relPolicy.TCCMin,
+                TDCMin: relPolicy.TDCMin,
+                TDDMin: relPolicy.TDDMin,
+                BelowFloorGrade: relPolicy.BelowFloorGrade));
+
+            if (!outcome.FellBackToAbsolute)
+                relativeLetters = outcome.Letters;
+            // If FellBackToAbsolute: relativeLetters stays null → absolute path used below
+        }
+
+        // ── Per-student assign: base letter + existing Faz 2a floors ────────────
+        foreach (var reg in nonNaRegistrations)
+        {
+            var (weightedScore, roundedScore, studentGrades) = roundedScores[reg.Id];
+
+            // Base letter: from relative curve (if active) or absolute criteria
+            var letterGrade = relativeLetters != null
+                ? relativeLetters[reg.Id]
+                : effectiveCriteria.ResolveGrade(roundedScore);
 
             // Sınav yönergesi: final barajı + geçme notu kontrolü (bulk dict lookup, no N+1)
             examRegByStudent.TryGetValue(reg.StudentId, out var studentReg);
 
             if (studentReg != null)
             {
-                // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → FF
+                // Final barajı: final bileşenlerinin ham puanları ortalaması barajın altındaysa → BelowFloorGrade
                 var finalComponents = components
                     .Where(c => c.Type == GradeComponentType.Final)
                     .ToList();
