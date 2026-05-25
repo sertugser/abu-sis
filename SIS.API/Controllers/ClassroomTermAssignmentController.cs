@@ -116,47 +116,67 @@ public class ClassroomTermAssignmentController(AppDbContext context, ClassroomSu
             return NotFound(new { error = "Dönem bulunamadı." });
 
         var errors = new List<string>();
-        var created = new List<ClassroomTermAssignmentDto>();
+
+        // Doğrulama verilerini tek seferde topla (önceki kod item başına N+1 sorgu yapıyordu).
+        var requestedClassroomIds = dto.Assignments.Select(a => a.ClassroomId).Distinct().ToList();
+        var requestedFacultyIds = dto.Assignments.Select(a => a.FacultyId).Distinct().ToList();
+
+        var alreadyAssigned = (await _context.ClassroomTermAssignments
+            .AsNoTracking()
+            .Where(a => a.TermId == dto.TermId && requestedClassroomIds.Contains(a.ClassroomId))
+            .Select(a => a.ClassroomId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var classroomNames = await _context.Classrooms
+            .AsNoTracking()
+            .Where(c => requestedClassroomIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.Name })
+            .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+
+        var facultyNames = await _context.Faculties
+            .AsNoTracking()
+            .Where(f => requestedFacultyIds.Contains(f.Id))
+            .Select(f => new { f.Id, f.Name })
+            .ToDictionaryAsync(f => f.Id, f => f.Name, ct);
+
+        var toCreate = new List<ClassroomTermAssignment>();
+        var seenInRequest = new HashSet<int>(); // aynı istekte tekrarlanan derslik koruması
 
         foreach (var item in dto.Assignments)
         {
-            var exists = await _context.ClassroomTermAssignments
-                .AnyAsync(a => a.TermId == dto.TermId && a.ClassroomId == item.ClassroomId, ct);
-
-            if (exists)
+            if (alreadyAssigned.Contains(item.ClassroomId) || !seenInRequest.Add(item.ClassroomId))
             {
                 errors.Add($"Derslik {item.ClassroomId} zaten bu dönemde atanmış.");
                 continue;
             }
-
-            var classroom = await _context.Classrooms.AsNoTracking().FirstOrDefaultAsync(c => c.Id == item.ClassroomId, ct);
-            if (classroom == null)
+            if (!classroomNames.ContainsKey(item.ClassroomId))
             {
                 errors.Add($"Derslik {item.ClassroomId} bulunamadı.");
                 continue;
             }
-
-            var faculty = await _context.Faculties.AsNoTracking().FirstOrDefaultAsync(f => f.Id == item.FacultyId, ct);
-            if (faculty == null)
+            if (!facultyNames.ContainsKey(item.FacultyId))
             {
                 errors.Add($"Fakülte {item.FacultyId} bulunamadı.");
                 continue;
             }
 
-            var assignment = new ClassroomTermAssignment
+            toCreate.Add(new ClassroomTermAssignment
             {
                 TermId = dto.TermId,
                 ClassroomId = item.ClassroomId,
                 FacultyId = item.FacultyId
-            };
-
-            _context.ClassroomTermAssignments.Add(assignment);
-            await _context.SaveChangesAsync(ct);
-
-            created.Add(new ClassroomTermAssignmentDto(
-                assignment.Id, assignment.TermId, assignment.ClassroomId,
-                classroom.Name, assignment.FacultyId, faculty.Name));
+            });
         }
+
+        if (toCreate.Count > 0)
+        {
+            _context.ClassroomTermAssignments.AddRange(toCreate);
+            await _context.SaveChangesAsync(ct); // tek transaction
+        }
+
+        var created = toCreate.Select(a => new ClassroomTermAssignmentDto(
+            a.Id, a.TermId, a.ClassroomId, classroomNames[a.ClassroomId],
+            a.FacultyId, facultyNames[a.FacultyId])).ToList();
 
         return Ok(new { created, errors });
     }

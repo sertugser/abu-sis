@@ -16,15 +16,15 @@ const CAPACITY_BUCKETS = [
   { label: '91+ kişi',    min: 91,  max: Infinity },
 ] as const;
 
-interface ClassroomAnalyticsSheetProps {
+interface ClassroomAnalyticsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   classrooms: ClassroomDto[];
 }
 
-export default function ClassroomAnalyticsSheet({
+export default function ClassroomAnalyticsDialog({
   open, onOpenChange, classrooms,
-}: ClassroomAnalyticsSheetProps) {
+}: ClassroomAnalyticsDialogProps) {
   const stats = useMemo(() => {
     const total = classrooms.length;
     const totalCapacity = classrooms.reduce((s, c) => s + c.capacity, 0);

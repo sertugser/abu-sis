@@ -216,7 +216,7 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.derslik-doluluk.view" />}>
                     <Route path="derslik-doluluk-tablosu" element={<ClassroomManagementPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.derslik-yonetimi.view" />}>
+                  <Route element={<RoleProtectedRoute permission="menu.derslik-fakulte-atamasi.view" />}>
                     <Route path="derslik-fakulte-atamasi" element={<ClassroomAssignmentPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-acma-islemleri.view" />}>

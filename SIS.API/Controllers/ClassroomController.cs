@@ -10,7 +10,10 @@ namespace SIS.API.Controllers;
 
 public record ClassroomDto(int Id, string Name, string BuildingName, int Floor, int Capacity, string Type);
 public record CreateClassroomDto(string Name, string BuildingName, int Floor, int Capacity, string Type);
-public record UpdateClassroomDto(string Name, string BuildingName, int Floor, int Capacity, string Type);
+public record UpdateClassroomDto(string Name, string BuildingName, int Floor, int Capacity, string Type, bool ConfirmScheduleImpact = false);
+
+/// <summary>Bir dersliğin tipi/kapasitesi değiştiğinde geçersiz kalabilecek mevcut program satırı.</summary>
+public record ClassroomScheduleImpactDto(string CourseCode, string CourseName, int SectionNumber, string Reason);
 
 [ApiController]
 [Route("api/admin/classrooms")]
@@ -68,8 +71,8 @@ public class ClassroomController(AppDbContext context) : ControllerBase
 
         var classroom = new Classroom
         {
-            Name = dto.Name,
-            BuildingName = dto.BuildingName ?? string.Empty,
+            Name = dto.Name.Trim(),
+            BuildingName = dto.BuildingName?.Trim() ?? string.Empty,
             Floor = dto.Floor,
             Capacity = dto.Capacity,
             Type = classroomType,
@@ -100,16 +103,37 @@ public class ClassroomController(AppDbContext context) : ControllerBase
         if (!Enum.TryParse<ClassroomType>(dto.Type, true, out var classroomType))
             return BadRequest(new { error = $"Geçersiz derslik tipi: {dto.Type}" });
 
+        var name = dto.Name.Trim();
+
         // İsim değiştiyse duplikat kontrol
-        if (dto.Name != classroom.Name)
+        if (name != classroom.Name)
         {
-            var exists = await _context.Classrooms.AnyAsync(c => c.Name == dto.Name && c.Id != id, ct);
+            var exists = await _context.Classrooms.AnyAsync(c => c.Name == name && c.Id != id, ct);
             if (exists)
-                return BadRequest(new { error = $"'{dto.Name}' adında bir derslik zaten mevcut." });
+                return BadRequest(new { error = $"'{name}' adında bir derslik zaten mevcut." });
         }
 
-        classroom.Name = dto.Name;
-        classroom.BuildingName = dto.BuildingName ?? string.Empty;
+        // Tip değişimi veya kapasite düşüşü, bu dersliğe atanmış mevcut program satırlarını
+        // (SectionSchedule) sessizce geçersiz kılabilir: tip kuralı odayı reddedebilir ya da
+        // küçülen kapasite section'ın kontenjanına yetmeyebilir. Admin onaylamadan kaydı bloklarız.
+        var typeChanged = classroomType != classroom.Type;
+        var capacityReduced = dto.Capacity < classroom.Capacity;
+        if ((typeChanged || capacityReduced) && !dto.ConfirmScheduleImpact)
+        {
+            var impact = await BuildScheduleImpactAsync(id, classroomType, dto.Capacity, typeChanged, capacityReduced, ct);
+            if (impact.Count > 0)
+            {
+                return Conflict(new
+                {
+                    error = $"Bu değişiklik mevcut {impact.Count} ders programı atamasını etkiliyor.",
+                    code = "ScheduleImpact",
+                    affected = impact,
+                });
+            }
+        }
+
+        classroom.Name = name;
+        classroom.BuildingName = dto.BuildingName?.Trim() ?? string.Empty;
         classroom.Floor = dto.Floor;
         classroom.Capacity = dto.Capacity;
         classroom.Type = classroomType;
@@ -128,15 +152,81 @@ public class ClassroomController(AppDbContext context) : ControllerBase
         if (classroom == null)
             return NotFound(new { error = "Derslik bulunamadı." });
 
-        // Aktif section'da kullanılıyorsa silme
-        var inUse = await _context.CourseSections
-            .AnyAsync(cs => cs.ClassroomId == id && cs.IsActive, ct);
-        if (inUse)
-            return BadRequest(new { error = "Bu derslik aktif ders şubelerinde kullanılıyor, silinemez." });
+        // Veritabanı düzeyinde silmeyi bloklayan iki Restrict FK'i (SectionSchedule, ClassroomTermAssignment)
+        // önceden kontrol edilmezse SaveChanges DbUpdateException fırlatır ve kullanıcı jenerik 500 görür.
+        // Her referansı ayrı ayrı kontrol edip anlamlı 400 mesajı döneriz.
+
+        var assignmentCount = await _context.ClassroomTermAssignments
+            .CountAsync(cta => cta.ClassroomId == id, ct);
+        if (assignmentCount > 0)
+            return BadRequest(new
+            {
+                error = $"Bu derslik {assignmentCount} dönem fakülte atamasında kullanılıyor. Önce 'Derslik-Fakülte Ataması' sayfasından kaldırın.",
+                code = "ClassroomInUse",
+            });
+
+        var scheduleCount = await _context.SectionSchedules
+            .CountAsync(ss => ss.ClassroomId == id, ct);
+        if (scheduleCount > 0)
+            return BadRequest(new
+            {
+                error = $"Bu derslik {scheduleCount} ders programı satırında kullanılıyor. Önce ilgili programlardan çıkarın.",
+                code = "ClassroomInUse",
+            });
+
+        // Aktif section'ın varsayılan dersliği (CourseSection.ClassroomId, SetNull FK) — iş kuralı gereği
+        // aktif şubede kullanılan derslik silinmesin (silinirse atama sessizce null'a düşerdi).
+        var activeSectionCount = await _context.CourseSections
+            .CountAsync(cs => cs.ClassroomId == id && cs.Status == CourseSectionStatus.Active, ct);
+        if (activeSectionCount > 0)
+            return BadRequest(new
+            {
+                error = $"Bu derslik {activeSectionCount} aktif ders şubesinde kullanılıyor, silinemez.",
+                code = "ClassroomInUse",
+            });
 
         _context.Classrooms.Remove(classroom);
         await _context.SaveChangesAsync(ct);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Tip değişimi/kapasite düşüşünün etkilediği mevcut program satırlarını listeler.
+    /// Bir section etkilenir: (tip değiştiyse) bu odadaki her atama, VEYA
+    /// (kapasite düştüyse) section kontenjanı yeni kapasiteyi aşıyorsa.
+    /// </summary>
+    private async Task<List<ClassroomScheduleImpactDto>> BuildScheduleImpactAsync(
+        int classroomId, ClassroomType newType, int newCapacity,
+        bool typeChanged, bool capacityReduced, CancellationToken ct)
+    {
+        var sections = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => ss.ClassroomId == classroomId)
+            .Select(ss => new
+            {
+                ss.CourseSection.SectionNumber,
+                ss.CourseSection.Capacity,
+                CourseCode = ss.CourseSection.Course.Code,
+                CourseName = ss.CourseSection.Course.Name,
+            })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var impact = new List<ClassroomScheduleImpactDto>();
+        foreach (var s in sections)
+        {
+            var overflow = capacityReduced && s.Capacity > newCapacity;
+            if (!typeChanged && !overflow)
+                continue;
+
+            var reason = overflow
+                ? $"Kontenjan {s.Capacity}, yeni kapasite {newCapacity} yetersiz"
+                : $"Derslik tipi '{newType}' olarak değişiyor";
+
+            impact.Add(new ClassroomScheduleImpactDto(s.CourseCode, s.CourseName, s.SectionNumber, reason));
+        }
+
+        return impact;
     }
 }
