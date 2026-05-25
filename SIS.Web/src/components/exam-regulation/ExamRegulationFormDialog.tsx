@@ -65,6 +65,8 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
               onChange={(e) => set('degreeLevel', e.target.value as SaveExamRegulationRequest['degreeLevel'])}>
               <option value="Bachelor">Lisans</option>
               <option value="Associate">Önlisans</option>
+              <option value="Master">Yüksek Lisans</option>
+              <option value="Doctorate">Doktora</option>
             </select>
           </div>
           <div className="space-y-1">
