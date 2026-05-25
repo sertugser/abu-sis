@@ -3319,6 +3319,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseRegistrationId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ExamAttendance")
+                        .HasColumnType("integer");
+
                     b.Property<int>("GradeComponentId")
                         .HasColumnType("integer");
 
