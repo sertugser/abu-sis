@@ -2508,6 +2508,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Weight")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
