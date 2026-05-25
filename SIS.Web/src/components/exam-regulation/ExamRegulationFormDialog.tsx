@@ -22,6 +22,9 @@ const emptyForm: SaveExamRegulationRequest = {
   passingGrade: 50, rawScoreFloor1: 0, rawScoreFloor2: 0, finalExamFloor: 0,
   aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
   letterRangesEditable: true, belowFloorGrade: 'FF',
+  evaluationType: 'Absolute',
+  relativeMinStudentCount: 10, relativeInclusionLimit: 0, relativeAbsoluteFloor: 0,
+  tAAMin: 70, tBAMin: 63, tBBMin: 57, tCBMin: 50, tCCMin: 45, tDCMin: 40, tDDMin: 35,
 };
 
 export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Props) {
@@ -111,6 +114,14 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             <Input type="number" min={0} value={form.rawScoreFloor1} onChange={(e) => set('rawScoreFloor1', Number(e.target.value))} /></div>
           <div className="space-y-1"><Label>Ham Başarı Alt Limit 2</Label>
             <Input type="number" min={0} value={form.rawScoreFloor2} onChange={(e) => set('rawScoreFloor2', Number(e.target.value))} /></div>
+          <div className="space-y-1 md:col-span-2">
+            <Label>Değerlendirme Tipi</Label>
+            <select className="h-9 w-full rounded-md border px-3 text-sm" value={form.evaluationType}
+              onChange={(e) => set('evaluationType', e.target.value as SaveExamRegulationRequest['evaluationType'])}>
+              <option value="Absolute">Mutlak</option>
+              <option value="Relative">Bağıl</option>
+            </select>
+          </div>
         </div>
 
         <div className="space-y-3 pt-2">
@@ -144,6 +155,53 @@ export function ExamRegulationFormDialog({ open, onOpenChange, editTarget }: Pro
             ))}
           </div>
         </div>
+
+        {form.evaluationType === 'Relative' && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-sm font-semibold">Bağıl Değerlendirme (Çan Eğrisi)</h3>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="space-y-1">
+                <Label className="text-xs">En Az Öğrenci Sayısı</Label>
+                <Input type="number" min={0} value={form.relativeMinStudentCount}
+                  onChange={(e) => set('relativeMinStudentCount', Number(e.target.value))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Katma Limiti</Label>
+                <Input type="number" min={0} value={form.relativeInclusionLimit}
+                  onChange={(e) => set('relativeInclusionLimit', Number(e.target.value))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Mutlak Alt Sınır</Label>
+                <Input type="number" min={0} value={form.relativeAbsoluteFloor}
+                  onChange={(e) => set('relativeAbsoluteFloor', Number(e.target.value))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {([
+                { key: 'tAAMin' as const, label: 'T-AA min' },
+                { key: 'tBAMin' as const, label: 'T-BA min' },
+                { key: 'tBBMin' as const, label: 'T-BB min' },
+                { key: 'tCBMin' as const, label: 'T-CB min' },
+                { key: 'tCCMin' as const, label: 'T-CC min' },
+                { key: 'tDCMin' as const, label: 'T-DC min' },
+                { key: 'tDDMin' as const, label: 'T-DD min' },
+              ]).map(({ key, label }) => (
+                <div key={key} className="space-y-1">
+                  <Label className="font-mono text-xs">{label}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form[key]}
+                    onChange={(e) => set(key, Number(e.target.value))}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Çan eğrisi: sınıfın ortalaması ve dağılımına göre harf verir. Öğrenci sayısı &apos;En Az Öğrenci Sayısı&apos; altındaysa otomatik mutlak değerlendirmeye döner.
+            </p>
+          </div>
+        )}
 
         {mutation.isError && (
           <p className="text-sm text-destructive">

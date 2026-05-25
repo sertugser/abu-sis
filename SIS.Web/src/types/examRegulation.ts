@@ -28,6 +28,17 @@ export interface ExamRegulation {
   ddMin: number;
   letterRangesEditable: boolean;
   belowFloorGrade: string;
+  evaluationType: 'Absolute' | 'Relative';
+  relativeMinStudentCount: number;
+  relativeInclusionLimit: number;
+  relativeAbsoluteFloor: number;
+  tAAMin: number;
+  tBAMin: number;
+  tBBMin: number;
+  tCBMin: number;
+  tCCMin: number;
+  tDCMin: number;
+  tDDMin: number;
 }
 
 export type SaveExamRegulationRequest = Omit<ExamRegulation, 'id' | 'programName'>;
