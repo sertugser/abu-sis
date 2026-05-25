@@ -26,6 +26,8 @@ BulkAdvisorSettingsUpdateRequestDto
 BulkAssignInstructorRequest
 # Bütünleme (resit makeup) score entry: two numeric fields (StudentId int, MakeupScore decimal 0-100) with inline controller validation
 ButunlemeScoresRequest
+# Mazeret (excuse) makeup score entry: three numeric fields (StudentId int, ComponentId int, MakeupScore decimal 0-100) with inline controller validation mirroring ButunlemeScoresRequest pattern
+MazeretScoresRequest
 BulkClassroomTermAssignmentDto
 BulkCurriculumAssignmentRequestDto
 BulkOpenCoursesRequest
