@@ -181,6 +181,8 @@ public static class PermissionSeed
         // Sınav Müfredatı (kendi izni — Ders Aç'tan ayrıldı, ExamCurriculumController)
         ("menu.sinav-mufredati.view",                    PermissionCategory.Menu, "Sınav müfredatı (sınav bileşen şablonu) görüntüleme"),
         ("menu.sinav-mufredati.edit",                    PermissionCategory.Menu, "Sınav müfredatı şablonu kaydetme"),
+        ("menu.sinav-mufredati.create",                  PermissionCategory.Menu, "Sınav yönergesi oluşturma"),
+        ("menu.sinav-mufredati.delete",                  PermissionCategory.Menu, "Sınav yönergesi silme"),
 
         // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
         ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
