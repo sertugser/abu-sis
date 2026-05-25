@@ -35,6 +35,13 @@ export interface AdminStudentDetail extends AdminStudentListItem {
   programId: number | null;
   curriculumId: number | null;
   programType: string;
+  enrollmentDate?: string | null;
+  classYear?: number | null;
+  departureDate?: string | null;
+  previousStudentNumber?: string | null;
+  nationalId?: string | null;
+  entranceType?: string | null;
+  entranceTypeLabel?: string | null;
 }
 
 export interface AdminStudentFilter {
@@ -145,6 +152,7 @@ export interface UpdateStudentAcademic {
   programType: string;
   isScholarshipStudent: boolean;
   hasFinancialBlock: boolean;
+  departureDate?: string | null;
 }
 
 export function useUpdateStudentAcademic() {

@@ -179,6 +179,7 @@ public class AdminStudentService : IAdminStudentService
     {
         var student = await _context.Students
             .Include(s => s.Advisor)
+            .Include(s => s.Placement)
             .Include(s => s.StudentPrograms)
                 .ThenInclude(sp => sp.Program)
                     .ThenInclude(p => p.Department)
@@ -221,7 +222,16 @@ public class AdminStudentService : IAdminStudentService
             student.AdvisorId,
             mainProgram?.ProgramId,
             mainProgram?.CurriculumId,
-            (mainProgram?.Type ?? StudentProgramType.Main).ToString()
+            (mainProgram?.Type ?? StudentProgramType.Main).ToString(),
+            mainProgram?.EnrollmentDate,
+            Math.Min(4, student.CompletedSemesters / 2 + 1),
+            student.DepartureDate,
+            student.PreviousStudentNumber,
+            student.NationalId,
+            student.Placement?.EntranceType?.ToString(),
+            student.Placement?.EntranceType is null
+                ? null
+                : EntranceTypeLabels.Of(student.Placement.EntranceType.Value)
         );
     }
 
@@ -386,6 +396,7 @@ public class AdminStudentService : IAdminStudentService
         student.AdvisorId = dto.AdvisorId;
         student.IsScholarshipStudent = dto.IsScholarshipStudent;
         student.HasFinancialBlock = dto.HasFinancialBlock;
+        student.DepartureDate = dto.DepartureDate;
         student.UpdatedAt = DateTime.UtcNow;
 
         if (mainProgram.ProgramId == dto.ProgramId)
@@ -425,6 +436,7 @@ public class AdminStudentService : IAdminStudentService
         var taken = await _context.Students.AnyAsync(s => s.Id != studentId && s.StudentNumber == trimmed);
         if (taken)
             throw new InvalidOperationException($"Bu öğrenci numarası başka bir öğrenci tarafından kullanılıyor: {trimmed}");
+        student.PreviousStudentNumber = student.StudentNumber;
         student.StudentNumber = trimmed;
         student.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();

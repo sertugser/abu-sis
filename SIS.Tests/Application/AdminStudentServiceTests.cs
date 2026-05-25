@@ -427,6 +427,71 @@ public class AdminStudentServiceTests
             .Should().ThrowAsync<KeyNotFoundException>();
     }
 
+    [Fact]
+    public async Task ChangeStudentNumberAsync_SetsPreviousStudentNumber_ToOldValue()
+    {
+        var (context, service) = await SeedStudentNumberScenario();
+        await using var _ = context;
+
+        await service.ChangeStudentNumberAsync(20, "2024999");
+
+        var student = await context.Students.SingleAsync(x => x.Id == 20);
+        student.StudentNumber.Should().Be("2024999");
+        student.PreviousStudentNumber.Should().Be("2024001");
+    }
+
+    [Fact]
+    public async Task UpdateAcademicAsync_PersistsDepartureDate()
+    {
+        var (context, service, studentId) = await SeedAcademicEditScenario();
+        await using var _ = context;
+
+        var departure = new DateTime(2025, 6, 15, 0, 0, 0, DateTimeKind.Utc);
+        await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
+            "Active", 5, 1, 10, "Main", false, false, departure));
+
+        var s = await context.Students.FirstAsync(x => x.Id == studentId);
+        s.DepartureDate.Should().Be(departure);
+    }
+
+    [Fact]
+    public async Task GetStudentByIdAsync_ReturnsEntranceTypeLabelAndNationalId()
+    {
+        await using var context = CreateContext();
+        const int studentId = 20;
+
+        context.Students.Add(new Student
+        {
+            Id = studentId,
+            UserId = 200,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.5m,
+            Sgpa = 2.5m,
+            CompletedSemesters = 2,
+        });
+        context.Set<StudentPlacement>().Add(new StudentPlacement
+        {
+            StudentId = studentId,
+            EntranceType = StudentEntranceType.Dgs,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync();
+
+        var config = new Mock<ISystemConfigProvider>();
+        var service = new AdminStudentService(context, CreateUserManagerMock().Object, config.Object);
+
+        var result = await service.GetStudentByIdAsync(studentId);
+
+        result.Should().NotBeNull();
+        result!.NationalId.Should().Be("11111111111");
+        result.EntranceType.Should().Be("Dgs");
+        result.EntranceTypeLabel.Should().Be(EntranceTypeLabels.Of(StudentEntranceType.Dgs));
+        result.ClassYear.Should().Be(2);
+        result.EnrollmentDate.Should().BeNull();
+    }
+
     private static async Task<(AppDbContext context, AdminStudentService service, int studentId)> SeedAcademicEditScenario(int advisorDepartmentId = 1)
     {
         var context = CreateContext();
@@ -504,7 +569,7 @@ public class AdminStudentServiceTests
         await using var _ = context;
 
         await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
-            "Frozen", 5, 2, 20, "Main", true, false));
+            "Frozen", 5, 2, 20, "Main", true, false, null));
 
         var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
         s.Status.Should().Be(StudentStatus.Frozen);
@@ -523,7 +588,7 @@ public class AdminStudentServiceTests
 
         await FluentActions
             .Invoking(() => service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
-                "Active", 5, 2, 20, "Main", false, false)))
+                "Active", 5, 2, 20, "Main", false, false, null)))
             .Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -535,7 +600,7 @@ public class AdminStudentServiceTests
 
         // Program 1 -> 2 (advisor in dept 1; program 2 also in dept 1, so advisor stays valid).
         await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
-            "Active", 5, 2, 20, "Main", false, false));
+            "Active", 5, 2, 20, "Main", false, false, null));
 
         var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
         s.StudentPrograms.Count(p => p.IsActive && p.Type == StudentProgramType.Main).Should().Be(1);
@@ -551,7 +616,7 @@ public class AdminStudentServiceTests
         // Curriculum 10 belongs to program 1, but we target program 2 -> mismatch.
         await FluentActions
             .Invoking(() => service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
-                "Active", null, 2, 10, "Main", false, false)))
+                "Active", null, 2, 10, "Main", false, false, null)))
             .Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -570,7 +635,7 @@ public class AdminStudentServiceTests
 
         // Keep program 1, change only curriculum (10 -> 11) and type.
         await service.UpdateAcademicAsync(studentId, new UpdateStudentAcademicDto(
-            "Active", null, 1, 11, "DoubleMajor", false, false));
+            "Active", null, 1, 11, "DoubleMajor", false, false, null));
 
         var s = await context.Students.Include(x => x.StudentPrograms).FirstAsync(x => x.Id == studentId);
         s.StudentPrograms.Count.Should().Be(rowCountBefore);

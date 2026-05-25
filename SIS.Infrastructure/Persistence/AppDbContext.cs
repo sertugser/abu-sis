@@ -131,6 +131,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(s => s.UserId).IsUnique();
             e.Property(s => s.Cgpa).HasPrecision(4, 2);
             e.Property(s => s.Sgpa).HasPrecision(4, 2);
+            e.Property(s => s.PreviousStudentNumber).HasMaxLength(40);
 
             e.HasOne<ApplicationUser>()
              .WithOne()

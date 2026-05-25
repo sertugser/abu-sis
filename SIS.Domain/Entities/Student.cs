@@ -15,6 +15,8 @@ public class Student
     public int CompletedSemesters { get; set; }                  // total semesters (excluding frozen)
     public int FrozenSemesterCount { get; set; }
     public int WithdrawalCount { get; set; }                     // cumulative withdrawals
+    public DateTime? DepartureDate { get; set; }                 // ayrılış / ilişik kesme tarihi
+    public string? PreviousStudentNumber { get; set; }           // set when the student number changes
     public bool IsScholarshipStudent { get; set; }               // FR-52: skip payment confirmation
     public bool HasFinancialBlock { get; set; }                  // FR-49: debt block
     public int? AdvisorId { get; set; }                          // FK to Instructor

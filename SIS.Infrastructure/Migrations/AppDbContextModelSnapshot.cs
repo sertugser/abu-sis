@@ -3070,6 +3070,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DepartureDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("FrozenSemesterCount")
                         .HasColumnType("integer");
 
@@ -3082,6 +3085,10 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("NationalId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("PreviousStudentNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<decimal>("Sgpa")
                         .HasPrecision(4, 2)

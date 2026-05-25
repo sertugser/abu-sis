@@ -40,7 +40,14 @@ public record AdminStudentDetailDto(
     int? AdvisorId,
     int? ProgramId,
     int? CurriculumId,
-    string ProgramType
+    string ProgramType,
+    DateTime? EnrollmentDate,
+    int? ClassYear,
+    DateTime? DepartureDate,
+    string? PreviousStudentNumber,
+    string? NationalId,
+    string? EntranceType,
+    string? EntranceTypeLabel
 );
 
 public record AdminStudentFilterDto(
@@ -71,7 +78,8 @@ public record UpdateStudentAcademicDto(
     int CurriculumId,
     string ProgramType,
     bool IsScholarshipStudent,
-    bool HasFinancialBlock
+    bool HasFinancialBlock,
+    DateTime? DepartureDate
 );
 
 public record ChangeStudentNumberDto(string NewStudentNumber);

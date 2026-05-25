@@ -74,7 +74,8 @@ public class StudentManagementControllerTests
             CurriculumId: 1,
             ProgramType: "Main",
             IsScholarshipStudent: false,
-            HasFinancialBlock: false);
+            HasFinancialBlock: false,
+            DepartureDate: null);
 
         var result = await controller.UpdateAcademic(5, dto);
 
