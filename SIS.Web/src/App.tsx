@@ -35,7 +35,7 @@ import ClassroomManagementPage from './pages/ClassroomManagementPage';
 import ClassroomAssignmentPage from './pages/ClassroomAssignmentPage';
 
 import CourseOpeningPage from './pages/CourseOpeningPage';
-import ExamCurriculumPage from './pages/ExamCurriculumPage';
+import ExamRegulationManagementPage from './pages/ExamRegulationManagementPage';
 import InstructorAssignmentPage from './pages/InstructorAssignmentPage';
 import UserManagementPage from './pages/UserManagementPage';
 import StudentSearchPage from './pages/student-hub/StudentSearchPage';
@@ -223,7 +223,7 @@ export default function App() {
                     <Route path="ders-acma-islemleri" element={<CourseOpeningPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.sinav-mufredati.view" />}>
-                    <Route path="sinav-mufredati" element={<ExamCurriculumPage />} />
+                    <Route path="sinav-mufredati" element={<ExamRegulationManagementPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ogretim-elemani-atama.view" />}>
                     <Route path="ogretim-elemani-atama" element={<InstructorAssignmentPage />} />
