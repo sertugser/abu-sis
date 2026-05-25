@@ -43,6 +43,7 @@ public class GradeFinalizeExamRulesTests : IDisposable
     private const int RegistrationId = 1;
     private const int MidtermComponentId = 1;
     private const int FinalComponentId = 2;
+    private const int OtherComponentId = 3;
     private const int ExamRegulationId = 1;
     private const int GradingCriteriaId = 1;
 
@@ -705,6 +706,190 @@ public class GradeFinalizeExamRulesTests : IDisposable
             "both rules off → normal grade from GradingCriteria: 60 → CC");
         reg.Grade.Should().NotBe(GradeCode.FF,
             "neither rule fires when flags are false");
+    }
+
+    /// <summary>
+    /// Seeds a scenario where the section has NO Midterm-type component at all —
+    /// only a Final component (weight=100) and optionally an Other component.
+    /// The student has a passing Final score.
+    /// </summary>
+    private void SeedScenarioNoMidterm(decimal finalScore)
+    {
+        _context.Faculties.Add(new Faculty { Id = FacultyId, Name = "Test Faculty", Code = "TF" });
+        _context.Departments.Add(new Department { Id = DeptId, Name = "Test Dept", Code = "TD", FacultyId = FacultyId });
+        _context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = ProgramId,
+            Name = "Test Program",
+            Code = "TP",
+            DepartmentId = DeptId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            EducationType = EducationType.Semester,
+            MaxStudyDurationSemesters = 8,
+            TotalRequiredEcts = 240
+        });
+        _context.Courses.Add(new Course { Id = CourseId, Code = "ERX101", Name = "Exam Rules Test", Ects = 3 });
+        _context.Curricula.Add(new Curriculum
+        {
+            Id = CurriculumId,
+            ProgramId = ProgramId,
+            Name = "Müfredat",
+            Version = "2024"
+        });
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumId,
+            CourseId = CourseId,
+            IsCompulsory = true,
+            SuggestedSemester = 1
+        });
+
+        _context.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = TermId,
+            Name = "2024-2025 Güz",
+            ShortEnglishName = "Fall 2024",
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActivated = true,
+            TermStart = new DateTime(2024, 10, 1),
+            TermEnd = new DateTime(2025, 1, 31)
+        });
+
+        _context.Users.Add(new ApplicationUser
+        {
+            Id = InstructorUserId,
+            UserName = "hoca@test.edu",
+            NormalizedUserName = "HOCA@TEST.EDU",
+            Email = "hoca@test.edu",
+            NormalizedEmail = "HOCA@TEST.EDU",
+            FirstName = "Test",
+            LastName = "Hoca"
+        });
+        _context.Instructors.Add(new Instructor
+        {
+            Id = InstructorId,
+            UserId = InstructorUserId,
+            DepartmentId = DeptId,
+            Title = "Dr.",
+            MaxWeeklyHours = 12
+        });
+
+        _context.CourseSections.Add(new CourseSection
+        {
+            Id = SectionId,
+            CourseId = CourseId,
+            TermId = TermId,
+            InstructorId = InstructorId,
+            Capacity = 30,
+            Status = CourseSectionStatus.Active,
+            IsFinalized = false
+        });
+
+        // Only a Final component (weight=100) — no Midterm component at all.
+        _context.GradeComponents.Add(new GradeComponent
+        {
+            Id = FinalComponentId,
+            CourseId = CourseId,
+            AcademicTermId = TermId,
+            Name = "Final",
+            Weight = 100m,
+            Order = 1,
+            Type = GradeComponentType.Final
+        });
+
+        // GradingCriteria with defaults (AA≥91, DD≥45)
+        _context.GradingCriteria.Add(new GradingCriteria
+        {
+            Id = GradingCriteriaId,
+            CourseId = CourseId,
+            AcademicTermId = TermId
+        });
+
+        _context.Users.Add(new ApplicationUser
+        {
+            Id = StudentUserId,
+            UserName = "ogrenci@test.edu",
+            NormalizedUserName = "OGRENCI@TEST.EDU",
+            Email = "ogrenci@test.edu",
+            NormalizedEmail = "OGRENCI@TEST.EDU",
+            FirstName = "Test",
+            LastName = "Öğrenci"
+        });
+        _context.Students.Add(new Student
+        {
+            Id = StudentId,
+            UserId = StudentUserId,
+            StudentNumber = "2024001",
+            NationalId = "11111111111",
+            Status = StudentStatus.Active,
+            Cgpa = 2.50m,
+            Sgpa = 2.50m,
+            CompletedSemesters = 1
+        });
+        _context.StudentPrograms.Add(new StudentProgram
+        {
+            StudentId = StudentId,
+            ProgramId = ProgramId,
+            CurriculumId = CurriculumId,
+            Type = StudentProgramType.Main,
+            IsActive = true,
+            EnrollmentDate = new DateTime(2024, 9, 15)
+        });
+
+        _context.CourseRegistrations.Add(new CourseRegistration
+        {
+            Id = RegistrationId,
+            StudentId = StudentId,
+            CourseSectionId = SectionId,
+            Status = RegistrationStatus.Active
+        });
+
+        // Final grade row — student attended and has a passing score.
+        _context.StudentGrades.Add(new StudentGrade
+        {
+            Id = 1,
+            CourseRegistrationId = RegistrationId,
+            GradeComponentId = FinalComponentId,
+            Score = finalScore,
+            ExamAttendance = ExamAttendance.Present
+        });
+
+        _context.SaveChanges();
+    }
+
+    /// <summary>
+    /// Rule A guard: BlockFinalIfNoMidterm=true must NOT penalize when the section
+    /// has zero Midterm-type components. There are no midterms to "attend", so the
+    /// rule is moot and must not fire. The student's passing Final score must count
+    /// normally → a passing letter grade (not FF from a zeroed Final).
+    ///
+    /// Before the guard fix the bug was: midtermComponents.Count==0 →
+    /// attendedAnyMidterm==false → blockFinalScores=true → Final zeroed → FF.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_BlockFinalIfNoMidterm_DoesNothing_WhenSectionHasNoMidterm()
+    {
+        // Section has only a Final component (weight=100), student scored 80 → should be AA/BA range.
+        SeedScenarioNoMidterm(finalScore: 80m);
+
+        // Regulation with BlockFinalIfNoMidterm=true — the flag is on, but no midterm exists.
+        SeedExamRegulation(blockFinalIfNoMidterm: true, failIfNoFinal: false);
+
+        var controller = CreateController();
+        var result = await controller.Finalize(SectionId);
+
+        result.Should().BeOfType<OkObjectResult>(
+            "finalize must succeed when section has no midterm component");
+
+        var reg = await _context.CourseRegistrations.FindAsync(RegistrationId);
+
+        // weightedScore = 80*1.0 = 80 → roundedScore=80 → BA (≥81? no, 80<81 → BB ≥71)
+        // Default criteria: BB≥71. 80 ≥ 71 and 80 < 81 → BB.
+        // The key invariant: the grade must NOT be FF.
+        reg!.Grade.Should().NotBe(GradeCode.FF,
+            "BlockFinalIfNoMidterm must not zero the Final when no Midterm component exists; " +
+            "student scored 80 on the only Final → should receive a passing grade (BB), not FF");
     }
 
     public void Dispose() => _context.Dispose();

@@ -1233,14 +1233,20 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             if (studentRegForPrePass != null && studentRegForPrePass.BlockFinalIfNoMidterm)
             {
                 var midtermComponents = components.Where(c => c.Type == GradeComponentType.Midterm).ToList();
-                var attendedAnyMidterm = midtermComponents.Any(mc =>
+                // Rule A is only meaningful when midterm components actually exist.
+                // If there are no midterm components, "attended no midterm" is trivially true
+                // but penalising is wrong — the rule must be moot in this case.
+                if (midtermComponents.Count > 0)
                 {
-                    var g = studentGrades.FirstOrDefault(sg => sg.GradeComponentId == mc.Id);
-                    if (g == null) return false;
-                    return g.ExamAttendance == ExamAttendance.Present
-                        || (g.ExamAttendance == ExamAttendance.NotMarked && g.Score != null);
-                });
-                blockFinalScores = !attendedAnyMidterm;
+                    var attendedAnyMidterm = midtermComponents.Any(mc =>
+                    {
+                        var g = studentGrades.FirstOrDefault(sg => sg.GradeComponentId == mc.Id);
+                        if (g == null) return false;
+                        return g.ExamAttendance == ExamAttendance.Present
+                            || (g.ExamAttendance == ExamAttendance.NotMarked && g.Score != null);
+                    });
+                    blockFinalScores = !attendedAnyMidterm;
+                }
             }
 
             decimal weightedScore = 0;
