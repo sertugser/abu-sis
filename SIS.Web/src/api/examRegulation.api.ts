@@ -33,6 +33,7 @@ export interface AttendancePolicy {
   termWeekCount: number;
   theoryAbsenceLimitPercent: number;
   labAbsenceLimitPercent: number;
+  attendanceMethod: string;
 }
 
 export async function getAttendancePolicy(): Promise<AttendancePolicy> {

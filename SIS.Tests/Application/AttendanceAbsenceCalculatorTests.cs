@@ -1,0 +1,161 @@
+using FluentAssertions;
+using SIS.Application.Grading;
+using SIS.Domain.Enums;
+
+namespace SIS.Tests.Application;
+
+/// <summary>
+/// Unit tests for AttendanceAbsenceCalculator.IsFailedByAbsence (method-aware overload).
+///
+/// The method-aware signature:
+///   IsFailedByAbsence(AttendanceMethod, theoryAbs, labAbs, theoryLimit, labLimit, totalLimit)
+///
+/// Rules under test:
+///   Separate  → fails if theoryAbs > theoryLimit OR labAbs > labLimit
+///   TotalHours → fails if (theoryAbs + labAbs) > totalLimit
+///   Passive   → never fails
+///   MarkOnly  → never fails
+/// </summary>
+public sealed class AttendanceAbsenceCalculatorTests
+{
+    // ── helper ──────────────────────────────────────────────────────────────
+
+    private static bool Check(
+        AttendanceMethod method,
+        int theoryAbs, int labAbs,
+        int theoryLimit, int labLimit, int totalLimit)
+        => AttendanceAbsenceCalculator.IsFailedByAbsence(
+            method, theoryAbs, labAbs, theoryLimit, labLimit, totalLimit);
+
+    // ── Separate ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Separate_FailsWhenTheoryExceedsLimit()
+    {
+        // theoryAbs (14) > theoryLimit (13) → fail
+        Check(AttendanceMethod.Separate, theoryAbs: 14, labAbs: 0, theoryLimit: 13, labLimit: 0, totalLimit: 13)
+            .Should().BeTrue("theory absence exceeds limit");
+    }
+
+    [Fact]
+    public void Separate_FailsWhenLabExceedsLimit()
+    {
+        // labAbs (5) > labLimit (4) → fail (even if theory is fine)
+        Check(AttendanceMethod.Separate, theoryAbs: 0, labAbs: 5, theoryLimit: 99, labLimit: 4, totalLimit: 99)
+            .Should().BeTrue("lab absence exceeds limit");
+    }
+
+    [Fact]
+    public void Separate_PassesWhenBothAtLimit()
+    {
+        // Exactly at limit = allowed (strictly-greater-than semantics)
+        Check(AttendanceMethod.Separate, theoryAbs: 13, labAbs: 4, theoryLimit: 13, labLimit: 4, totalLimit: 17)
+            .Should().BeFalse("at-limit is not a failure");
+    }
+
+    [Fact]
+    public void Separate_PassesWhenBothBelowLimit()
+    {
+        Check(AttendanceMethod.Separate, theoryAbs: 5, labAbs: 2, theoryLimit: 13, labLimit: 4, totalLimit: 17)
+            .Should().BeFalse("below limit is not a failure");
+    }
+
+    [Fact]
+    public void Separate_FailsWhenEitherExceeds_OtherIsZero()
+    {
+        // OR semantics — only lab over
+        Check(AttendanceMethod.Separate, theoryAbs: 0, labAbs: 10, theoryLimit: 13, labLimit: 9, totalLimit: 22)
+            .Should().BeTrue("lab over limit triggers failure regardless of theory");
+    }
+
+    // ── TotalHours ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void TotalHours_FailsWhenCombinedExceedsTotalLimit()
+    {
+        // theoryAbs(8) + labAbs(8) = 16 > totalLimit(15)
+        Check(AttendanceMethod.TotalHours, theoryAbs: 8, labAbs: 8, theoryLimit: 13, labLimit: 9, totalLimit: 15)
+            .Should().BeTrue("combined absence exceeds total limit");
+    }
+
+    [Fact]
+    public void TotalHours_PassesWhenCombinedAtTotalLimit()
+    {
+        // Combined exactly at limit = allowed
+        Check(AttendanceMethod.TotalHours, theoryAbs: 7, labAbs: 8, theoryLimit: 99, labLimit: 99, totalLimit: 15)
+            .Should().BeFalse("combined at total limit is not a failure");
+    }
+
+    [Fact]
+    public void TotalHours_PassesWhenCombinedBelowTotalLimit()
+    {
+        Check(AttendanceMethod.TotalHours, theoryAbs: 5, labAbs: 5, theoryLimit: 99, labLimit: 99, totalLimit: 15)
+            .Should().BeFalse("combined below total limit is not a failure");
+    }
+
+    [Fact]
+    public void TotalHours_IgnoresSeparateLimits()
+    {
+        // theoryAbs(20) exceeds theoryLimit(13) individually, but combined(20+0=20) <= totalLimit(25)
+        // TotalHours ignores per-track limits → should not fail
+        Check(AttendanceMethod.TotalHours, theoryAbs: 20, labAbs: 0, theoryLimit: 13, labLimit: 9, totalLimit: 25)
+            .Should().BeFalse("TotalHours method ignores individual track limits");
+    }
+
+    // ── Passive ─────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 0, 0, 0, 0)]
+    [InlineData(100, 100, 0, 0, 0)]
+    [InlineData(14, 5, 13, 4, 17)]
+    public void Passive_NeverFails(int theoryAbs, int labAbs, int theoryLimit, int labLimit, int totalLimit)
+    {
+        Check(AttendanceMethod.Passive, theoryAbs, labAbs, theoryLimit, labLimit, totalLimit)
+            .Should().BeFalse("Passive method never triggers attendance failure");
+    }
+
+    // ── MarkOnly ─────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 0, 0, 0, 0)]
+    [InlineData(100, 100, 0, 0, 0)]
+    [InlineData(14, 5, 13, 4, 17)]
+    public void MarkOnly_NeverFails(int theoryAbs, int labAbs, int theoryLimit, int labLimit, int totalLimit)
+    {
+        Check(AttendanceMethod.MarkOnly, theoryAbs, labAbs, theoryLimit, labLimit, totalLimit)
+            .Should().BeFalse("MarkOnly method never triggers attendance failure");
+    }
+
+    // ── Legacy 4-arg overload (regression guard) ─────────────────────────────
+
+    [Fact]
+    public void LegacyOverload_StillWorksForSeparateBehaviour()
+    {
+        // The original 4-arg overload must remain unchanged (Separate semantics).
+        AttendanceAbsenceCalculator.IsFailedByAbsence(14, 0, 13, 4)
+            .Should().BeTrue("14 > 13 theory limit");
+
+        AttendanceAbsenceCalculator.IsFailedByAbsence(13, 4, 13, 4)
+            .Should().BeFalse("exactly at limit is allowed");
+    }
+
+    // ── ParseAttendanceMethod helper ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Separate", AttendanceMethod.Separate)]
+    [InlineData("separate", AttendanceMethod.Separate)]
+    [InlineData("SEPARATE", AttendanceMethod.Separate)]
+    [InlineData("TotalHours", AttendanceMethod.TotalHours)]
+    [InlineData("totalhours", AttendanceMethod.TotalHours)]
+    [InlineData("Passive", AttendanceMethod.Passive)]
+    [InlineData("MarkOnly", AttendanceMethod.MarkOnly)]
+    [InlineData("markonly", AttendanceMethod.MarkOnly)]
+    [InlineData(null, AttendanceMethod.Separate)]
+    [InlineData("", AttendanceMethod.Separate)]
+    [InlineData("Unknown", AttendanceMethod.Separate)]
+    public void ParseAttendanceMethod_ParsesCorrectly(string? input, AttendanceMethod expected)
+    {
+        AttendanceMethodExtensions.ParseAttendanceMethod(input)
+            .Should().Be(expected);
+    }
+}

@@ -108,6 +108,7 @@ export interface StudentAttendancePolicyDto {
   termWeekCount: number;
   theoryAbsenceLimitPercent: number;
   labAbsenceLimitPercent: number;
+  attendanceMethod: string;
 }
 
 export interface StudentAttendanceCourseDto {

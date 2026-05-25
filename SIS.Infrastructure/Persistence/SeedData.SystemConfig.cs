@@ -32,6 +32,7 @@ public static partial class SeedData
     {
         var configs = new List<SystemConfig>
         {
+            new() { Key = "Attendance.Method", Value = "Separate", Category = "Attendance", DataType = "string", Description = "Devamsızlık hesap yöntemi: Separate (teori/uygulama ayrı), TotalHours (toplam saat), Passive (kapalı), MarkOnly (sadece işaretle)" },
             new() { Key = "Attendance.TermWeekCount", Value = "14", Category = "Attendance", DataType = "int", Description = "Devamsizlik hesabinda kullanilan aktif donem hafta sayisi" },
             new() { Key = "Attendance.TheoryAbsenceLimitPercent", Value = "30", Category = "Attendance", DataType = "decimal", Description = "Teorik derslerde devamsizliktan kalma esigi (%)" },
             new() { Key = "Attendance.LabAbsenceLimitPercent", Value = "20", Category = "Attendance", DataType = "decimal", Description = "Uygulama/lab derslerinde devamsizliktan kalma esigi (%)" },

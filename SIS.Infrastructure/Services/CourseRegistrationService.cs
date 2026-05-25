@@ -241,6 +241,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         var weekCount = Math.Max(1, await _config.GetIntAsync("Attendance.TermWeekCount", 14));
         var theoryLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m));
         var labLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m));
+        var attendanceMethodStr = await _config.GetStringAsync("Attendance.Method", "Separate");
 
         var student = await _context.Students
             .AsNoTracking()
@@ -330,7 +331,8 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             {
                 TermWeekCount = weekCount,
                 TheoryAbsenceLimitPercent = theoryLimitPercent,
-                LabAbsenceLimitPercent = labLimitPercent
+                LabAbsenceLimitPercent = labLimitPercent,
+                AttendanceMethod = attendanceMethodStr
             },
             Courses = registrations.Select(registration =>
             {

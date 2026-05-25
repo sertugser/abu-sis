@@ -7,6 +7,13 @@ import { ExamRegulationFormDialog } from '../components/exam-regulation/ExamRegu
 import type { ExamRegulation } from '../types/examRegulation';
 import { TERM_LABELS, LEVEL_LABELS } from '../lib/examRegulationLabels';
 
+const ATTENDANCE_METHOD_LABELS: Record<string, string> = {
+  Separate: 'Teori/Uygulama Ayrı',
+  TotalHours: 'Toplam Saate Göre',
+  Passive: 'Pasif',
+  MarkOnly: 'Sadece İşaretle',
+};
+
 export default function ExamRegulationManagementPage() {
   const programs = useAdminPrograms();
   const [programId, setProgramId] = useState<number | undefined>(undefined);
@@ -96,7 +103,9 @@ export default function ExamRegulationManagementPage() {
         <CardContent className="p-4 text-sm text-muted-foreground">
           {attendancePolicy.data ? (
             <>
-              Devamsızlık: <strong>{attendancePolicy.data.termWeekCount} hafta</strong> · Teori{' '}
+              Devamsızlık Yöntemi:{' '}
+              <strong>{ATTENDANCE_METHOD_LABELS[attendancePolicy.data.attendanceMethod] ?? attendancePolicy.data.attendanceMethod}</strong>
+              {' · '}{attendancePolicy.data.termWeekCount} hafta · Teori{' '}
               <strong>%{attendancePolicy.data.theoryAbsenceLimitPercent}</strong> · Uygulama{' '}
               <strong>%{attendancePolicy.data.labAbsenceLimitPercent}</strong>{' '}
               (<strong>Sistem Ayarları</strong>'ndan yönetilir)

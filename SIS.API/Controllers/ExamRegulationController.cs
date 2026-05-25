@@ -111,7 +111,8 @@ public class ExamRegulationController(AppDbContext context, ISystemConfigProvide
         var weekCount = await _config.GetIntAsync("Attendance.TermWeekCount", 14, ct);
         var theoryPercent = await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30, ct);
         var labPercent = await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20, ct);
-        return Ok(new AttendancePolicyDto(weekCount, theoryPercent, labPercent));
+        var methodStr = await _config.GetStringAsync("Attendance.Method", "Separate", ct);
+        return Ok(new AttendancePolicyDto(weekCount, theoryPercent, labPercent, methodStr));
     }
 
     [HttpPost("{id:int}/clone")]
@@ -343,4 +344,8 @@ public record SaveExamRegulationRequest(
 
 public record CloneExamRegulationRequest(int? ProgramId, int Year);
 
-public record AttendancePolicyDto(int TermWeekCount, decimal TheoryAbsenceLimitPercent, decimal LabAbsenceLimitPercent);
+public record AttendancePolicyDto(
+    int TermWeekCount,
+    decimal TheoryAbsenceLimitPercent,
+    decimal LabAbsenceLimitPercent,
+    string AttendanceMethod = "Separate");

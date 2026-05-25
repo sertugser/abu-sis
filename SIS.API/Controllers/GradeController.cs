@@ -1088,12 +1088,18 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         var weekCount = Math.Max(1, await _systemConfig.GetIntAsync("Attendance.TermWeekCount", 14));
         var theoryLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m);
         var labLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m);
+        var attendanceMethodStr = await _systemConfig.GetStringAsync("Attendance.Method", "Separate");
+        var attendanceMethod = AttendanceMethodExtensions.ParseAttendanceMethod(attendanceMethodStr);
 
         var course = section.Course;
         var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
         var labTotalHours = weekCount * Math.Max(0, course.LabHours);
         var theoryLimitHours = CalculateLimitHours(theoryTotalHours, theoryLimitPercent);
         var labLimitHours = CalculateLimitHours(labTotalHours, labLimitPercent);
+        // TotalHours method: combine theory+lab into one total; reuse theory% as the general limit
+        // (theory percent is the primary, usually only non-zero, percent in practice).
+        var combinedTotalHours = weekCount * (Math.Max(0, course.TheoryHours) + Math.Max(0, course.LabHours));
+        var totalLimitHours = CalculateLimitHours(combinedTotalHours, theoryLimitPercent);
 
         var naRegistrationIds = new HashSet<int>();
 
@@ -1109,7 +1115,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 course.ApplicationHours,
                 sectionSlots);
 
-            if (IsFailedByAbsence(theoryAbs, labAbs, theoryLimitHours, labLimitHours))
+            if (IsFailedByAbsence(attendanceMethod, theoryAbs, labAbs, theoryLimitHours, labLimitHours, totalLimitHours))
                 naRegistrationIds.Add(reg.Id);
         }
 

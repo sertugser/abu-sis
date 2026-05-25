@@ -58,6 +58,19 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         new("load-based", "Yük Bazlı"),
     ];
 
+    private static readonly IReadOnlyList<SystemConfigValueOptionDto> AttendanceMethodOptions =
+    [
+        new("Separate", "Teori/Uygulama Ayrı"),
+        new("TotalHours", "Toplam Saate Göre"),
+        new("Passive", "Pasif"),
+        new("MarkOnly", "Sadece İşaretle"),
+    ];
+
+    private static readonly HashSet<string> AttendanceMethodValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Separate", "TotalHours", "Passive", "MarkOnly",
+    };
+
     private static readonly HashSet<string> SchedulerEngineValues = new(StringComparer.OrdinalIgnoreCase)
     {
         "v2-ortools",
@@ -93,6 +106,10 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
         ["Instructor.TranscriptClosed"] = new("Akademisyen Transkript Kapalı", "instructor", "Akademisyen", 130),
         ["Instructor.PrimaryEmailImmutable"] = new("Akademisyen 1.e-posta Adresini Değiştiremez", "instructor", "Akademisyen", 140),
         ["Instructor.AdvisingCalculationMethod"] = new("Danışmanlık Hesaplama Yöntemi", "instructor", "Akademisyen", 150, AdvisingCalculationMethodOptions),
+        ["Attendance.Method"] = new("Devamsızlık Hesap Yöntemi", "attendance-policy", "Devamsızlık Politikası", 10, AttendanceMethodOptions),
+        ["Attendance.TermWeekCount"] = new("Dönem Hafta Sayısı", "attendance-policy", "Devamsızlık Politikası", 20),
+        ["Attendance.TheoryAbsenceLimitPercent"] = new("Teorik Devamsızlık Kalma Eşiği (%)", "attendance-policy", "Devamsızlık Politikası", 30),
+        ["Attendance.LabAbsenceLimitPercent"] = new("Uygulama Devamsızlık Kalma Eşiği (%)", "attendance-policy", "Devamsızlık Politikası", 40),
         ["Registration.HideQuotaInCatalog"] = new("Ders kayıt özet sayfasında kontenjan bilgilerini gizle", "registration-controls", "Ders Kayıt Kontrolleri", 10),
         ["Registration.AllowNonCurriculumCourseSelection"] = new("Ders Kayıtta Müfredat/Bölüm Dışı Ders Listesinde Programının Dışında Ders Alabilsin mi", "registration-controls", "Ders Kayıt Kontrolleri", 20),
         ["Registration.EctsLimit.CgpaBelow200"] = new("CGPA 2.00 altı öğrenciler için AKTS üst sınırı", "registration-controls", "Ders Kayıt Kontrolleri", 30),
@@ -519,6 +536,23 @@ public class SystemConfigController(AppDbContext context, ISystemConfigProvider 
                     }
 
                     normalizedValue = string.Join(",", days);
+                    return true;
+                }
+
+                if (string.Equals(key, "Attendance.Method", StringComparison.OrdinalIgnoreCase))
+                {
+                    var trimmedValue = rawValue.Trim();
+                    if (!AttendanceMethodValues.Contains(trimmedValue))
+                    {
+                        error = "Geçerli devamsızlık yöntemi değerleri: Separate, TotalHours, Passive, MarkOnly";
+                        return false;
+                    }
+
+                    // Normalise to the canonical casing stored in the option list
+                    var canonical = AttendanceMethodOptions.FirstOrDefault(o =>
+                        string.Equals(o.Value, trimmedValue, StringComparison.OrdinalIgnoreCase))?.Value
+                        ?? trimmedValue;
+                    normalizedValue = canonical;
                     return true;
                 }
 

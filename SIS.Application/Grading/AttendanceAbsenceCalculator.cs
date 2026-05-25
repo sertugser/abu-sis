@@ -4,6 +4,31 @@ using SIS.Domain.Enums;
 namespace SIS.Application.Grading;
 
 /// <summary>
+/// Extension helpers for AttendanceMethod enum.
+/// </summary>
+public static class AttendanceMethodExtensions
+{
+    /// <summary>
+    /// Parses the SystemConfig string value (case-insensitive) to AttendanceMethod.
+    /// Returns Separate (default/current behaviour) when the value is missing or unrecognised.
+    /// </summary>
+    public static AttendanceMethod ParseAttendanceMethod(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return AttendanceMethod.Separate;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "separate" => AttendanceMethod.Separate,
+            "totalhours" => AttendanceMethod.TotalHours,
+            "passive" => AttendanceMethod.Passive,
+            "markonly" => AttendanceMethod.MarkOnly,
+            _ => AttendanceMethod.Separate,
+        };
+    }
+}
+
+/// <summary>
 /// Pure static helpers for computing per-registration absence hours.
 /// Single source of truth shared by CourseRegistrationService (student-facing
 /// attendance status) and GradeController.Finalize (NA grade assignment).
@@ -64,6 +89,7 @@ public static class AttendanceAbsenceCalculator
 
     /// <summary>
     /// Returns true when absence hours exceed the limit in either theory or lab.
+    /// Uses the Separate method (current/default behaviour): fails if theoryAbs > theoryLimit OR labAbs > labLimit.
     /// Intentional: failure is strictly-greater-than (a student may miss UP TO the limit hours)
     /// — preserved from the original attendance display logic for consistency.
     /// </summary>
@@ -71,6 +97,30 @@ public static class AttendanceAbsenceCalculator
         int theoryAbsenceHours, int labAbsenceHours,
         int theoryLimitHours, int labLimitHours)
         => theoryAbsenceHours > theoryLimitHours || labAbsenceHours > labLimitHours;
+
+    /// <summary>
+    /// Method-aware absence-fail check. Uses the global AttendanceMethod setting to decide behaviour:
+    /// <list type="bullet">
+    ///   <item><description><b>Separate</b> (default): fails if theoryAbs &gt; theoryLimit OR labAbs &gt; labLimit.</description></item>
+    ///   <item><description><b>TotalHours</b>: fails if (theoryAbs + labAbs) &gt; totalLimit.</description></item>
+    ///   <item><description><b>Passive</b>: never fails (attendance tracking is off).</description></item>
+    ///   <item><description><b>MarkOnly</b>: never fails (informational recording only).</description></item>
+    /// </list>
+    /// </summary>
+    public static bool IsFailedByAbsence(
+        AttendanceMethod method,
+        int theoryAbsenceHours,
+        int labAbsenceHours,
+        int theoryLimitHours,
+        int labLimitHours,
+        int totalLimitHours)
+        => method switch
+        {
+            AttendanceMethod.Passive => false,
+            AttendanceMethod.MarkOnly => false,
+            AttendanceMethod.TotalHours => (theoryAbsenceHours + labAbsenceHours) > totalLimitHours,
+            _ /* Separate */ => theoryAbsenceHours > theoryLimitHours || labAbsenceHours > labLimitHours,
+        };
 
     /// <summary>
     /// Maps DayOfWeek to Monday-anchored day index (Monday = 0 … Sunday = 6).
