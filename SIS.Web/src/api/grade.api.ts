@@ -1,6 +1,7 @@
 // SIS.Web/src/api/grade.api.ts
 import apiClient from './axios';
 import type {
+  ExamAttendance,
   FinalizeResponse,
   GradeComponent,
   GradeComponentType,
@@ -93,6 +94,18 @@ export async function previewImport(
   );
 
   return data;
+}
+
+// Sınav katılım işaretleme
+export async function setExamAttendance(
+  sectionId: number,
+  componentId: number,
+  items: { studentId: number; attendance: ExamAttendance }[]
+): Promise<void> {
+  await apiClient.put(`/instructor/section/${sectionId}/exam-attendance`, {
+    componentId,
+    items,
+  });
 }
 
 // Excel apply

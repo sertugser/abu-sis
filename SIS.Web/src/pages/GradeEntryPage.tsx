@@ -51,8 +51,10 @@ import {
   useDownloadTemplate,
   usePreviewImport,
   useApplyImport,
+  useSetExamAttendance,
 } from '../hooks/useGradeData';
 import type {
+  ExamAttendance,
   GradeComponentType,
   GradingCriteria,
   FinalizePreviewItem,
@@ -71,6 +73,14 @@ const COMPONENT_TYPE_BADGE_CLASS: Record<GradeComponentType, string> = {
   Midterm: 'bg-blue-50 text-blue-600',
   Final: 'bg-purple-50 text-purple-700',
 };
+
+/* ── Sınav katılım ── */
+const ATTENDANCE_OPTIONS: { value: ExamAttendance; label: string }[] = [
+  { value: 'NotMarked', label: '—' },
+  { value: 'Present',   label: 'Girdi' },
+  { value: 'Absent',    label: 'Girmedi' },
+  { value: 'Excused',   label: 'Mazeretli' },
+];
 
 /* ── Harf notu stilleri ── */
 const GRADE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -280,6 +290,7 @@ export default function GradeEntryPage() {
   const downloadTemplateMut = useDownloadTemplate(id);
 const previewImportMut = usePreviewImport(id);
 const applyImportMut = useApplyImport(id);
+const setAttendanceMut = useSetExamAttendance(id);
 
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<number, string>>({});
@@ -497,6 +508,14 @@ const handleApplyImport = () => {
     },
   });
 };
+
+  const handleAttendanceChange = (studentId: number, attendance: ExamAttendance) => {
+    if (!activeComponentId || isFinalized) return;
+    setAttendanceMut.mutate({
+      componentId: activeComponentId,
+      items: [{ studentId, attendance }],
+    });
+  };
 
   /* ── Filter students ── */
   const filteredStudents = gradesData.students.filter(s => {
@@ -735,6 +754,7 @@ const handleApplyImport = () => {
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-14">#</th>
                       <th className="text-left py-3 px-4 font-medium text-muted-foreground">Öğrenci No</th>
                       <th className="text-left py-3 px-4 font-medium text-muted-foreground">Ad Soyad</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground w-36">Katılım</th>
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-32">Puan</th>
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-24">Harf</th>
                     </tr>
@@ -750,7 +770,13 @@ const handleApplyImport = () => {
                          scoreNum >= 0 &&
                          scoreNum <= 100;
 
-                      const previewLetterGrade = isValidScore
+                      const attendance: ExamAttendance =
+                        (activeComponentId && student.examAttendances?.[activeComponentId]) || 'NotMarked';
+                      const isAbsent = attendance === 'Absent';
+                      const isExcused = attendance === 'Excused';
+                      const scoreDisabled = isAbsent || isExcused;
+
+                      const previewLetterGrade = isValidScore && !scoreDisabled
                           ? resolveGrade(Math.round(scoreNum), currentCriteria)
                           : null;
 
@@ -771,7 +797,45 @@ const handleApplyImport = () => {
                           </td>
                           <td className="py-3 px-4 text-center">
                             {isFinalized ? (
-                              <span className="font-mono text-sm font-semibold">{scoreStr || '—'}</span>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
+                                isAbsent  ? 'bg-red-50 text-red-600' :
+                                isExcused ? 'bg-amber-50 text-amber-600' :
+                                attendance === 'Present' ? 'bg-emerald-50 text-emerald-600' :
+                                'text-muted-foreground'
+                              }`}>
+                                {ATTENDANCE_OPTIONS.find(o => o.value === attendance)?.label ?? '—'}
+                              </span>
+                            ) : (
+                              <select
+                                value={attendance}
+                                onChange={(e) =>
+                                  handleAttendanceChange(student.studentId, e.target.value as ExamAttendance)
+                                }
+                                disabled={setAttendanceMut.isPending}
+                                className={`h-8 rounded-md border text-xs font-medium px-2 pr-6 appearance-none bg-background cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 ${
+                                  isAbsent  ? 'border-red-300 text-red-600 bg-red-50' :
+                                  isExcused ? 'border-amber-300 text-amber-600 bg-amber-50' :
+                                  attendance === 'Present' ? 'border-emerald-300 text-emerald-600 bg-emerald-50' :
+                                  'border-input text-muted-foreground'
+                                }`}
+                              >
+                                {ATTENDANCE_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {isFinalized ? (
+                              <span className="font-mono text-sm font-semibold">
+                                {isAbsent ? '0 (Girmedi)' : isExcused ? 'Mazeretli' : scoreStr || '—'}
+                              </span>
+                            ) : scoreDisabled ? (
+                              <span className={`text-xs font-mono font-medium ${isAbsent ? 'text-red-500' : 'text-amber-500'}`}>
+                                {isAbsent ? '0 (Girmedi)' : 'Mazeretli'}
+                              </span>
                             ) : (
                               <Input
                                type="number"

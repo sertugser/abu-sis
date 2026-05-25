@@ -20,6 +20,8 @@ export interface GradeSubmitDto {
   grades: StudentScore[];
 }
 
+export type ExamAttendance = 'NotMarked' | 'Present' | 'Absent' | 'Excused';
+
 export interface StudentGradeRow {
   studentId: number;
   studentNumber: string;
@@ -28,6 +30,7 @@ export interface StudentGradeRow {
   letterGrade?: string | null;
   weightedAverage?: number | null;
   scores: Record<number, number | null>;
+  examAttendances?: Record<number, ExamAttendance>;
 }
 
 export interface GradesResponse {

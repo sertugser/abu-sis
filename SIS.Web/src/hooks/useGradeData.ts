@@ -10,11 +10,13 @@ import {
   getGrades,
   getGradingCriteria,
   previewImport,
+  setExamAttendance,
   submitGrades,
   unfinalizeSection,
   updateGradingCriteria,
 } from '../api/grade.api';
 import type {
+  ExamAttendance,
   GradeComponentType,
   GradeSubmitDto,
   GradingCriteria,
@@ -127,6 +129,23 @@ export function useApplyImport(sectionId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['grades', sectionId] });
       qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
+    },
+  });
+}
+
+export function useSetExamAttendance(sectionId: number) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      componentId,
+      items,
+    }: {
+      componentId: number;
+      items: { studentId: number; attendance: ExamAttendance }[];
+    }) => setExamAttendance(sectionId, componentId, items),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
     },
   });
 }
