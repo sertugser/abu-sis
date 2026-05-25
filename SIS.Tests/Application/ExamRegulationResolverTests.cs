@@ -178,6 +178,46 @@ public class ExamRegulationResolverTests : IDisposable
         });
     }
 
+    private void SeedExamRegulationWithRelative(int id, int programId,
+        GradeEvaluationType evaluationType = GradeEvaluationType.Relative,
+        int minStudentCount = 15,
+        decimal inclusionLimit = 30m,
+        decimal absoluteFloor = 35m,
+        int taaMin = 70, int tbaMin = 63, int tbbMin = 57,
+        int tcbMin = 50, int tccMin = 45, int tdcMin = 40, int tddMin = 35,
+        GradeCode belowFloorGrade = GradeCode.FF)
+    {
+        _context.ExamRegulations.Add(new ExamRegulation
+        {
+            Id = id,
+            ProgramId = programId,
+            DegreeLevel = DegreeLevel.Bachelor,
+            TermType = TermType.Fall,
+            Year = 2024,
+            IsActive = true,
+            Name = $"Yönerge {id}",
+            MidtermCount = 1,
+            FinalCount = 1,
+            MinMidtermWeightPercent = 40m,
+            MaxMidtermWeightPercent = 60m,
+            MinFinalWeightPercent = 40m,
+            MaxFinalWeightPercent = 60m,
+            EvaluationType = evaluationType,
+            RelativeMinStudentCount = minStudentCount,
+            RelativeInclusionLimit = inclusionLimit,
+            RelativeAbsoluteFloor = absoluteFloor,
+            TAAMin = taaMin,
+            TBAMin = tbaMin,
+            TBBMin = tbbMin,
+            TCBMin = tcbMin,
+            TCCMin = tccMin,
+            TDCMin = tdcMin,
+            TDDMin = tddMin,
+            BelowFloorGrade = belowFloorGrade,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
     // ── tests ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -475,6 +515,109 @@ public class ExamRegulationResolverTests : IDisposable
 
         // Act
         var result = await _resolver.ResolveCourseLetterPolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    // ── ResolveCourseRelativePolicyAsync tests ────────────────────────────────
+
+    [Fact]
+    public async Task ResolveCourseRelativePolicyAsync_ReturnsRelative_ForSingleRelativeRegulation()
+    {
+        // Arrange
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        SeedExamRegulationWithRelative(RegAId, ProgramAId,
+            evaluationType: GradeEvaluationType.Relative,
+            minStudentCount: 15, inclusionLimit: 30m, absoluteFloor: 35m,
+            taaMin: 70, tbaMin: 63, tbbMin: 57, tcbMin: 50,
+            tccMin: 45, tdcMin: 40, tddMin: 35,
+            belowFloorGrade: GradeCode.FF);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseRelativePolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.EvaluationType.Should().Be(GradeEvaluationType.Relative);
+        result.MinStudentCount.Should().Be(15);
+        result.InclusionLimit.Should().Be(30m);
+        result.AbsoluteFloor.Should().Be(35m);
+        result.TAAMin.Should().Be(70);
+        result.TBAMin.Should().Be(63);
+        result.TBBMin.Should().Be(57);
+        result.TCBMin.Should().Be(50);
+        result.TCCMin.Should().Be(45);
+        result.TDCMin.Should().Be(40);
+        result.TDDMin.Should().Be(35);
+        result.BelowFloorGrade.Should().Be(GradeCode.FF);
+        result.IsConflicting.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveCourseRelativePolicyAsync_IsConflicting_WhenProgramsDisagreeOnType()
+    {
+        // Arrange — progA: Relative, progB: Absolute
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedFacultyDeptProgram(ProgramBId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+
+        _context.Curricula.Add(new Curriculum { Id = CurriculumBId, ProgramId = ProgramBId, Name = "Müfredat B", Version = "2024" });
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumBId,
+            CourseId = CourseId,
+            IsCompulsory = true,
+            SuggestedSemester = 1
+        });
+
+        SeedTerm();
+        SeedExamRegulationWithRelative(RegAId, ProgramAId, evaluationType: GradeEvaluationType.Relative);
+        SeedExamRegulationWithRelative(RegBId, ProgramBId, evaluationType: GradeEvaluationType.Absolute);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseRelativePolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.IsConflicting.Should().BeTrue();
+        result.EvaluationType.Should().Be(GradeEvaluationType.Absolute, "safe fallback when programs disagree");
+    }
+
+    [Fact]
+    public async Task ResolveCourseRelativePolicyAsync_ReturnsAbsolute_WhenSingleAbsoluteRegulation()
+    {
+        // Arrange
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        SeedExamRegulationWithRelative(RegAId, ProgramAId, evaluationType: GradeEvaluationType.Absolute);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseRelativePolicyAsync(CourseId, TermId, default);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.EvaluationType.Should().Be(GradeEvaluationType.Absolute);
+        result.IsConflicting.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveCourseRelativePolicyAsync_ReturnsNull_WhenNoRegulation()
+    {
+        // Arrange — course and program seeded, no ExamRegulation
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseRelativePolicyAsync(CourseId, TermId, default);
 
         // Assert
         result.Should().BeNull();

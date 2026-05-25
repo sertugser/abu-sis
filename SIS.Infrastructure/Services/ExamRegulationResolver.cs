@@ -138,6 +138,33 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
             editable, hasUnique);
     }
 
+    public async Task<RelativePolicy?> ResolveCourseRelativePolicyAsync(
+        int courseId, int academicTermId, CancellationToken ct)
+    {
+        var regs = await GetCourseRegulationsAsync(courseId, academicTermId, ct);
+        if (regs == null) return null;
+
+        var distinctTypes = regs.Select(r => r.EvaluationType).Distinct().ToList();
+        var isConflicting = distinctTypes.Count > 1;
+        var evaluationType = isConflicting ? GradeEvaluationType.Absolute : distinctTypes[0];
+
+        var first = regs[0];
+        return new RelativePolicy(
+            EvaluationType: evaluationType,
+            MinStudentCount: first.RelativeMinStudentCount,
+            InclusionLimit: first.RelativeInclusionLimit,
+            AbsoluteFloor: first.RelativeAbsoluteFloor,
+            TAAMin: first.TAAMin,
+            TBAMin: first.TBAMin,
+            TBBMin: first.TBBMin,
+            TCBMin: first.TCBMin,
+            TCCMin: first.TCCMin,
+            TDCMin: first.TDCMin,
+            TDDMin: first.TDDMin,
+            BelowFloorGrade: first.BelowFloorGrade,
+            IsConflicting: isConflicting);
+    }
+
     // ── private helpers ───────────────────────────────────────────────────────
 
     /// <summary>
