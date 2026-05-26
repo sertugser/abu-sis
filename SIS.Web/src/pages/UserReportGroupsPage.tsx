@@ -50,7 +50,6 @@ import { UserSearchCombobox } from '@/components/audit-log/UserSearchCombobox';
 import { usePermissions } from '../context/PermissionContext';
 import {
   useAddGroupMember,
-  useCreateReport,
   useCreateReportCategory,
   useCreateReportUserGroup,
   useDeleteReport,
@@ -83,6 +82,22 @@ const FIELD_LIMITS = {
   reason: 500,
 } as const;
 
+// İsimden sistem kimliği (slug) üretir: Türkçe karakterleri sadeleştirir, küçük harfe çevirir,
+// boşluk/özel karakterleri tireye dönüştürür. Backend ValidateCode ile uyumlu (a-z, 0-9, -, _).
+function slugify(name: string): string {
+  return name
+    .replace(/ç/g, 'c').replace(/Ç/g, 'c')
+    .replace(/ğ/g, 'g').replace(/Ğ/g, 'g')
+    .replace(/ı/g, 'i').replace(/İ/g, 'i')
+    .replace(/ö/g, 'o').replace(/Ö/g, 'o')
+    .replace(/ş/g, 's').replace(/Ş/g, 's')
+    .replace(/ü/g, 'u').replace(/Ü/g, 'u')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
 function extractError(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
     const resp = (err as { response?: { data?: { message?: string } } }).response;
@@ -96,39 +111,45 @@ export default function UserReportGroupsPage() {
   const canManage = hasPermission('menu.kullanici-rapor-gruplari.manage');
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="categories" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="categories">
-            <FolderTree className="h-4 w-4 mr-2" />
-            Kategoriler
-          </TabsTrigger>
-          <TabsTrigger value="reports">
-            <FileBarChart2 className="h-4 w-4 mr-2" />
-            Raporlar
-          </TabsTrigger>
-          <TabsTrigger value="permissions">
-            <ShieldCheck className="h-4 w-4 mr-2" />
-            Yetkiler
-          </TabsTrigger>
-          <TabsTrigger value="groups">
-            <Users className="h-4 w-4 mr-2" />
-            Kullanıcı Grupları
-          </TabsTrigger>
-        </TabsList>
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col">
+      <Tabs defaultValue="categories" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="border-b px-3 py-2.5">
+            <TabsList className="bg-muted/60">
+              <TabsTrigger value="categories">
+                <FolderTree className="h-4 w-4 mr-2" />
+                Kategoriler
+              </TabsTrigger>
+              <TabsTrigger value="reports">
+                <FileBarChart2 className="h-4 w-4 mr-2" />
+                Raporlar
+              </TabsTrigger>
+              <TabsTrigger value="permissions">
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                Yetkiler
+              </TabsTrigger>
+              <TabsTrigger value="groups">
+                <Users className="h-4 w-4 mr-2" />
+                Kullanıcı Grupları
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <TabsContent value="categories">
-          <CategoriesTab canManage={canManage} />
-        </TabsContent>
-        <TabsContent value="reports">
-          <ReportsTab canManage={canManage} />
-        </TabsContent>
-        <TabsContent value="permissions">
-          <PermissionsTab canManage={canManage} />
-        </TabsContent>
-        <TabsContent value="groups">
-          <GroupsTab canManage={canManage} />
-        </TabsContent>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <TabsContent value="categories" className="mt-0">
+              <CategoriesTab canManage={canManage} />
+            </TabsContent>
+            <TabsContent value="reports" className="mt-0">
+              <ReportsTab canManage={canManage} />
+            </TabsContent>
+            <TabsContent value="permissions" className="mt-0">
+              <PermissionsTab canManage={canManage} />
+            </TabsContent>
+            <TabsContent value="groups" className="mt-0">
+              <GroupsTab canManage={canManage} />
+            </TabsContent>
+          </div>
+        </div>
       </Tabs>
     </div>
   );
@@ -151,7 +172,7 @@ function CategoriesTab({ canManage }: { canManage: boolean }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Kategoriler</CardTitle>
@@ -282,13 +303,11 @@ function CategoryFormDialog({
   isPending: boolean;
   errorMsg: string | null;
 }) {
-  const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const isEdit = !!target;
 
   const handleOpen = (o: boolean) => {
     if (o) {
-      setCode(target?.code ?? '');
       setName(target?.name ?? '');
     }
     onOpenChange(o);
@@ -296,7 +315,9 @@ function CategoryFormDialog({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit({ code: code.trim(), name: name.trim() });
+    const trimmed = name.trim();
+    // Sistem kimliği (kod) isimden otomatik üretilir; admin kod yazmaz. Düzenlemede kod zaten değişmez.
+    await onSubmit({ code: slugify(trimmed), name: trimmed });
   };
 
   return (
@@ -305,22 +326,10 @@ function CategoryFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Kategoriyi Düzenle' : 'Yeni Kategori'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Sadece adı güncelleyebilirsiniz.' : 'Code stable bir slug olmalı (a-z, 0-9, -, _).'}
+            Kategori için bir ad girin. Sistem kimliği otomatik oluşturulur.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cat-code">Kod</Label>
-            <Input
-              id="cat-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={isEdit}
-              placeholder="academic"
-              maxLength={FIELD_LIMITS.categoryCode}
-              required
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="cat-name">Ad</Label>
             <Input
@@ -337,7 +346,7 @@ function CategoryFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               İptal
             </Button>
-            <Button type="submit" disabled={isPending || !code.trim() || !name.trim()}>
+            <Button type="submit" disabled={isPending || !name.trim()}>
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {isEdit ? 'Güncelle' : 'Oluştur'}
             </Button>
@@ -359,7 +368,6 @@ function ReportsTab({ canManage }: { canManage: boolean }) {
   const filterId = filterCategoryId === 'all' ? undefined : Number(filterCategoryId);
   const { data: reports, isLoading } = useReports(filterId);
 
-  const createMut = useCreateReport();
   const updateMut = useUpdateReport();
   const deleteMut = useDeleteReport();
 
@@ -369,37 +377,25 @@ function ReportsTab({ canManage }: { canManage: boolean }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between gap-4">
         <div>
           <CardTitle>Raporlar</CardTitle>
           <CardDescription>
-            Her raporun stable bir kodu, başlığı ve bağlı bir kategorisi olur.
+            Raporlar sistemde hazır gelir; buradan adını ve kategorisini düzenleyebilirsin.
           </CardDescription>
         </div>
-        <div className="flex items-center gap-3">
-          <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Kategoriye göre filtrele" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
-              {categories?.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {canManage && (
-            <Button
-              onClick={() => { setEditTarget(null); setErrorMsg(null); setDialogOpen(true); }}
-              disabled={!categories || categories.length === 0}
-              title={!categories?.length ? 'Önce kategori oluştur' : ''}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Yeni Rapor
-            </Button>
-          )}
-        </div>
+        <Select value={filterCategoryId} onValueChange={setFilterCategoryId}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Kategoriye göre filtrele" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tümü</SelectItem>
+            {categories?.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -461,20 +457,15 @@ function ReportsTab({ canManage }: { canManage: boolean }) {
         target={editTarget}
         categories={categories ?? []}
         errorMsg={errorMsg}
-        isPending={createMut.isPending || updateMut.isPending}
+        isPending={updateMut.isPending}
         onSubmit={async (v) => {
+          if (!editTarget) return;
           setErrorMsg(null);
           try {
-            if (editTarget) {
-              await updateMut.mutateAsync({
-                id: editTarget.id,
-                dto: { name: v.name, description: v.description, categoryId: v.categoryId },
-              });
-            } else {
-              await createMut.mutateAsync({
-                code: v.code, name: v.name, description: v.description, categoryId: v.categoryId,
-              });
-            }
+            await updateMut.mutateAsync({
+              id: editTarget.id,
+              dto: { name: v.name, description: v.description, categoryId: v.categoryId },
+            });
             setDialogOpen(false);
           } catch (err) {
             setErrorMsg(extractError(err, 'İşlem başarısız.'));
@@ -487,7 +478,7 @@ function ReportsTab({ canManage }: { canManage: boolean }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Raporu sil</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{deleteTarget?.name}</strong> raporu silinecek. Bağlı override'lar da otomatik temizlenir.
+              <strong>{deleteTarget?.name}</strong> raporu silinecek. Bağlı yetkiler de otomatik temizlenir. (Backend'de handler'ı duruyorsa bir sonraki açılışta yeniden eklenir.)
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -521,19 +512,16 @@ function ReportFormDialog({
   onOpenChange: (o: boolean) => void;
   target: ReportDefinitionDto | null;
   categories: ReportCategoryDto[];
-  onSubmit: (v: { code: string; name: string; description: string | null; categoryId: number }) => Promise<void>;
+  onSubmit: (v: { name: string; description: string | null; categoryId: number }) => Promise<void>;
   isPending: boolean;
   errorMsg: string | null;
 }) {
-  const isEdit = !!target;
-  const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
 
   const handleOpen = (o: boolean) => {
     if (o) {
-      setCode(target?.code ?? '');
       setName(target?.name ?? '');
       setDescription(target?.description ?? '');
       setCategoryId(target ? String(target.categoryId) : (categories[0] ? String(categories[0].id) : ''));
@@ -545,7 +533,6 @@ function ReportFormDialog({
     e.preventDefault();
     if (!categoryId) return;
     await onSubmit({
-      code: code.trim(),
       name: name.trim(),
       description: description.trim() || null,
       categoryId: Number(categoryId),
@@ -556,24 +543,17 @@ function ReportFormDialog({
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Raporu Düzenle' : 'Yeni Rapor'}</DialogTitle>
+          <DialogTitle>Raporu Düzenle</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Code değiştirilemez.' : 'Code stable bir slug olmalı.'}
+            Raporun adını, açıklamasını ve hangi kategoride görüneceğini düzenleyin.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="rep-code">Kod</Label>
-            <Input
-              id="rep-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={isEdit}
-              placeholder="ogrenci-mezuniyet-listesi"
-              maxLength={FIELD_LIMITS.reportCode}
-              required
-            />
-          </div>
+          {target && (
+            <p className="text-xs text-muted-foreground">
+              Rapor kodu: <span className="font-mono">{target.code}</span> (sistemde sabit, değişmez)
+            </p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="rep-name">Ad</Label>
             <Input
@@ -613,9 +593,9 @@ function ReportFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               İptal
             </Button>
-            <Button type="submit" disabled={isPending || !code.trim() || !name.trim() || !categoryId}>
+            <Button type="submit" disabled={isPending || !name.trim() || !categoryId}>
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEdit ? 'Güncelle' : 'Oluştur'}
+              Güncelle
             </Button>
           </DialogFooter>
         </form>
@@ -640,7 +620,7 @@ function PermissionsTab({ canManage }: { canManage: boolean }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Yetkiler</CardTitle>
@@ -861,7 +841,7 @@ function GroupsTab({ canManage }: { canManage: boolean }) {
   const [memberUserId, setMemberUserId] = useState('');
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader>
         <CardTitle>Kullanıcı Grupları</CardTitle>
         <CardDescription>Rapor yetkisi verilebilen adlandırılmış kullanıcı listeleri (örn. "Fakülte Sekreterleri").</CardDescription>

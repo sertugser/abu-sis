@@ -75,6 +75,21 @@ public class AdminLookupController(AppDbContext db, ISystemConfigProvider system
         return Ok(curricula);
     }
 
+    [HttpGet("sections")]
+    [RequirePermission("lookup.section")]
+    public async Task<IActionResult> GetSections([FromQuery] int termId)
+    {
+        // Döneme göre şube listesi — rapor filtreleri için isim seçici ("DERSKODU - Şube N").
+        var rows = await db.CourseSections
+            .AsNoTracking()
+            .Where(s => s.TermId == termId)
+            .OrderBy(s => s.Course.Code).ThenBy(s => s.SectionNumber)
+            .Select(s => new { s.Id, s.SectionNumber, CourseCode = s.Course.Code })
+            .ToListAsync();
+        var sections = rows.Select(s => new { s.Id, Label = $"{s.CourseCode} - Şube {s.SectionNumber}" });
+        return Ok(sections);
+    }
+
     [HttpGet("advisors")]
     [RequirePermission("lookup.advisor")]
     public async Task<IActionResult> GetAdvisors()

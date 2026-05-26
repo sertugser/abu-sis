@@ -14,6 +14,23 @@ interface ReportRunPanelProps {
   onClose: () => void;
 }
 
+const PAGE_SIZE = 50;
+
+// Export hatası blob döndüğünden gövdedeki mesajı çıkarmaya çalışır.
+async function extractExportError(err: unknown): Promise<string | undefined> {
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text();
+      const parsed = JSON.parse(text) as { message?: string };
+      return parsed.message;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export function ReportRunPanel({ report, onClose }: ReportRunPanelProps) {
   const { showError } = useToast();
   const code = report?.code ?? null;
@@ -22,25 +39,27 @@ export function ReportRunPanel({ report, onClose }: ReportRunPanelProps) {
   const exportMut = useExportReport(code ?? '');
   const [values, setValues] = useState<Record<string, string>>({});
 
-  const buildRequest = () => ({
-    parameters: Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '')),
-    page: 1,
-    pageSize: 50,
-  });
+  const activeParams = () => Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
 
-  const handleRun = async () => {
+  const run = async (targetPage: number) => {
     try {
-      await runMut.mutateAsync(buildRequest());
+      await runMut.mutateAsync({ parameters: activeParams(), page: targetPage, pageSize: PAGE_SIZE });
     } catch {
       showError('Rapor çalıştırılamadı', 'Yetki veya bağlantı sorunu olabilir.');
     }
   };
 
+  // Filtre değişince eski sonucu temizle (yeni filtreyle eski tablo gösterilmesin).
+  const handleFilterChange = (k: string, v: string) => {
+    setValues((prev) => ({ ...prev, [k]: v }));
+    runMut.reset();
+  };
+
   const handleExport = async (format: 'xlsx' | 'pdf') => {
     try {
-      await exportMut.mutateAsync({ format, req: buildRequest() });
-    } catch {
-      showError('Dışa aktarım başarısız');
+      await exportMut.mutateAsync({ format, req: { parameters: activeParams(), page: 1, pageSize: PAGE_SIZE } });
+    } catch (err) {
+      showError('Dışa aktarım başarısız', await extractExportError(err));
     }
   };
 
@@ -67,9 +86,9 @@ export function ReportRunPanel({ report, onClose }: ReportRunPanelProps) {
               <ReportFilterForm
                 parameters={schemaQuery.data.parameters}
                 values={values}
-                onChange={(k, v) => setValues((prev) => ({ ...prev, [k]: v }))}
+                onChange={handleFilterChange}
               />
-              <Button onClick={handleRun} disabled={runMut.isPending}>
+              <Button onClick={() => run(1)} disabled={runMut.isPending}>
                 {runMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
                 Çalıştır
               </Button>
@@ -81,6 +100,8 @@ export function ReportRunPanel({ report, onClose }: ReportRunPanelProps) {
               result={runMut.data}
               onExport={handleExport}
               exporting={exportMut.isPending}
+              onPageChange={(p) => run(p)}
+              busy={runMut.isPending}
             />
           )}
         </div>

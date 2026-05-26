@@ -18,7 +18,7 @@ public sealed class AdvisorStudentsReportHandler : IReportHandler
 
     public ReportParameterSchema GetParameterSchema() => new(new ReportParameter[]
     {
-        new("advisorId", "Danışman (Instructor Id)", ReportParameterType.Int, Required: false),
+        new("advisorId", "Danışman", ReportParameterType.Advisor, Required: false),
         new("status", "Durum", ReportParameterType.Enum, Required: false,
             Options: Enum.GetNames<StudentStatus>().Select(n => new ReportParameterOption(n, n)).ToList()),
     });

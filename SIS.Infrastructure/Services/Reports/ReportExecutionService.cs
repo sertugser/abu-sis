@@ -1,5 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using SIS.Application.Identity.Services;
 using SIS.Application.Reports;
+using SIS.Infrastructure.Persistence;
 
 namespace SIS.Infrastructure.Services.Reports;
 
@@ -11,18 +13,27 @@ public sealed class ReportExecutionService : IReportExecutionService
     private readonly IReportAuthorizationService _authz;
     private readonly ICurrentUserScope _scope;
     private readonly IUserRoleReader _roleReader;
+    private readonly AppDbContext _db;
 
     public ReportExecutionService(
         IEnumerable<IReportHandler> handlers,
         IReportAuthorizationService authz,
         ICurrentUserScope scope,
-        IUserRoleReader roleReader)
+        IUserRoleReader roleReader,
+        AppDbContext db)
     {
         _handlers = handlers.ToDictionary(h => h.Code, StringComparer.Ordinal);
         _authz = authz;
         _scope = scope;
         _roleReader = roleReader;
+        _db = db;
     }
+
+    public async Task<string?> GetReportTitleAsync(string reportCode, CancellationToken ct = default) =>
+        await _db.ReportDefinitions.AsNoTracking()
+            .Where(r => r.Code == reportCode)
+            .Select(r => r.Name)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<ReportParameterSchema?> GetSchemaAsync(int userId, string reportCode, CancellationToken ct = default)
     {

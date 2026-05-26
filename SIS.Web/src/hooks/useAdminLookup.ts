@@ -77,6 +77,24 @@ export function useAdminPrograms(departmentId?: number) {
   });
 }
 
+export interface LookupSection {
+  id: number;
+  label: string;
+}
+
+/** Döneme bağlı şube lookup'ı ("DERSKODU - Şube N"). termId yoksa fetch etmez. */
+export function useSectionLookup(termId?: number) {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'sections', termId ?? null],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupSection[]>('/admin/sections', { params: { termId } });
+      return data;
+    },
+    enabled: termId != null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useAdminAdvisors() {
   return useQuery({
     queryKey: ['admin', 'lookup', 'advisors'],

@@ -2,7 +2,7 @@ import apiClient from './axios';
 
 export type ReportParameterType =
   | 'Text' | 'Int' | 'Decimal' | 'Bool' | 'Date' | 'Enum'
-  | 'Term' | 'Faculty' | 'Department' | 'Program';
+  | 'Term' | 'Faculty' | 'Department' | 'Program' | 'Advisor' | 'CourseSection';
 
 export interface ReportParameterOption { value: string; label: string }
 export interface ReportParameter {

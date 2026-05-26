@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { ReportRunResult } from '@/api/reportRun.api';
@@ -7,13 +7,22 @@ interface ReportResultTableProps {
   result: ReportRunResult;
   onExport: (format: 'xlsx' | 'pdf') => void;
   exporting: boolean;
+  onPageChange: (page: number) => void;
+  busy: boolean;
 }
 
-export function ReportResultTable({ result, onExport, exporting }: ReportResultTableProps) {
+export function ReportResultTable({ result, onExport, exporting, onPageChange, busy }: ReportResultTableProps) {
+  const totalPages = Math.max(1, Math.ceil(result.totalCount / result.pageSize));
+  const from = result.totalCount === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
+  const to = Math.min(result.page * result.pageSize, result.totalCount);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Toplam <strong>{result.totalCount}</strong> kayıt</p>
+        <p className="text-sm text-muted-foreground">
+          Toplam <strong>{result.totalCount}</strong> kayıt
+          {result.totalCount > 0 && <> · {from}-{to} arası</>}
+        </p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => onExport('xlsx')} disabled={exporting}>
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
@@ -55,6 +64,26 @@ export function ReportResultTable({ result, onExport, exporting }: ReportResultT
           </TableBody>
         </Table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-xs text-muted-foreground">Sayfa {result.page} / {totalPages}</span>
+          <Button
+            variant="outline" size="sm"
+            disabled={busy || result.page <= 1}
+            onClick={() => onPageChange(result.page - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            disabled={busy || result.page >= totalPages}
+            onClick={() => onPageChange(result.page + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

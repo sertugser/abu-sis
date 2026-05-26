@@ -12,6 +12,8 @@ public enum ReportParameterType
     Faculty,     // fakülte seçici (lookup)
     Department,  // bölüm seçici (lookup)
     Program,     // program seçici (lookup)
+    Advisor,     // danışman (öğretim üyesi) seçici (lookup)
+    CourseSection, // şube seçici (lookup, döneme bağlı)
 }
 
 public sealed record ReportParameterOption(string Value, string Label);

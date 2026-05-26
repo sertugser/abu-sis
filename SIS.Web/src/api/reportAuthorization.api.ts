@@ -50,13 +50,6 @@ export interface SetReportAccessGrantDto {
   scopeKind: number; targetId: number; subjectKind: number; subjectId: number; effect: number; reason?: string | null;
 }
 
-export interface AccessibleReportDto {
-  id: number;
-  code: string;
-  name: string;
-  categoryId: number;
-  categoryName: string;
-}
 
 // ── API ──────────────────────────────────────────────────────
 

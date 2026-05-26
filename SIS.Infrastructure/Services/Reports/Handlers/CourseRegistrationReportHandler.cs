@@ -20,7 +20,7 @@ public sealed class CourseRegistrationReportHandler : IReportHandler
     public ReportParameterSchema GetParameterSchema() => new(new ReportParameter[]
     {
         new("termId", "Dönem", ReportParameterType.Term, Required: false),
-        new("courseSectionId", "Şube (Section Id)", ReportParameterType.Int, Required: false),
+        new("courseSectionId", "Şube", ReportParameterType.CourseSection, Required: false),
         new("status", "Kayıt Durumu", ReportParameterType.Enum, Required: false,
             Options: Enum.GetNames<RegistrationStatus>().Select(n => new ReportParameterOption(n, n)).ToList()),
     });

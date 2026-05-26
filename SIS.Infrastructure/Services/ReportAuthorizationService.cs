@@ -378,7 +378,7 @@ public class ReportAuthorizationService : IReportAuthorizationService
             .Include(r => r.Category)
             .Where(r => allowedIds.Contains(r.Id))
             .OrderBy(r => r.Category!.Name).ThenBy(r => r.Name)
-            .Select(r => new AccessibleReportDto(r.Id, r.Code, r.Name, r.CategoryId, r.Category!.Name))
+            .Select(r => new AccessibleReportDto(r.Id, r.Code, r.Name, r.Description, r.CategoryId, r.Category!.Name))
             .ToListAsync(ct);
     }
 

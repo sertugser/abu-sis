@@ -48,4 +48,4 @@ public record SetReportAccessGrantDto(
     string? Reason);
 
 // Effective list (frontend için)
-public record AccessibleReportDto(int Id, string Code, string Name, int CategoryId, string CategoryName);
+public record AccessibleReportDto(int Id, string Code, string Name, string? Description, int CategoryId, string CategoryName);

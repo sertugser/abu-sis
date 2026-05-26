@@ -18,4 +18,7 @@ public interface IReportExecutionService
 
     /// <summary>Raporun TÜM satırlarını (sayfalama olmadan) export için çalıştırır.</summary>
     Task<ReportResult> RunForExportAsync(int userId, string reportCode, ReportRunRequest request, CancellationToken ct = default);
+
+    /// <summary>Raporun kullanıcıya görünen başlığı (export dosya adı/başlığı için). Bulunamazsa null.</summary>
+    Task<string?> GetReportTitleAsync(string reportCode, CancellationToken ct = default);
 }

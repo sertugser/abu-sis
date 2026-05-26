@@ -1,7 +1,9 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.Application.Identity.Services;
 using SIS.Application.Reports;
+using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services.Reports;
 
 namespace SIS.Tests.Reports;
@@ -33,7 +35,9 @@ public class ReportExecutionServiceTests
         roles.Setup(r => r.GetRolesAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
              .ReturnsAsync(new[] { "Dean" });
 
-        return new ReportExecutionService(new IReportHandler[] { new FakeHandler() }, authz.Object, scope.Object, roles.Object);
+        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"ReportExec-{Guid.NewGuid()}").Options);
+        return new ReportExecutionService(new IReportHandler[] { new FakeHandler() }, authz.Object, scope.Object, roles.Object, db);
     }
 
     [Fact]

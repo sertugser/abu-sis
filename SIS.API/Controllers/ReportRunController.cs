@@ -50,13 +50,13 @@ public class ReportRunController : ControllerBase
         catch (UnauthorizedAccessException) { return Forbid(); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
 
-        var title = code;
+        var title = await _exec.GetReportTitleAsync(code, ct) ?? code;
         if (string.Equals(format, "pdf", StringComparison.OrdinalIgnoreCase))
-            return File(_export.ToPdf(title, result), "application/pdf", $"{code}.pdf");
+            return File(_export.ToPdf(title, result), "application/pdf", $"{title}.pdf");
 
         if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
             return File(_export.ToXlsx(title, result),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"{code}.xlsx");
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"{title}.xlsx");
 
         return BadRequest(new { message = "Geçersiz format. 'xlsx' veya 'pdf' olmalı." });
     }

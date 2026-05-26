@@ -20,7 +20,7 @@ public sealed class GradeStatusReportHandler : IReportHandler
     public ReportParameterSchema GetParameterSchema() => new(new ReportParameter[]
     {
         new("termId", "Dönem", ReportParameterType.Term, Required: false),
-        new("courseSectionId", "Şube (Section Id)", ReportParameterType.Int, Required: false),
+        new("courseSectionId", "Şube", ReportParameterType.CourseSection, Required: false),
     });
 
     public async Task<ReportResult> RunAsync(ReportRunRequest request, ReportExecutionContext ctx, CancellationToken ct)
