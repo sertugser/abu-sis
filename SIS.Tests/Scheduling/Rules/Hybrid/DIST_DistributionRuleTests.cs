@@ -46,9 +46,10 @@ public sealed class DIST_DistributionRuleTests
     }
 
     [Fact]
-    public void DifferentDay_Violated_StronglyDiscouraged_SoftPenalty30()
+    public void DifferentDay_Violated_StronglyDiscouraged_UsesConfigWeight()
     {
-        // DifferentDay requires distinct days; both Mon → violation
+        // DifferentDay requires distinct days; both Mon → violation.
+        // Ceza ağırlığı config'ten gelir (DistStronglyDiscouragedWeight default 200) — encoder ile parite.
         var rule = new DIST_DistributionRule();
         var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 9, durationHours: 2));
         var other = Candidate(id: 2, courseId: 200, blocks: Block(day: 1, startHour: 14, durationHours: 2));
@@ -58,12 +59,13 @@ public sealed class DIST_DistributionRuleTests
         var ctx = new RuleContext { Candidate = c, Snapshot = snapshot, Config = DefaultConfig() };
 
         rule.Evaluate(ctx).Should().BeEmpty();
-        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(30, 0.01);
+        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(200, 0.01);
     }
 
     [Fact]
-    public void Discouraged_SoftPenalty10()
+    public void Discouraged_UsesConfigWeight()
     {
+        // Discouraged → DistDiscouragedWeight (default 50).
         var rule = new DIST_DistributionRule();
         var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 9, durationHours: 2));
         var other = Candidate(id: 2, courseId: 200, blocks: Block(day: 1, startHour: 14, durationHours: 2));
@@ -72,13 +74,14 @@ public sealed class DIST_DistributionRuleTests
             (100, null, 0), (200, null, 1));
         var ctx = new RuleContext { Candidate = c, Snapshot = snapshot, Config = DefaultConfig() };
 
-        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(10, 0.01);
+        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(50, 0.01);
     }
 
     [Fact]
-    public void Preferred_SoftPenalty5()
+    public void Preferred_NotPenalized()
     {
-        // PreferenceLevel.Preferred (default branch) → 5
+        // Preferred/StronglyPreferred solver encoder'da modellenmiyor (skip); evaluator da
+        // cezalandırmaz (eski "_ => 5.0" drift'i kaldırıldı).
         var rule = new DIST_DistributionRule();
         var c = Candidate(id: 1, courseId: 100, blocks: Block(day: 1, startHour: 9, durationHours: 2));
         var other = Candidate(id: 2, courseId: 200, blocks: Block(day: 1, startHour: 14, durationHours: 2));
@@ -87,7 +90,7 @@ public sealed class DIST_DistributionRuleTests
             (100, null, 0), (200, null, 1));
         var ctx = new RuleContext { Candidate = c, Snapshot = snapshot, Config = DefaultConfig() };
 
-        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(5, 0.01);
+        rule.CalculatePenalty(ctx).RawPenalty.Should().Be(0);
     }
 
     [Fact]
@@ -129,7 +132,7 @@ public sealed class DIST_DistributionRuleTests
             (100, null, 0), (200, null, 1));
         var ctx = new RuleContext { Candidate = c, Snapshot = snapshot, Config = DefaultConfig() };
 
-        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(30, 0.01);
+        rule.CalculatePenalty(ctx).RawPenalty.Should().BeApproximately(200, 0.01);
     }
 
     [Fact]
