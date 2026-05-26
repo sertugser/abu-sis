@@ -75,8 +75,11 @@ public class SchedulingController : ControllerBase
         if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
         if (string.IsNullOrWhiteSpace(days)) return BadRequest(new { error = "En az bir gun secilmelidir." });
 
-        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 1 && d <= 5).ToList();
-        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (1-5)." });
+        // Gün değerleri System.DayOfWeek kodlaması (Pazar=0 … Cumartesi=6). Hafta sonu (Cmt/Paz)
+        // slotları da oluşturulabildiği için arama tüm haftaya açık — eski 1-5 clamp'i hafta sonu
+        // slotlarını programlanamaz bırakıyordu (TimeSlot oluşturma ile çelişki).
+        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 0 && d <= 6).ToList();
+        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (0-6)." });
 
         if (!TimeOnly.TryParse(startTime, out var start) || !TimeOnly.TryParse(endTime, out var end))
             return BadRequest(new { error = "Baslangic/bitis saati gecerli formatta olmalidir (HH:mm)." });
