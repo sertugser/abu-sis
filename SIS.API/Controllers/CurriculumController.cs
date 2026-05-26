@@ -51,7 +51,7 @@ public class CurriculumController(
         bool IsMainGroupCourse, bool IsFormationCourse,
         bool ExcludedFromCreditTotal, bool ExcludedFromTranscriptTotal,
         bool AutoAddOnNewRegistration, bool ShowAtTakenCurriculum,
-        bool ShowInstructorAtRegistration, bool HasCustomExamCurriculum,
+        bool ShowInstructorAtRegistration,
         // Phase 2 — decision metadata
         DateTime? DecisionDate, string? DecisionNo, string? DecisionNote,
         // Phase 2 — curriculum-specific description
@@ -85,7 +85,7 @@ public class CurriculumController(
         bool IsMainGroupCourse = false, bool IsFormationCourse = false,
         bool ExcludedFromCreditTotal = false, bool ExcludedFromTranscriptTotal = false,
         bool AutoAddOnNewRegistration = false, bool ShowAtTakenCurriculum = false,
-        bool ShowInstructorAtRegistration = true, bool HasCustomExamCurriculum = false,
+        bool ShowInstructorAtRegistration = true,
         // Phase 2 decision metadata
         DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
         // Phase 2 description
@@ -102,7 +102,7 @@ public class CurriculumController(
         bool? IsMainGroupCourse = null, bool? IsFormationCourse = null,
         bool? ExcludedFromCreditTotal = null, bool? ExcludedFromTranscriptTotal = null,
         bool? AutoAddOnNewRegistration = null, bool? ShowAtTakenCurriculum = null,
-        bool? ShowInstructorAtRegistration = null, bool? HasCustomExamCurriculum = null,
+        bool? ShowInstructorAtRegistration = null,
         // Phase 2 decision metadata (string? where null = no change; ClearXxx flags allow setting to null)
         DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
         bool ClearDecisionDate = false,
@@ -261,7 +261,7 @@ public class CurriculumController(
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                     cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    cc.ShowInstructorAtRegistration,
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description
@@ -426,7 +426,7 @@ public class CurriculumController(
                 cc.IsMainGroupCourse, cc.IsFormationCourse,
                 cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                 cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                cc.ShowInstructorAtRegistration,
                 cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                 cc.CurriculumDescription,
                 // Phase 3
@@ -491,7 +491,6 @@ public class CurriculumController(
             AutoAddOnNewRegistration = req.AutoAddOnNewRegistration,
             ShowAtTakenCurriculum = req.ShowAtTakenCurriculum,
             ShowInstructorAtRegistration = req.ShowInstructorAtRegistration,
-            HasCustomExamCurriculum = req.HasCustomExamCurriculum,
             // Phase 2 decision metadata
             DecisionDate = req.DecisionDate,
             DecisionNo = req.DecisionNo,
@@ -528,7 +527,7 @@ public class CurriculumController(
             saved.IsMainGroupCourse, saved.IsFormationCourse,
             saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
             saved.AutoAddOnNewRegistration, saved.ShowAtTakenCurriculum,
-            saved.ShowInstructorAtRegistration, saved.HasCustomExamCurriculum,
+            saved.ShowInstructorAtRegistration,
             saved.DecisionDate, saved.DecisionNo, saved.DecisionNote,
             saved.CurriculumDescription,
             // Phase 3
@@ -575,7 +574,6 @@ public class CurriculumController(
         if (req.AutoAddOnNewRegistration.HasValue) cc.AutoAddOnNewRegistration = req.AutoAddOnNewRegistration.Value;
         if (req.ShowAtTakenCurriculum.HasValue) cc.ShowAtTakenCurriculum = req.ShowAtTakenCurriculum.Value;
         if (req.ShowInstructorAtRegistration.HasValue) cc.ShowInstructorAtRegistration = req.ShowInstructorAtRegistration.Value;
-        if (req.HasCustomExamCurriculum.HasValue) cc.HasCustomExamCurriculum = req.HasCustomExamCurriculum.Value;
 
         // Phase 2 — decision metadata
         if (req.ClearDecisionDate) cc.DecisionDate = null;
@@ -816,7 +814,6 @@ public class CurriculumController(
                 AutoAddOnNewRegistration = cc.AutoAddOnNewRegistration,
                 ShowAtTakenCurriculum = cc.ShowAtTakenCurriculum,
                 ShowInstructorAtRegistration = cc.ShowInstructorAtRegistration,
-                HasCustomExamCurriculum = cc.HasCustomExamCurriculum,
                 // Phase 2 — decision metadata
                 DecisionDate = cc.DecisionDate,
                 DecisionNo = cc.DecisionNo,
@@ -877,7 +874,7 @@ public class CurriculumController(
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                     cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    cc.ShowInstructorAtRegistration,
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description

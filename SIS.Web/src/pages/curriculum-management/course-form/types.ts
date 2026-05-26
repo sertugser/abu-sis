@@ -58,7 +58,6 @@ export interface CourseFlagsState {
   autoAddOnNewRegistration: boolean;
   showAtTakenCurriculum: boolean;
   showInstructorAtRegistration: boolean;
-  hasCustomExamCurriculum: boolean;
 }
 
 // Phase 2 — CurriculumCourse-specific decision metadata (Senato kararı vb.)

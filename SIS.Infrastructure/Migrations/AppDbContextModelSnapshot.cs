@@ -1601,9 +1601,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("ExcludedFromTranscriptTotal")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasCustomExamCurriculum")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IncludeInGpa")
                         .HasColumnType("boolean");
 

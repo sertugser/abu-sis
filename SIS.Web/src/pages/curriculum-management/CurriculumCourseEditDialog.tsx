@@ -89,7 +89,6 @@ export default function CurriculumCourseEditDialog({
     autoAddOnNewRegistration: false,
     showAtTakenCurriculum: false,
     showInstructorAtRegistration: true,
-    hasCustomExamCurriculum: false,
   });
   const [decision, setDecision] = useState<CourseDecisionState>({
     decisionDate: '',
@@ -152,7 +151,6 @@ export default function CurriculumCourseEditDialog({
       autoAddOnNewRegistration: curriculumCourse.autoAddOnNewRegistration,
       showAtTakenCurriculum: curriculumCourse.showAtTakenCurriculum,
       showInstructorAtRegistration: curriculumCourse.showInstructorAtRegistration,
-      hasCustomExamCurriculum: curriculumCourse.hasCustomExamCurriculum,
     });
     setDecision({
       decisionDate: curriculumCourse.decisionDate ? curriculumCourse.decisionDate.slice(0, 10) : '',
@@ -318,7 +316,6 @@ export default function CurriculumCourseEditDialog({
         autoAddOnNewRegistration: flags.autoAddOnNewRegistration,
         showAtTakenCurriculum: flags.showAtTakenCurriculum,
         showInstructorAtRegistration: flags.showInstructorAtRegistration,
-        hasCustomExamCurriculum: flags.hasCustomExamCurriculum,
         // Phase 2 — decision metadata (empty string maps to null via Clear flag)
         decisionDate: decision.decisionDate || undefined,
         clearDecisionDate: decision.decisionDate === '',

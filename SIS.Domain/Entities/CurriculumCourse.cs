@@ -28,7 +28,6 @@ public class CurriculumCourse
     public bool AutoAddOnNewRegistration { get; set; } = false;   // ÖSYM Yeni Kayıtta Otomatik Ekle
     public bool ShowAtTakenCurriculum { get; set; } = false;      // Alındığı Yerde Göster
     public bool ShowInstructorAtRegistration { get; set; } = true;// Ders Kayıtta Öğretim Elemanı Görünsün
-    public bool HasCustomExamCurriculum { get; set; } = false;    // Derse Özel Sınav Müfredat Ata
 
     // Karar bilgileri (senato kararı vb.)
     public DateTime? DecisionDate { get; set; }

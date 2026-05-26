@@ -75,7 +75,6 @@ export interface CurriculumCourseItemDto {
   autoAddOnNewRegistration: boolean;
   showAtTakenCurriculum: boolean;
   showInstructorAtRegistration: boolean;
-  hasCustomExamCurriculum: boolean;
   // Phase 2 — decision metadata
   decisionDate: string | null;
   decisionNo: string | null;
@@ -142,7 +141,6 @@ export interface AddCourseRequest {
   autoAddOnNewRegistration?: boolean;
   showAtTakenCurriculum?: boolean;
   showInstructorAtRegistration?: boolean;
-  hasCustomExamCurriculum?: boolean;
   // Phase 2 — decision metadata
   decisionDate?: string | null;
   decisionNo?: string | null;
@@ -170,7 +168,6 @@ export interface UpdateCourseRequest {
   autoAddOnNewRegistration?: boolean;
   showAtTakenCurriculum?: boolean;
   showInstructorAtRegistration?: boolean;
-  hasCustomExamCurriculum?: boolean;
   // Phase 2 — decision metadata
   decisionDate?: string | null;
   decisionNo?: string | null;
