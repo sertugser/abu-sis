@@ -12,14 +12,20 @@ namespace SIS.API.Authorization;
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
 public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
 {
-    private readonly string _permissionKey;
+    private readonly string[] _permissionKeys;
 
     private const string SystemAdminRole = "SystemAdministrator";
     private const string LookupPrefix = "lookup.";
 
-    public RequirePermissionAttribute(string permissionKey)
+    /// <summary>
+    /// Bir veya daha fazla permission anahtarı. Birden fazla verildiğinde "any-of"
+    /// (herhangi biri yeterli) semantiği uygulanır — paylaşılan uçlar için. Aynı method'a
+    /// iki ayrı attribute koymak ise "all-of" (AND) demektir; OR isteniyorsa tek attribute
+    /// içinde birden çok anahtar kullanılmalıdır.
+    /// </summary>
+    public RequirePermissionAttribute(params string[] permissionKeys)
     {
-        _permissionKey = permissionKey;
+        _permissionKeys = permissionKeys;
     }
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
@@ -39,7 +45,8 @@ public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
 
         // 2) lookup.* shortcut — Karar 7: hardcoded, her authenticated user'a açık.
         // DB'de seed edilmediği için PermissionService'e gitmek anlamsız.
-        if (_permissionKey.StartsWith(LookupPrefix, StringComparison.Ordinal))
+        // Any-of: anahtarlardan biri lookup.* ise erişim açıktır.
+        if (_permissionKeys.Any(key => key.StartsWith(LookupPrefix, StringComparison.Ordinal)))
         {
             return;
         }
@@ -55,10 +62,13 @@ public class RequirePermissionAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        var hasPermission = await permissionService.HasPermissionAsync(userId, _permissionKey);
-        if (!hasPermission)
+        // Any-of: anahtarlardan herhangi birine sahipse yetkilidir.
+        foreach (var key in _permissionKeys)
         {
-            context.Result = new ForbidResult();
+            if (await permissionService.HasPermissionAsync(userId, key))
+                return;
         }
+
+        context.Result = new ForbidResult();
     }
 }

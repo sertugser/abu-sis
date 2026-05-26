@@ -215,14 +215,10 @@ public class StudentController : ControllerBase
         if (student == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
-        var objectionEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptObjectionEnabled", true);
-        if (!objectionEnabled)
-            return BadRequest(new { error = "Sosyal transkript itiraz akışı sistem konfigürasyonunda kapalı." });
-
-        var objectionAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-student-objection");
-        if (!objectionAccess.IsOpen)
-            return BadRequest(new { error = objectionAccess.Message ?? "Sosyal transkript itiraz akışı şu anda kapalı." });
-
+        // Not: Bu uç "Dersin Ayrıntıları" (Alınan Dersler) ve "Not Listesi" sayfaları
+        // tarafından genel istatistik görünümü olarak kullanılır; sosyal transkript itiraz
+        // akışına bağlı değildir. Yayın görünürlüğü zaten aşağıda bileşen bazında
+        // (BuildComponentVisibilityMapAsync) ve harf notu için takvim kuralıyla uygulanır.
         var registration = await _context.CourseRegistrations
             .AsNoTracking()
             .Include(cr => cr.CourseSection)

@@ -507,7 +507,6 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         }
 
         // Aktif dönem (rapor üst bloğu)
-        var nowReport = _clock.UtcNow;
         var activeTermName = await _context.AcademicTerms
             .AsNoTracking()
             .ActiveTerm()
@@ -527,6 +526,10 @@ public partial class CourseRegistrationService : ICourseRegistrationService
 
         var grouped = registrations
             .GroupBy(r => r.CourseSection.TermId)
+            // Kronolojik sıra (en yeni dönem üstte): Year → TermType enum değeri.
+            // TermType.ToString() ile alfabetik sıralama YANLIŞTI (Resit/Other dönemleri karışıyordu).
+            .OrderByDescending(g => g.First().CourseSection.Term.Year)
+                .ThenByDescending(g => g.First().CourseSection.Term.TermType)
             .Select(g =>
             {
                 var term = g.First().CourseSection.Term;
@@ -571,8 +574,6 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     }).OrderBy(c => c.CourseCode).ToList()
                 };
             })
-            .OrderByDescending(t => t.Year)
-                .ThenByDescending(t => t.Semester)
             .ToList();
 
         return (grouped, studentInfo);
