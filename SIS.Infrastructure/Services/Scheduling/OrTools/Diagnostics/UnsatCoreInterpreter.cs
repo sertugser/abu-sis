@@ -39,14 +39,15 @@ public sealed class UnsatCoreInterpreter
         SolverRequest request)
     {
         var coreIndices = solver.SufficientAssumptionsForInfeasibility();
-        var allLiterals = registry.AllLiterals;
         var sectionLookup = request.Sections.ToDictionary(s => s.Id, s => s);
         var entries = new List<UnsatCoreEntry>();
 
         foreach (var idx in coreIndices)
         {
-            if (idx < 0 || idx >= allLiterals.Count) continue;
-            var meta = registry.LookupByLiteral(allLiterals[idx]);
+            // idx = literal/proto indeksi (dizi pozisyonu DEĞİL) → index haritasından metadata çöz.
+            // Eski kod allLiterals[idx] ile pozisyon erişimi yapıyordu; proto indeksleri büyük
+            // olduğundan guard çoğunu eliyor, UNSAT teşhisi sessizce boşalıyordu.
+            var meta = registry.LookupByIndex(idx);
             if (meta == null) continue;
 
             var reason = BuildReason(meta, sectionLookup);
