@@ -30,15 +30,15 @@ public sealed class StudentListReportHandler : IReportHandler
         var p = request.Parameters;
         IQueryable<Domain.Entities.Student> q = _db.Students.AsNoTracking();
 
-        if (TryEnum(p, "status", out StudentStatus status))
+        if (p.TryGetEnum("status", out StudentStatus status))
             q = q.Where(s => s.Status == status);
 
-        if (TryInt(p, "programId", out var programId))
+        if (p.TryGetInt("programId", out var programId))
             q = q.Where(s => s.StudentPrograms.Any(sp => sp.ProgramId == programId));
 
-        if (TryDecimal(p, "minCgpa", out var minCgpa))
+        if (p.TryGetDecimal("minCgpa", out var minCgpa))
             q = q.Where(s => s.Cgpa >= minCgpa);
-        if (TryDecimal(p, "maxCgpa", out var maxCgpa))
+        if (p.TryGetDecimal("maxCgpa", out var maxCgpa))
             q = q.Where(s => s.Cgpa <= maxCgpa);
 
         // Scope: SystemAdmin değilse ve scope aktifse, erişilebilir fakültelerdeki öğrencilerle sınırla.
@@ -74,26 +74,5 @@ public sealed class StudentListReportHandler : IReportHandler
         };
 
         return new ReportResult(columns, rows.Cast<IReadOnlyList<object?>>().ToList(), total);
-    }
-
-    private static bool TryEnum<TEnum>(IReadOnlyDictionary<string, string?> p, string key, out TEnum value)
-        where TEnum : struct, Enum
-    {
-        value = default;
-        return p.TryGetValue(key, out var raw) && !string.IsNullOrWhiteSpace(raw) && Enum.TryParse(raw, out value);
-    }
-
-    private static bool TryInt(IReadOnlyDictionary<string, string?> p, string key, out int value)
-    {
-        value = 0;
-        return p.TryGetValue(key, out var raw) && int.TryParse(raw, out value);
-    }
-
-    private static bool TryDecimal(IReadOnlyDictionary<string, string?> p, string key, out decimal value)
-    {
-        value = 0m;
-        return p.TryGetValue(key, out var raw)
-            && decimal.TryParse(raw, System.Globalization.NumberStyles.Number,
-                System.Globalization.CultureInfo.InvariantCulture, out value);
     }
 }

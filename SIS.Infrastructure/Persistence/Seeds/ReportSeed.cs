@@ -19,15 +19,34 @@ public static class ReportSeed
             await db.SaveChangesAsync(ct);
         }
 
-        if (!await db.ReportDefinitions.AnyAsync(r => r.Code == "ogrenci-listesi", ct))
+        // Handler'ı olan raporlar (Code = handler.Code). Yeni handler eklerken buraya bir satır ekle.
+        var definitions = new (string Code, string Name, string Description)[]
         {
-            db.ReportDefinitions.Add(new ReportDefinition
+            ("ogrenci-listesi", "Öğrenci Listesi", "Duruma, programa ve GNO aralığına göre öğrenci listesi."),
+            ("mezun-aday-listesi", "Mezun Aday Listesi", "Tamamlanan yarıyıl ve GNO eşiğini geçen aktif öğrenciler."),
+            ("ders-kayit-listesi", "Ders Kayıt Listesi", "Bir dönem/şubedeki ders kayıtları (öğrenci, ders, durum, not)."),
+        };
+
+        var codes = definitions.Select(d => d.Code).ToArray();
+        var existingCodes = await db.ReportDefinitions
+            .Where(r => codes.Contains(r.Code))
+            .Select(r => r.Code)
+            .ToListAsync(ct);
+
+        var toAdd = definitions
+            .Where(d => !existingCodes.Contains(d.Code))
+            .Select(d => new ReportDefinition
             {
-                Code = "ogrenci-listesi",
-                Name = "Öğrenci Listesi",
-                Description = "Duruma, programa ve GNO aralığına göre öğrenci listesi.",
+                Code = d.Code,
+                Name = d.Name,
+                Description = d.Description,
                 CategoryId = category.Id,
-            });
+            })
+            .ToList();
+
+        if (toAdd.Count > 0)
+        {
+            db.ReportDefinitions.AddRange(toAdd);
             await db.SaveChangesAsync(ct);
         }
     }
