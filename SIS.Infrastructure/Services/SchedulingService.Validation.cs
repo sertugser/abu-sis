@@ -62,9 +62,30 @@ public partial class SchedulingService
             var expectedType = section.Course.LabHours > 0 && section.Course.TheoryHours == 0
                 ? ClassroomType.Lab : ClassroomType.Lecture;
 
-            var fallbackClassroomId = await _context.Classrooms
+            // Temsili oda yalnız tip değil, section'ın FAKÜLTESİNE bu dönem atanmış derslikler
+            // arasından seçilir → bulk-validate'in test ettiği oda, drop'ta önerilen (faculty-scoped,
+            // #18) odalarla tutarlı olur. Aksi halde başka fakültenin odası test edilip hücre yanlış
+            // yeşil/kırmızı gösterebilirdi. (Ortak ders → DepartmentId null → faculty filtresi yok.)
+            var fallbackQuery = _context.Classrooms
                 .AsNoTracking()
-                .Where(c => c.Type == expectedType && c.Capacity >= section.Capacity)
+                .Where(c => c.Type == expectedType && c.Capacity >= section.Capacity);
+
+            var sectionFacultyId = section.Course.DepartmentId.HasValue
+                ? await _context.Departments.AsNoTracking()
+                    .Where(d => d.Id == section.Course.DepartmentId.Value)
+                    .Select(d => (int?)d.FacultyId)
+                    .FirstOrDefaultAsync(cancellationToken)
+                : null;
+
+            if (sectionFacultyId.HasValue)
+            {
+                var assignedIds = _context.ClassroomTermAssignments
+                    .Where(cta => cta.TermId == section.TermId && cta.FacultyId == sectionFacultyId.Value)
+                    .Select(cta => cta.ClassroomId);
+                fallbackQuery = fallbackQuery.Where(c => assignedIds.Contains(c.Id));
+            }
+
+            var fallbackClassroomId = await fallbackQuery
                 .OrderBy(c => c.Id)
                 .Select(c => (int?)c.Id)
                 .FirstOrDefaultAsync(cancellationToken);
