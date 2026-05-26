@@ -158,17 +158,6 @@
 
 ---
 
-### Kullanıcı Rapor Tasarım Grupları
-
-| | |
-|---|---|
-| **Route** | `/kullanici-rapor-tasarim-gruplari` |
-| **Dosya** | `SIS.Web/src/pages/UserReportDesignGroupsPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
----
-
 ### Kullanıcı Tanımlama
 
 | | |
@@ -1774,7 +1763,14 @@
 | **Route** | `/raporlarim` |
 | **Dosya** | `SIS.Web/src/pages/MyReportsPage.tsx` |
 | **Roller** | administrativeStaff, advisor, dean, departmentManager, instructor, student, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 1 (Sheet: ReportRunPanel — in-page rapor çalıştırma) |
+
+**Veri kancaları:**
+- `useReportSchema()` — rapor parametre şeması
+- `useRunReport()` — raporu çalıştır (sayfalı sonuç)
+- `useExportReport()` — Excel/PDF indir
+
+Rapor motoru (Faz 1): rapora tıkla → sağdan Sheet → şemadan otomatik filtre → Çalıştır → tablo → Excel/PDF. Backend handler registry (`IReportHandler`), endpoint'ler `/api/me/reports/{code}/{schema,run,export}`.
 
 ---
 

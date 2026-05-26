@@ -306,6 +306,19 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IMenuAdminService, MenuAdminService>();
 builder.Services.AddScoped<IPermissionDelegationService, PermissionDelegationService>();
 builder.Services.AddScoped<IReportAuthorizationService, ReportAuthorizationService>();
+
+// Rapor motoru (Faz 1): handler registry + tek çatı
+builder.Services.AddScoped<SIS.Application.Reports.IUserRoleReader, SIS.Infrastructure.Services.Reports.UserRoleReader>();
+builder.Services.AddScoped<SIS.Application.Reports.IReportExecutionService, SIS.Infrastructure.Services.Reports.ReportExecutionService>();
+builder.Services.AddSingleton<SIS.Application.Reports.IReportExportService, SIS.Infrastructure.Services.Reports.ReportExportService>();
+// Tüm IReportHandler implementasyonlarını otomatik kaydet (yeni rapor = sadece yeni handler sınıfı)
+foreach (var handlerType in typeof(SIS.Infrastructure.Services.Reports.Handlers.StudentListReportHandler).Assembly.GetTypes()
+             .Where(t => t is { IsAbstract: false, IsInterface: false }
+                         && typeof(SIS.Application.Reports.IReportHandler).IsAssignableFrom(t)))
+{
+    builder.Services.AddScoped(typeof(SIS.Application.Reports.IReportHandler), handlerType);
+}
+
 builder.Services.AddScoped<ICurrentUserScope, CurrentUserScope>();
 builder.Services.AddScoped<IScopeGuard, ScopeGuard>();
 builder.Services.AddScoped<IScopeResolver, ScopeResolver>();

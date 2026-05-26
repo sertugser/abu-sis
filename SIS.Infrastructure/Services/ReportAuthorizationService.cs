@@ -11,6 +11,14 @@ public class ReportAuthorizationService : IReportAuthorizationService
 {
     private const string SystemAdminRole = "SystemAdministrator";
 
+    // DB kolon limitleriyle birebir (AppDbContext + migration). Aşımı temiz 400 olarak yakala,
+    // aksi halde EF/Postgres insert'te yakalanmamış 500 üretir.
+    private const int CategoryCodeMaxLength = 64;
+    private const int ReportCodeMaxLength = 100;
+    private const int NameMaxLength = 200;
+    private const int DescriptionMaxLength = 500;
+    private const int ReasonMaxLength = 500;
+
     private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
@@ -39,9 +47,8 @@ public class ReportAuthorizationService : IReportAuthorizationService
 
     public async Task<ReportCategoryDto> CreateCategoryAsync(CreateReportCategoryDto dto, CancellationToken ct = default)
     {
-        ValidateCode(dto.Code);
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new InvalidOperationException("Kategori adı zorunlu.");
+        ValidateCode(dto.Code, CategoryCodeMaxLength);
+        ValidateName(dto.Name);
 
         if (await _db.ReportCategories.AnyAsync(c => c.Code == dto.Code, ct))
             throw new InvalidOperationException($"Kod zaten kullanımda: {dto.Code}");
@@ -64,8 +71,7 @@ public class ReportAuthorizationService : IReportAuthorizationService
         var entity = await _db.ReportCategories.FirstOrDefaultAsync(c => c.Id == id, ct)
             ?? throw new KeyNotFoundException($"Kategori bulunamadı: {id}");
 
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new InvalidOperationException("Kategori adı zorunlu.");
+        ValidateName(dto.Name);
 
         entity.Name = dto.Name.Trim();
         entity.UpdatedAt = DateTime.UtcNow;
@@ -108,9 +114,9 @@ public class ReportAuthorizationService : IReportAuthorizationService
 
     public async Task<ReportDefinitionDto> CreateReportAsync(CreateReportDefinitionDto dto, CancellationToken ct = default)
     {
-        ValidateCode(dto.Code);
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new InvalidOperationException("Rapor adı zorunlu.");
+        ValidateCode(dto.Code, ReportCodeMaxLength);
+        ValidateName(dto.Name);
+        ValidateOptionalText(dto.Description, DescriptionMaxLength, "Açıklama");
 
         var category = await _db.ReportCategories.FirstOrDefaultAsync(c => c.Id == dto.CategoryId, ct)
             ?? throw new KeyNotFoundException($"Kategori bulunamadı: {dto.CategoryId}");
@@ -140,8 +146,8 @@ public class ReportAuthorizationService : IReportAuthorizationService
         var entity = await _db.ReportDefinitions.FirstOrDefaultAsync(r => r.Id == id, ct)
             ?? throw new KeyNotFoundException($"Rapor bulunamadı: {id}");
 
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new InvalidOperationException("Rapor adı zorunlu.");
+        ValidateName(dto.Name);
+        ValidateOptionalText(dto.Description, DescriptionMaxLength, "Açıklama");
 
         var category = await _db.ReportCategories.FirstOrDefaultAsync(c => c.Id == dto.CategoryId, ct)
             ?? throw new KeyNotFoundException($"Kategori bulunamadı: {dto.CategoryId}");
@@ -257,6 +263,8 @@ public class ReportAuthorizationService : IReportAuthorizationService
         int createdByUserId,
         CancellationToken ct = default)
     {
+        ValidateOptionalText(dto.Reason, ReasonMaxLength, "Sebep");
+
         var report = await _db.ReportDefinitions.FirstOrDefaultAsync(r => r.Id == dto.ReportId, ct)
             ?? throw new KeyNotFoundException($"Rapor bulunamadı: {dto.ReportId}");
 
@@ -404,18 +412,32 @@ public class ReportAuthorizationService : IReportAuthorizationService
             .AnyAsync(rp => rp.CategoryId == categoryId && roleIds.Contains(rp.RoleId), ct);
     }
 
-    private static void ValidateCode(string code)
+    private static void ValidateCode(string code, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(code))
             throw new InvalidOperationException("Kod zorunlu.");
         var trimmed = code.Trim();
-        if (trimmed.Length < 2 || trimmed.Length > 100)
-            throw new InvalidOperationException("Kod 2-100 karakter arası olmalı.");
+        if (trimmed.Length < 2 || trimmed.Length > maxLength)
+            throw new InvalidOperationException($"Kod 2-{maxLength} karakter arası olmalı.");
         foreach (var ch in trimmed)
         {
             var ok = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_';
             if (!ok)
                 throw new InvalidOperationException("Kod sadece küçük harf, rakam, tire ve alt-tire içerebilir.");
         }
+    }
+
+    private static void ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("Ad zorunlu.");
+        if (name.Trim().Length > NameMaxLength)
+            throw new InvalidOperationException($"Ad en fazla {NameMaxLength} karakter olabilir.");
+    }
+
+    private static void ValidateOptionalText(string? text, int maxLength, string fieldLabel)
+    {
+        if (!string.IsNullOrWhiteSpace(text) && text.Trim().Length > maxLength)
+            throw new InvalidOperationException($"{fieldLabel} en fazla {maxLength} karakter olabilir.");
     }
 }

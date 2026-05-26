@@ -219,6 +219,18 @@ Yetki sistemi artık ortogonal bir "scope" boyutuna da sahip. Scope-bound rol ü
 Yeni bir entity faculty'e doğrudan veya dolaylı bağlıysa, scope gerekip gerekmediği kontrol edilip
 gerekliyse `OnModelCreating` query filter zincirine eklenmeli.
 
+## Rapor Motoru (Faz 1 — handler registry + tek çatı)
+
+Raporlar tek ortak motorda çalışır; ikibaşlılık (her rapora ayrı sayfa/export) yok.
+
+- **Yeni rapor = tek `IReportHandler` sınıfı** (`SIS.Application/Reports/IReportHandler.cs`). `Code` (ReportDefinition.Code ile birebir) + `GetParameterSchema()` + `RunAsync(request, ctx, ct)` → `ReportResult` (kolon+satır). DI'da otomatik taranır (Program.cs handler scan).
+- **Çalıştırma:** `IReportExecutionService` (`ReportExecutionService`) → kod→handler, `CanAccessReportAsync` yetki, parametre, scope (`ICurrentUserScope` → `ReportExecutionContext.ScopeFacultyIds`), sayfalama.
+- **Export:** tek `IReportExportService` (`ReportExportService`) → ClosedXML (.xlsx) / QuestPDF (.pdf).
+- **Endpoint'ler:** `GET /api/me/reports/{code}/schema`, `POST .../{code}/run`, `POST .../{code}/export?format=xlsx|pdf` (`ReportRunController`). Rapor listesi: `GET /api/me/reports` (ReportAuthorizationController).
+- **Frontend:** tek çatı — `MyReportsPage` katalog → `ReportRunPanel` (Sheet) → `ReportFilterForm` (şemadan otomatik) → `ReportResultTable` (+ Excel/PDF). `reportRun.api.ts` + `useReportRun.ts`.
+- **Seed:** handler'ı olan raporlar `ReportSeed` ile idempotent eklenir (kategori `genel-raporlar`). İlk rapor: `ogrenci-listesi` (`StudentListReportHandler`).
+- **Yetkilendirme** hâlâ rol bazlı (kategori×rol + rapor×rol override); kişi/grup seviyesi Faz 2'de (birleşik `ReportAccessGrant`). Tasarım: `docs/superpowers/specs/2026-05-26-rapor-sistemi-obs-overhaul-design.md`.
+
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports
 - ApplicationUser (IdentityUser) lives in SIS.Infrastructure/Persistence/

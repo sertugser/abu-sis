@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/components/ui/global-toast';
 import { getAssignableRoles, type RoleDto } from '@/api/permissionAdmin.api';
 import { usePermissions } from '../context/PermissionContext';
 import {
@@ -68,6 +69,15 @@ import type {
   ReportDefinitionDto,
   ReportPermissionOverrideDto,
 } from '@/api/reportAuthorization.api';
+
+// DB kolon limitleriyle aynı (backend ValidateCode/ValidateName ile hizalı).
+const FIELD_LIMITS = {
+  categoryCode: 64,
+  reportCode: 100,
+  name: 200,
+  description: 500,
+  reason: 500,
+} as const;
 
 function extractError(err: unknown, fallback: string): string {
   if (err && typeof err === 'object') {
@@ -118,6 +128,7 @@ export default function UserReportGroupsPage() {
 // ════════════════════════════════════════════════════════════
 
 function CategoriesTab({ canManage }: { canManage: boolean }) {
+  const { showSuccess, showError } = useToast();
   const { data: categories, isLoading } = useReportCategories();
   const createMut = useCreateReportCategory();
   const updateMut = useUpdateReportCategory();
@@ -230,13 +241,13 @@ function CategoriesTab({ canManage }: { canManage: boolean }) {
             <AlertDialogCancel>Vazgeç</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
-                if (deleteTarget) {
-                  try {
-                    await deleteMut.mutateAsync(deleteTarget.id);
-                  } catch {
-                    /* error swallowed; consider toast */
-                  }
+                if (!deleteTarget) return;
+                try {
+                  await deleteMut.mutateAsync(deleteTarget.id);
+                  showSuccess('Kategori silindi', deleteTarget.name);
                   setDeleteTarget(null);
+                } catch (err) {
+                  showError('Kategori silinemedi', extractError(err, 'İşlem başarısız.'));
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -295,6 +306,7 @@ function CategoryFormDialog({
               onChange={(e) => setCode(e.target.value)}
               disabled={isEdit}
               placeholder="academic"
+              maxLength={FIELD_LIMITS.categoryCode}
               required
             />
           </div>
@@ -305,6 +317,7 @@ function CategoryFormDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Akademik Raporlar"
+              maxLength={FIELD_LIMITS.name}
               required
             />
           </div>
@@ -329,6 +342,7 @@ function CategoryFormDialog({
 // ════════════════════════════════════════════════════════════
 
 function ReportsTab({ canManage }: { canManage: boolean }) {
+  const { showSuccess, showError } = useToast();
   const { data: categories } = useReportCategories();
   const [filterCategoryId, setFilterCategoryId] = useState<string>('all');
   const filterId = filterCategoryId === 'all' ? undefined : Number(filterCategoryId);
@@ -469,9 +483,13 @@ function ReportsTab({ canManage }: { canManage: boolean }) {
             <AlertDialogCancel>Vazgeç</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
-                if (deleteTarget) {
+                if (!deleteTarget) return;
+                try {
                   await deleteMut.mutateAsync(deleteTarget.id);
+                  showSuccess('Rapor silindi', deleteTarget.name);
                   setDeleteTarget(null);
+                } catch (err) {
+                  showError('Rapor silinemedi', extractError(err, 'İşlem başarısız.'));
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -541,6 +559,7 @@ function ReportFormDialog({
               onChange={(e) => setCode(e.target.value)}
               disabled={isEdit}
               placeholder="ogrenci-mezuniyet-listesi"
+              maxLength={FIELD_LIMITS.reportCode}
               required
             />
           </div>
@@ -551,6 +570,7 @@ function ReportFormDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Mezuniyet Listesi"
+              maxLength={FIELD_LIMITS.name}
               required
             />
           </div>
@@ -574,6 +594,7 @@ function ReportFormDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
+              maxLength={FIELD_LIMITS.description}
             />
           </div>
           {errorMsg && <Alert variant="destructive"><AlertDescription>{errorMsg}</AlertDescription></Alert>}
@@ -597,6 +618,7 @@ function ReportFormDialog({
 // ════════════════════════════════════════════════════════════
 
 function PermissionsTab({ canManage }: { canManage: boolean }) {
+  const { showSuccess, showError } = useToast();
   const { data: matrix, isLoading: matrixLoading } = useReportPermissionMatrix();
   const { data: roles } = useQuery({
     queryKey: ['admin', 'roles'],
@@ -626,7 +648,16 @@ function PermissionsTab({ canManage }: { canManage: boolean }) {
     try {
       await setMut.mutateAsync({ categoryId, roleIds: newRoleIds });
     } catch (err) {
-      console.error(err);
+      showError('Yetki güncellenemedi', extractError(err, 'İşlem başarısız.'));
+    }
+  };
+
+  const handleDeleteOverride = async (id: number) => {
+    try {
+      await deleteOverride.mutateAsync(id);
+      showSuccess('Override silindi');
+    } catch (err) {
+      showError('Override silinemedi', extractError(err, 'İşlem başarısız.'));
     }
   };
 
@@ -753,7 +784,7 @@ function PermissionsTab({ canManage }: { canManage: boolean }) {
                         <Button
                           variant="ghost" size="sm"
                           className="text-destructive"
-                          onClick={() => deleteOverride.mutate(o.id)}
+                          onClick={() => handleDeleteOverride(o.id)}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -873,6 +904,7 @@ function OverrideFormDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
+              maxLength={FIELD_LIMITS.reason}
               placeholder="Neden bu override gerekiyor?"
             />
           </div>

@@ -113,6 +113,7 @@ public class ReportAuthorizationController : ControllerBase
         if (!TryGetCurrentUserId(out var uid)) return Unauthorized();
         try { return Ok(await _service.UpsertOverrideAsync(dto, uid, ct)); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpDelete("api/admin/report-permissions/overrides/{id:int}")]

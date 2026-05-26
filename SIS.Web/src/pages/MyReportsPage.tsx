@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { myReportsApi, type AccessibleReportDto } from '@/api/myReports.api';
+import { ReportRunPanel } from '@/components/reports/ReportRunPanel';
 
 export default function MyReportsPage() {
   const { data, isLoading, error } = useQuery({
@@ -15,6 +16,7 @@ export default function MyReportsPage() {
   });
 
   const [filter, setFilter] = useState('');
+  const [activeReport, setActiveReport] = useState<AccessibleReportDto | null>(null);
 
   const grouped = useMemo(() => {
     if (!data) return [];
@@ -102,12 +104,7 @@ export default function MyReportsPage() {
                         key={r.id}
                         type="button"
                         className="text-left rounded-md border bg-card hover:bg-muted/40 transition-colors px-3 py-3"
-                        onClick={() => {
-                          // Rapor altyapısı geldiğinde açma logic'i buraya bağlanacak
-                          alert(
-                            `Rapor: ${r.name}\nKod: ${r.code}\n\nRapor altyapısı henüz aktif değil — yetkilendirme tarafı çalışıyor, rapor üretimi sonra eklenecek.`,
-                          );
-                        }}
+                        onClick={() => setActiveReport(r)}
                       >
                         <div className="font-medium text-sm">{r.name}</div>
                         <div className="text-xs text-muted-foreground font-mono mt-1">{r.code}</div>
@@ -120,6 +117,8 @@ export default function MyReportsPage() {
           )}
         </CardContent>
       </Card>
+
+      <ReportRunPanel report={activeReport} onClose={() => setActiveReport(null)} />
     </div>
   );
 }

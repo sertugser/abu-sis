@@ -43,5 +43,8 @@ public static partial class SeedData
         // ── RBAC Phase 2 (Permission Bundles) ───────────────────
         // MenuStructureSeed sonrası: bundle'lar menu modüllerinden derive ediliyor
         await PermissionBundleSeed.SeedAsync(context);
+
+        // ── Rapor Motoru (Faz 1): handler'ı olan raporları idempotent ekle ──
+        await ReportSeed.SeedAsync(context);
     }
 }
