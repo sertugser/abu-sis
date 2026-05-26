@@ -103,11 +103,11 @@ export function useApplySchedule() {
 
 export function useAvailableClassrooms(
   termId: number | null, day?: number, startTime?: string, endTime?: string,
-  minCapacity?: number, type?: string,
+  minCapacity?: number, type?: string, facultyId?: number,
 ) {
   return useQuery({
-    queryKey: ['availableClassrooms', termId, day, startTime, endTime, minCapacity, type],
-    queryFn: () => getAvailableClassrooms(termId!, day, startTime, endTime, minCapacity, type),
+    queryKey: ['availableClassrooms', termId, day, startTime, endTime, minCapacity, type, facultyId],
+    queryFn: () => getAvailableClassrooms(termId!, day, startTime, endTime, minCapacity, type, facultyId),
     enabled: termId != null,
     staleTime: 0,
   });

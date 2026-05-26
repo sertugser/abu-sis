@@ -310,6 +310,7 @@ export function AutoScheduleTab({
           endTime={assignSlot.endTime}
           allowedMode={assignSlot.allowedMode}
           termId={termId}
+          facultyId={facultyId}
           sections={sections}
         />
       )}

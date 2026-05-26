@@ -59,6 +59,7 @@ interface SlotAssignDialogProps {
   endTime: string;
   allowedMode: TimeSlotAllowedMode;
   termId: number;
+  facultyId: number;
   sections: FacultyPlanningSection[];
 }
 
@@ -89,6 +90,7 @@ export function SlotAssignDialog({
   endTime,
   allowedMode,
   termId,
+  facultyId,
   sections,
 }: SlotAssignDialogProps) {
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
@@ -337,6 +339,7 @@ export function SlotAssignDialog({
                     expanded={activeSectionId === s.sectionId}
                     onExpand={() => setActiveSectionId(prev => prev === s.sectionId ? null : s.sectionId)}
                     termId={termId}
+                    facultyId={facultyId}
                     day={day}
                     startTime={startTime}
                     endTime={endTime}
@@ -371,6 +374,7 @@ interface SectionCardProps {
   expanded: boolean;
   onExpand: () => void;
   termId: number;
+  facultyId: number;
   day: number;
   startTime: string;
   endTime: string;
@@ -383,18 +387,25 @@ function SectionCard({
   expanded,
   onExpand,
   termId,
+  facultyId,
   day,
   startTime,
   endTime,
   onAssign,
   isAssigning,
 }: SectionCardProps) {
+  // Pür-lab dersler Lab tipi, diğerleri Lecture bekler (editör/Assignment.cs ile birebir türetim).
+  // Tip + facultyId classroom sorgusuna geçer → yalnız fakülteye atanmış, doğru tipte derslikler önerilir
+  // (yanlış tip / başka fakülte odası önerip backend'in reddetmesi engellenir).
+  const requiredType = section.labHours > 0 && section.theoryHours === 0 ? 'Lab' : 'Lecture';
   const classroomsQuery = useAvailableClassrooms(
     termId,
     day,
     startTime,
     endTime,
     section.capacity,
+    requiredType,
+    facultyId,
   );
   const [selectedClassroomId, setSelectedClassroomId] = useState<string>('');
 

@@ -201,10 +201,10 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> GetAvailableClassrooms(
         [FromQuery] int termId, [FromQuery] DayOfWeek? day,
         [FromQuery] TimeOnly? startTime, [FromQuery] TimeOnly? endTime,
-        [FromQuery] int? minCapacity, [FromQuery] string? type,
+        [FromQuery] int? minCapacity, [FromQuery] string? type, [FromQuery] int? facultyId,
         CancellationToken ct)
     {
-        var result = await _service.GetAvailableClassroomsAsync(termId, day, startTime, endTime, minCapacity, type, ct);
+        var result = await _service.GetAvailableClassroomsAsync(termId, day, startTime, endTime, minCapacity, type, facultyId, ct);
         return Ok(result);
     }
 

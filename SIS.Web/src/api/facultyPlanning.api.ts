@@ -57,10 +57,11 @@ export async function applySchedule(request: ApplyScheduleRequest): Promise<Appl
 }
 
 export async function getAvailableClassrooms(
-  termId: number, day?: number, startTime?: string, endTime?: string, minCapacity?: number, type?: string,
+  termId: number, day?: number, startTime?: string, endTime?: string, minCapacity?: number,
+  type?: string, facultyId?: number,
 ): Promise<AvailableClassroom[]> {
   const { data } = await apiClient.get<AvailableClassroom[]>('/faculty-planning/available-classrooms', {
-    params: { termId, day, startTime, endTime, minCapacity, type },
+    params: { termId, day, startTime, endTime, minCapacity, type, facultyId },
   });
   return data;
 }

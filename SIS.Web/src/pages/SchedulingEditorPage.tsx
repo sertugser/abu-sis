@@ -706,7 +706,7 @@ export default function SchedulingEditorPage() {
         const requiredType = section.labHours > 0 && section.theoryHours === 0 ? 'Lab' : 'Lecture';
         try {
           const available = await getAvailableClassrooms(
-            termId, targetDay, startHm, endHm, section.capacity, requiredType,
+            termId, targetDay, startHm, endHm, section.capacity, requiredType, facultyId ?? undefined,
           );
           if (available.length === 0) {
             setFeedback({
@@ -820,7 +820,7 @@ export default function SchedulingEditorPage() {
         setFeedback({ kind: 'error', message: extractError(error, 'Taşıma başarısız.') });
       },
     });
-  }, [sections, timeSlots, assignMutation, unassignMutation, termId]);
+  }, [sections, timeSlots, assignMutation, unassignMutation, termId, facultyId]);
 
   /**
    * Override onay handler — kullanıcı dialog'da "Yine de devam et" derse aynı request'i
