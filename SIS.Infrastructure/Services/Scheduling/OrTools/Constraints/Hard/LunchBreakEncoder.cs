@@ -1,7 +1,12 @@
+using Google.OrTools.Sat;
+using SIS.Application.Scheduling.Solver;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
+
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
 /// <summary>
-/// H13 — Lunch Break. Section'lar öğle arası saatlerinde başlayamaz.
+/// H13 — Lunch Break. Section'ların blokları öğle arası slot'larını KAPSAYAMAZ (yalnız "başlayamaz"
+/// değil — span overlap; H13_LunchBreakRule evaluator'ı ile parite).
 ///
 /// Lunch start/end SystemConfig'ten okunur (Schedule.LunchBreakStart / Schedule.LunchBreakEnd, default 11:40-12:20).
 /// Encoder.Encode sync olduğu için config TimeOnly'lar constructor'a enjekte edilir;
@@ -9,8 +14,9 @@ namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 ///
 /// Admin lunch saatlerini DB'den değiştirebilir → 5 dk cache sonra etkili.
 ///
-/// CP-SAT model: TimeSlots arasında StartTime ∈ [lunchStart, lunchEnd) olanları belirle.
-/// Section'ın start indeksi bu slot'lara eşit olamaz: Add(start != slotIndex).OnlyEnforceIf(literal).
+/// CP-SAT model: TimeSlots arasında StartTime ∈ [lunchStart, lunchEnd) olan lunch slot'larını belirle.
+/// Bir blok ([start, start+duration)) bir lunch slot'unu kapsarsa start ∈ [lunchIdx-duration+1, lunchIdx];
+/// bu start aralığı (aynı güne clamp'li) yasaklanır → blok öğle arasını es geçemez.
 /// </summary>
 public sealed class LunchBreakEncoder : IConstraintEncoder
 {
@@ -41,53 +47,63 @@ public sealed class LunchBreakEncoder : IConstraintEncoder
         if (!string.Equals(category, "Hard", StringComparison.OrdinalIgnoreCase))
             return;
 
-        // Find slot indices whose start time falls within [lunchStart, lunchEnd)
+        // Lunch slot indeksleri + her günün ilk global indeksi (start aralığını aynı güne clamp için).
+        var slots = ctx.Request.TimeSlots;
         var lunchSlotIndices = new List<int>();
-        for (int i = 0; i < ctx.Request.TimeSlots.Count; i++)
+        var dayFirstIndex = new Dictionary<DayOfWeek, int>();
+        for (int i = 0; i < slots.Count; i++)
         {
-            var slot = ctx.Request.TimeSlots[i];
-            if (slot.StartTime >= _lunchStart && slot.StartTime < _lunchEnd)
+            if (!dayFirstIndex.ContainsKey(slots[i].DayOfWeek))
+                dayFirstIndex[slots[i].DayOfWeek] = i;
+            if (slots[i].StartTime >= _lunchStart && slots[i].StartTime < _lunchEnd)
                 lunchSlotIndices.Add(i);
         }
 
         if (lunchSlotIndices.Count == 0)
             return;  // no lunch slots in this term's grid
 
-        // For each section's lecture/lab interval, forbid start at lunch slot indices
         foreach (var section in ctx.Request.Sections)
         {
             if (section.TheoryHours > 0)
             {
                 var iv = ctx.Variables.GetLectureInterval(section.Id);
                 if (iv != null)
-                {
-                    foreach (var lunchIdx in lunchSlotIndices)
-                    {
-                        var literal = ctx.Assumptions.Register(Code, primarySectionId: section.Id, secondarySectionId: lunchIdx);
-                        ctx.Model.Add(iv.StartExpr() != lunchIdx).OnlyEnforceIf(literal);
-                    }
-                }
+                    ForbidCovering(ctx, section.Id, iv, section.TheoryHours, lunchSlotIndices, dayFirstIndex, slots);
             }
 
             if (section.LabHours > 0)
             {
-                // Plan 9 Issue 3 — multi-block lab parity (Plan 7b Task 7 plural API).
-                // Pre-fix used singular GetLabInterval which only returns block 0; non-primary
-                // blocks (LabHours > MaxLabBlockHours, e.g. LabHours=4 / max=2 → 2 blocks)
-                // could land in lunch slots. Iterate ALL blocks via GetLabIntervals so every
-                // block start avoids each lunch slot index. Pattern matches LunchBreakSoftEncoder
-                // (Plan 8 Task 6) and ClassroomConflictEncoder (Plan 7b Task 7).
+                // Multi-block lab: her blok kendi süresiyle değerlendirilir (LabBlockSplitter ile aynı bölünme).
                 var labIntervals = ctx.Variables.GetLabIntervals(section.Id);
-                foreach (var iv in labIntervals)
+                var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(section.LabHours, ctx.Request.MaxLabBlockHours);
+                for (int b = 0; b < labIntervals.Count; b++)
                 {
-                    foreach (var lunchIdx in lunchSlotIndices)
-                    {
-                        var literal = ctx.Assumptions.Register(Code,
-                            primarySectionId: section.Id, secondarySectionId: lunchIdx);
-                        ctx.Model.Add(iv.StartExpr() != lunchIdx).OnlyEnforceIf(literal);
-                    }
+                    var duration = b < blockSizes.Count ? blockSizes[b] : 1;
+                    ForbidCovering(ctx, section.Id, labIntervals[b], duration, lunchSlotIndices, dayFirstIndex, slots);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Bloğun ([start, start+duration)) herhangi bir lunch slot'unu kapsamasını yasaklar.
+    /// Blok lunchIdx'i kapsarsa start ∈ [lunchIdx-duration+1, lunchIdx]; bu aralık lunchIdx'in
+    /// gününün başına clamp'lenir (önceki günün başlangıçları tek-gün blok kuralı gereği bu lunch
+    /// slot'unu zaten kapsayamaz, onları yasaklamak meşru blokları engellerdi). Tüm aralık tek
+    /// assumption literal'i altında gated edilir (UNSAT diagnostiği için per (section, lunchIdx)).
+    /// </summary>
+    private void ForbidCovering(
+        EncoderContext ctx, int sectionId, IntervalVar iv, int duration,
+        IReadOnlyList<int> lunchSlotIndices, IReadOnlyDictionary<DayOfWeek, int> dayFirstIndex,
+        IReadOnlyList<TimeSlotInput> slots)
+    {
+        foreach (var lunchIdx in lunchSlotIndices)
+        {
+            var dayFirst = dayFirstIndex[slots[lunchIdx].DayOfWeek];
+            var lowStart = Math.Max(dayFirst, lunchIdx - duration + 1);
+            var literal = ctx.Assumptions.Register(Code, primarySectionId: sectionId, secondarySectionId: lunchIdx);
+            for (int s = lowStart; s <= lunchIdx; s++)
+                ctx.Model.Add(iv.StartExpr() != s).OnlyEnforceIf(literal);
         }
     }
 }
