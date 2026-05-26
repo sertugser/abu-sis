@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -45,8 +44,9 @@ function SortableHead({
 }
 
 export function AuditLogTable({ items, onViewDetail, sortBy, sortDir, onSortChange, footer }: AuditLogTableProps) {
+  // Kart sarmalayıcısı yok — sayfadaki tek yüzey (Card) içine gömülür.
   return (
-    <Card className="overflow-hidden">
+    <>
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -80,7 +80,7 @@ export function AuditLogTable({ items, onViewDetail, sortBy, sortDir, onSortChan
           {footer}
         </div>
       )}
-    </Card>
+    </>
   );
 }
 

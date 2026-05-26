@@ -16,7 +16,7 @@ public class CurrentUserScope : ICurrentUserScope
 
     private bool _loaded;
     private bool _isActive;
-    private int? _facultyId;
+    private int[] _facultyIds = Array.Empty<int>();
 
     public CurrentUserScope(
         IHttpContextAccessor httpContextAccessor,
@@ -28,7 +28,9 @@ public class CurrentUserScope : ICurrentUserScope
 
     public bool IsActive => _loaded && _isActive;
 
-    public int? FacultyId => _loaded ? _facultyId : null;
+    public int? FacultyId => _loaded && _facultyIds.Length > 0 ? _facultyIds[0] : null;
+
+    public IReadOnlyCollection<int> FacultyIds => _loaded ? _facultyIds : Array.Empty<int>();
 
     public async Task<bool> IsActiveAsync()
     {
@@ -39,7 +41,7 @@ public class CurrentUserScope : ICurrentUserScope
     public async Task<int?> GetFacultyIdAsync()
     {
         await EnsureLoadedAsync();
-        return _facultyId;
+        return FacultyId;
     }
 
     private async Task EnsureLoadedAsync()
@@ -69,23 +71,31 @@ public class CurrentUserScope : ICurrentUserScope
 
         await using var db = new AppDbContext(_dbOptions);
 
-        // 1) Kendi rolleri scope-bound ise kendi scope'unu yükle
+        var facultyIds = new HashSet<int>();
+        var scoped = false;
+
+        // 1) Kendi rolleri scope-bound ise kendi fakülte scope'unu ekle.
+        //    Scope-bound rol var ama UserScope satırı yoksa: aktif kalır ama set boş (hiçbir şey görmez).
         if (RoleScopeRegistry.AnyScopeBound(roles))
         {
-            _facultyId = await db.UserScopes
+            scoped = true;
+            var ownFacultyId = await db.UserScopes
                 .AsNoTracking()
                 .Where(scope => scope.UserId == userId && scope.Kind == ScopeKind.Faculty)
-                .Select(scope => scope.FacultyId)
+                .Select(scope => (int?)scope.FacultyId)
                 .FirstOrDefaultAsync();
 
-            _isActive = true;
-            _loaded = true;
-            return;
+            if (ownFacultyId is { } own)
+            {
+                facultyIds.Add(own);
+            }
         }
 
-        // 2) Kendi scope-bound rolü yok ama aktif vekâlet altında scope-bound bir kullanıcının
-        //    yetkilerini taşıyor olabilir → o delegator'ın scope'unu devral.
+        // 2) Aktif vekâletle scope-bound bir kullanıcının yetkilerini taşıyor olabilir →
+        //    o delegator'ların fakülte scope'larını da devral (birleşim — çakışma artık "ikisini de gör").
+        //    Yalnızca AKTİF (kilitli olmayan) delegator'lar sayılır (#10).
         var now = DateTime.UtcNow;
+        var nowOffset = DateTimeOffset.UtcNow;
         var delegatorIds = await db.PermissionDelegations
             .AsNoTracking()
             .Where(d => d.DelegateeUserId == userId
@@ -96,36 +106,45 @@ public class CurrentUserScope : ICurrentUserScope
             .Distinct()
             .ToListAsync();
 
-        if (delegatorIds.Count == 0)
+        if (delegatorIds.Count > 0)
         {
+            var activeDelegatorIds = await db.Users
+                .AsNoTracking()
+                .Where(u => delegatorIds.Contains(u.Id)
+                            && (!u.LockoutEnabled || u.LockoutEnd == null || u.LockoutEnd <= nowOffset))
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            if (activeDelegatorIds.Count > 0)
+            {
+                var inheritedFacultyIds = await db.UserScopes
+                    .AsNoTracking()
+                    .Where(scope => activeDelegatorIds.Contains(scope.UserId)
+                                    && scope.Kind == ScopeKind.Faculty
+                                    && scope.FacultyId != null)
+                    .Select(scope => scope.FacultyId!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (inheritedFacultyIds.Count > 0)
+                {
+                    scoped = true;
+                    foreach (var fid in inheritedFacultyIds)
+                    {
+                        facultyIds.Add(fid);
+                    }
+                }
+            }
+        }
+
+        if (!scoped)
+        {
+            // Ne kendi scope-bound rolü ne de scope devreden aktif vekâleti var → scope kapalı (her şeyi görür).
             MarkInactive();
             return;
         }
 
-        var inheritedFacultyIds = await db.UserScopes
-            .AsNoTracking()
-            .Where(scope => delegatorIds.Contains(scope.UserId) && scope.Kind == ScopeKind.Faculty)
-            .Select(scope => scope.FacultyId)
-            .Distinct()
-            .ToListAsync();
-
-        if (inheritedFacultyIds.Count == 0)
-        {
-            // Delegator'lar scope-bound değil → vekil de scope-bound değil
-            MarkInactive();
-            return;
-        }
-
-        if (inheritedFacultyIds.Count == 1)
-        {
-            _facultyId = inheritedFacultyIds[0];
-            _isActive = true;
-            _loaded = true;
-            return;
-        }
-
-        // Çakışan farklı fakülte scope'ları → fail-safe, hiçbir fakülte verisi görünmez
-        _facultyId = -1;
+        _facultyIds = facultyIds.ToArray();
         _isActive = true;
         _loaded = true;
     }
@@ -133,7 +152,7 @@ public class CurrentUserScope : ICurrentUserScope
     private void MarkInactive()
     {
         _isActive = false;
-        _facultyId = null;
+        _facultyIds = Array.Empty<int>();
         _loaded = true;
     }
 }

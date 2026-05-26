@@ -23,10 +23,13 @@ public class ScopeGuard : IScopeGuard
         switch (kind)
         {
             case ScopeKind.Faculty:
-                if (_scope.FacultyId is null || _scope.FacultyId != targetRefId)
+                if (!_scope.FacultyIds.Contains(targetRefId))
                 {
+                    var scopeDesc = _scope.FacultyIds.Count > 0
+                        ? string.Join(",", _scope.FacultyIds)
+                        : "none";
                     throw new ScopeViolationException(
-                        $"Target faculty {targetRefId} is outside user's scope (user faculty: {_scope.FacultyId?.ToString() ?? "none"}).");
+                        $"Target faculty {targetRefId} is outside user's scope (user faculties: {scopeDesc}).");
                 }
 
                 return;

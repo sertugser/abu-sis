@@ -110,7 +110,6 @@ import AdvisorDashboardPage from './pages/AdvisorDashboardPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
-import RolePermissionMatrix from './components/admin/RolePermissionMatrix';
 
 export default function App() {
   return (
@@ -307,7 +306,7 @@ export default function App() {
                     <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />
                   </Route>
                   {/* ── Yönetim → Kullanıcı İşlemleri (placeholder, SystemAdmin) ── */}
-                  <Route element={<RoleProtectedRoute permission="menu.kullanici-yetki-gruplari.view" />}>
+                  <Route element={<RoleProtectedRoute permission="system.permission-bundle.view" />}>
                     <Route path="kullanici-yetki-gruplari" element={<UserPermissionGroupsPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.kullanici-rapor-gruplari.view" />}>
@@ -386,19 +385,6 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.program-onayi.view" />}>
                     <Route path="program-onayi" element={<ScheduleApprovalPage />} />
                   </Route>
-
-                  {/* Dev-only test route — Karar 9: production sidebar/route YOK,
-                      Phase 2'de Kullanıcı Yetki Grupları placeholder'a import edilecek */}
-                  {import.meta.env.DEV && (
-                    <Route element={<RoleProtectedRoute permission="system.permission.view" />}>
-                      <Route path="__dev/permission-matrix" element={
-                        <div className="p-6">
-                          <h1 className="text-xl font-semibold mb-4">Rol Yetki Matrisi</h1>
-                          <RolePermissionMatrix />
-                        </div>
-                      } />
-                    </Route>
-                  )}
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

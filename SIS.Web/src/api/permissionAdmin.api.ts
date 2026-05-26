@@ -12,6 +12,14 @@ export interface RoleDto {
   name: string;
 }
 
+/**
+ * Bir rolün yetki durumu: manuel atanmış (düzenlenebilir) ve paketten gelen (kilitli) ayrı.
+ */
+export interface RolePermissionState {
+  manualPermissionIds: number[];
+  bundlePermissionIds: number[];
+}
+
 /** Tüm DB-seed permission'ları (admin matrisi için). lookup.* DB'de yok, listede de yok. */
 export async function getAllPermissions(): Promise<PermissionDto[]> {
   const res = await apiClient.get<PermissionDto[]>('/admin/permissions');
@@ -24,13 +32,13 @@ export async function getAssignableRoles(): Promise<RoleDto[]> {
   return res.data;
 }
 
-/** Bir rolün şu an sahip olduğu permission ID listesi. */
-export async function getRolePermissions(roleId: number): Promise<number[]> {
-  const res = await apiClient.get<number[]>(`/admin/permissions/roles/${roleId}`);
+/** Bir rolün yetki durumu (manuel + paket ayrı). */
+export async function getRolePermissions(roleId: number): Promise<RolePermissionState> {
+  const res = await apiClient.get<RolePermissionState>(`/admin/permissions/roles/${roleId}`);
   return res.data;
 }
 
-/** Bir rolün permission'larını TOPLU değiştirir (replace-all). */
+/** Bir rolün MANUEL permission'larını TOPLU değiştirir (sadece manuel satırlar; paketler korunur). */
 export async function updateRolePermissions(
   roleId: number,
   permissionIds: number[],

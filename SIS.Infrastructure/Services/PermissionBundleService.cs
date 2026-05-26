@@ -214,6 +214,48 @@ public class PermissionBundleService : IPermissionBundleService
             .ToListAsync(ct);
     }
 
+    public async Task<List<AppliedBundleDto>> GetAppliedBundlesAsync(int roleId, CancellationToken ct = default)
+    {
+        // Role uygulanmış (snapshot) satırlar: bundleId → permissionId seti
+        var appliedRows = await _context.RolePermissions
+            .AsNoTracking()
+            .Where(rp => rp.RoleId == roleId && rp.SourceBundleId != null)
+            .Select(rp => new { BundleId = rp.SourceBundleId!.Value, rp.PermissionId })
+            .ToListAsync(ct);
+
+        if (appliedRows.Count == 0) return new List<AppliedBundleDto>();
+
+        var appliedByBundle = appliedRows
+            .GroupBy(r => r.BundleId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.PermissionId).ToHashSet());
+
+        var bundleIds = appliedByBundle.Keys.ToList();
+
+        // Paketlerin GÜNCEL içeriği: bundleId → permissionId seti
+        var currentRows = await _context.PermissionBundleItems
+            .AsNoTracking()
+            .Where(i => bundleIds.Contains(i.BundleId))
+            .Select(i => new { i.BundleId, i.PermissionId })
+            .ToListAsync(ct);
+
+        var currentByBundle = currentRows
+            .GroupBy(r => r.BundleId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.PermissionId).ToHashSet());
+
+        return bundleIds
+            .Select(bid =>
+            {
+                var applied = appliedByBundle[bid];
+                var current = currentByBundle.TryGetValue(bid, out var c) ? c : new HashSet<int>();
+                return new AppliedBundleDto
+                {
+                    BundleId = bid,
+                    IsStale = !applied.SetEquals(current),
+                };
+            })
+            .ToList();
+    }
+
     private static void ValidateName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

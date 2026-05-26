@@ -96,8 +96,11 @@ AspNetRoles  ──< RolePermissions >──  Permissions
 | `GET /api/me/menu` | Kullanıcının dinamik menüsü (permission-filtered) | `[Authorize]` |
 | `GET /api/admin/permissions` | Tüm DB-seed permission'lar (admin matrisi) | `system.permission.view` |
 | `GET /api/admin/permissions/roles` | Atanabilir roller (SysAdmin hariç) | `system.permission.view` |
-| `GET /api/admin/permissions/roles/{id}` | Rol permission ID listesi | `system.permission.view` |
-| `PUT /api/admin/permissions/roles/{id}` | Rol permission'larını TOPLU set | `system.permission.assign` |
+| `GET /api/admin/permissions/roles/{id}` | Rol yetki durumu (`{ manualPermissionIds, bundlePermissionIds }`) | `system.permission.view` |
+| `PUT /api/admin/permissions/roles/{id}` | Rolün **manuel** permission'larını TOPLU set (paket satırları korunur — `SourceBundleId IS NULL` only) | `system.permission.assign` |
+| `GET /api/admin/roles/{id}/applied-bundles` | Role uygulanmış paketler + `isStale` | `system.permission-bundle.view` |
+| `POST /api/admin/permission-bundles/{id}/apply/{roleId}` | Paketi role uygula / yeniden uygula | `system.permission-bundle.apply` |
+| `DELETE /api/admin/permission-bundles/{id}/apply/{roleId}` | Paketi rolden kaldır | `system.permission-bundle.apply` |
 
 ### JWT (v2 Karar 6)
 
@@ -123,12 +126,12 @@ JWT'ye permission claim **EKLENMEZ**. Permission listesi `/api/me/permissions` e
 |-----------|-------|----------|
 | `RoleProtectedRoute` | [RoleProtectedRoute.tsx](../../SIS.Web/src/components/RoleProtectedRoute.tsx) | Permission-based: `permission` / `anyPermission` prop'ları (eski `allowedRoles` 2026-04-26'da silindi). Detay aşağıda "Frontend Route Guards" bölümünde. |
 | `Sidebar` | [Sidebar.tsx](../../SIS.Web/src/components/layout/Sidebar.tsx) | `useMenu()` data layer, render kısmı (favorites injection, accordion, flyout) korundu |
-| `RolePermissionMatrix` | [admin/RolePermissionMatrix.tsx](../../SIS.Web/src/components/admin/RolePermissionMatrix.tsx) | Admin UI (sidebar'a EKLENMEDİ — Karar 9, Phase 2'de "Kullanıcı Yetki Grupları" placeholder içine import) |
+| `RolePermissionMatrix` | [admin/RolePermissionMatrix.tsx](../../SIS.Web/src/components/admin/RolePermissionMatrix.tsx) | "Kullanıcı Yetki Grupları" sayfasının **"Rollere Yetki Ata"** sekmesinde render edilir (Phase 2'de prod'a alındı). Bundle yetkileri kilitli (salt-okunur), manuel yetkiler düzenlenebilir; üstte uygulanmış paket paneli (kaldır / yeniden uygula / stale rozeti). |
 | `ForbiddenPage` | [ForbiddenPage.tsx](../../SIS.Web/src/pages/ForbiddenPage.tsx) | 403 sayfası |
 
-### Dev-only Test Route
+### Kullanıcı Yetki Grupları sayfası (Phase 2)
 
-`/__dev/permission-matrix` — `import.meta.env.DEV` koşullu, prod build'de yok. SystemAdmin için admin UI manuel testi.
+[`UserPermissionGroupsPage.tsx`](../../SIS.Web/src/pages/UserPermissionGroupsPage.tsx) iki sekme: **Yetki Paketleri** (bundle CRUD) + **Rollere Yetki Ata** (`RolePermissionMatrix`). İkinci sekme `system.permission.view` yetkisi varsa görünür. Route + menü `system.permission-bundle.view` ile korunur (eski `menu.kullanici-yetki-gruplari.*` anahtarları kaldırıldı — bkz. `scripts/2026-05-26-permission-bundle-perm-standardize.sql`). Eski `/__dev/permission-matrix` dev-only route'u silindi.
 
 ### SidebarModules.ts (slim)
 

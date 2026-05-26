@@ -2,6 +2,8 @@ import apiClient from './axios';
 import { getFilenameFromContentDisposition, type DownloadableFile } from '../lib/download';
 
 /* ── Summary DTO (list endpoint) ── */
+// Not: Audit log LİSTE endpoint'i oldValue/newValue döndürmez; ancak bu tip config/web-modül
+// geçmiş çekmecelerinde de paylaşılıyor ve oralarda bu alanlar dolu gelir — bu yüzden opsiyonel tutulur.
 export interface AuditLogSummaryDto {
   id: number;
   userId: number | null;
@@ -53,14 +55,6 @@ export interface AuditLogFilters {
   pageSize?: number;
 }
 
-export interface AuditLogStatsDto {
-  todayTotal: number;
-  todayFailedLogins: number;
-  todayErrors: number;
-  todayUnauthorized: number;
-  last7DaysTotal: number;
-}
-
 export interface AuditLogAnomalyDto {
   type: string;
   message: string;
@@ -81,11 +75,6 @@ export async function getAuditLogs(filters: AuditLogFilters): Promise<AuditLogPa
 
 export async function getAuditLogById(id: number): Promise<AuditLogDetailDto> {
   const { data } = await apiClient.get<AuditLogDetailDto>(`/admin/audit-logs/${id}`);
-  return data;
-}
-
-export async function getAuditLogStats(): Promise<AuditLogStatsDto> {
-  const { data } = await apiClient.get<AuditLogStatsDto>('/admin/audit-logs/stats');
   return data;
 }
 

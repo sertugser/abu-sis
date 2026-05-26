@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  CalendarClock, Copy, FolderOpen, Loader2, Lock, Plus, RotateCcw, ScrollText, Trash2,
+  Copy, FolderOpen, Loader2, Lock, Plus, RotateCcw, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,18 +16,11 @@ import {
 import { useFacultyLookup, useAdminPrograms } from '../hooks/useAdminLookup';
 import { useAdminDepartmentsByStructure, useAdminProgramsByStructure } from '../hooks/useAdminAcademicStructure';
 import {
-  useExamRegulations, useDeleteExamRegulation, useCloneExamRegulation, useAttendancePolicy,
+  useExamRegulations, useDeleteExamRegulation, useCloneExamRegulation,
 } from '../hooks/useExamRegulations';
 import { ExamRegulationFormDialog } from '../components/exam-regulation/ExamRegulationFormDialog';
 import type { ExamRegulation } from '../types/examRegulation';
 import { TERM_LABELS, LEVEL_LABELS } from '../lib/examRegulationLabels';
-
-const ATTENDANCE_METHOD_LABELS: Record<string, string> = {
-  Separate: 'Teori/Uygulama Ayrı',
-  TotalHours: 'Toplam Saate Göre',
-  Passive: 'Pasif',
-  MarkOnly: 'Sadece İşaretle',
-};
 
 const LEVEL_BADGE_CLASS: Record<string, string> = {
   Associate: 'bg-sky-50 text-sky-700 border-sky-200',
@@ -107,7 +100,6 @@ export default function ExamRegulationManagementPage() {
   const regulations = useExamRegulations(programId);
   const deleteMut = useDeleteExamRegulation();
   const cloneMut = useCloneExamRegulation();
-  const attendancePolicy = useAttendancePolicy();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ExamRegulation | null>(null);
@@ -142,52 +134,12 @@ export default function ExamRegulationManagementPage() {
   };
 
   return (
-    <div className="p-6 space-y-5">
-      {/* ── Başlık ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <ScrollText className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold leading-tight">Sınav Müfredatı</h1>
-            <p className="text-sm text-muted-foreground">
-              Program bazında sınav yapısı, ağırlıklar ve değerlendirme kuralları.
-            </p>
-          </div>
-        </div>
-        <Button onClick={openNew}>
-          <Plus className="mr-1.5 h-4 w-4" /> Yeni Yönerge
-        </Button>
-      </div>
-
-      {/* ── Devamsızlık politikası bilgi şeridi ── */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-border/80 bg-muted/40 px-4 py-2.5 text-sm">
-        <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <p className="text-muted-foreground">
-          {attendancePolicy.data ? (
-            <>
-              <span className="font-medium text-foreground">Devamsızlık:</span>{' '}
-              {ATTENDANCE_METHOD_LABELS[attendancePolicy.data.attendanceMethod] ?? attendancePolicy.data.attendanceMethod}
-              {' · '}{attendancePolicy.data.termWeekCount} hafta
-              {' · '}Teori %{attendancePolicy.data.theoryAbsenceLimitPercent}
-              {' · '}Uygulama %{attendancePolicy.data.labAbsenceLimitPercent}
-              {' — '}tüm üniversite için ortaktır, <span className="font-medium text-foreground">Sistem Ayarları</span>'ndan yönetilir.
-            </>
-          ) : (
-            <>
-              Devamsızlık eşikleri (hafta sayısı, teori/uygulama oranı) tüm üniversite için ortak olup{' '}
-              <span className="font-medium text-foreground">Sistem Ayarları</span> sayfasından yönetilir.
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* ── Cascade filtre ── */}
-      <Card>
-        <CardContent className="py-4">
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-4">
-            <div className="space-y-1">
+    <div className="flex flex-1 flex-col">
+      <Card className="flex flex-1 flex-col overflow-hidden">
+        {/* ── Filtre + aksiyon ── */}
+        <div className="shrink-0 border-b border-border/80 bg-muted/20 px-5 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="w-full space-y-1 sm:flex-1 sm:min-w-[180px]">
               <Label className={labelClass}>Fakülte</Label>
               <Select
                 value={facultyId?.toString() ?? ''}
@@ -204,7 +156,7 @@ export default function ExamRegulationManagementPage() {
               </Select>
             </div>
 
-            <div className="space-y-1">
+            <div className="w-full space-y-1 sm:flex-1 sm:min-w-[180px]">
               <Label className={labelClass}>Bölüm</Label>
               <Select
                 value={departmentId?.toString() ?? ''}
@@ -222,7 +174,7 @@ export default function ExamRegulationManagementPage() {
               </Select>
             </div>
 
-            <div className="space-y-1">
+            <div className="w-full space-y-1 sm:flex-1 sm:min-w-[180px]">
               <Label className={labelClass}>Program</Label>
               <Select
                 value={programId?.toString() ?? ''}
@@ -240,26 +192,26 @@ export default function ExamRegulationManagementPage() {
               </Select>
             </div>
 
-            <div className="flex items-end">
-              {hasFilter && (
-                <Button
-                  variant="ghost"
-                  className="h-9 w-full text-sm text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                  onClick={resetFilters}
-                >
-                  <RotateCcw className="mr-1.5 h-4 w-4" /> Sıfırla
-                </Button>
-              )}
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Button
+                variant="ghost"
+                className="h-9 text-sm text-muted-foreground hover:bg-primary/5 hover:text-primary disabled:opacity-40"
+                onClick={resetFilters}
+                disabled={!hasFilter}
+              >
+                <RotateCcw className="mr-1.5 h-4 w-4" /> Sıfırla
+              </Button>
+              <Button className="h-9 flex-1 sm:flex-none" onClick={openNew}>
+                <Plus className="mr-1.5 h-4 w-4" /> Yeni Yönerge
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* ── Tablo ── */}
-      <Card>
-        <CardContent className="overflow-x-auto p-0">
+        {/* ── Tablo ── */}
+        <div className="flex flex-1 flex-col overflow-auto">
           <table className="w-full min-w-[920px]">
-            <thead className="border-b border-border/80 bg-muted/40">
+            <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Adı</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Program</th>
@@ -273,16 +225,9 @@ export default function ExamRegulationManagementPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">İşlem</th>
               </tr>
             </thead>
+            {!regulations.isLoading && list.length > 0 && (
             <tbody className="divide-y divide-border/80">
-              {regulations.isLoading && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Yükleniyor...
-                  </td>
-                </tr>
-              )}
-
-              {!regulations.isLoading && list.map((r) => (
+              {list.map((r) => (
                 <tr
                   key={r.id}
                   className="cursor-pointer transition-colors hover:bg-primary/5"
@@ -357,25 +302,30 @@ export default function ExamRegulationManagementPage() {
                   </td>
                 </tr>
               ))}
-
-              {!regulations.isLoading && list.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-16 text-center">
-                    <FolderOpen className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
-                    <p className="text-sm font-medium text-foreground">
-                      {hasFilter ? 'Bu seçimle eşleşen yönerge yok' : 'Henüz sınav yönergesi tanımlanmamış'}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {hasFilter
-                        ? 'Farklı bir fakülte/bölüm/program seçebilir veya filtreleri sıfırlayabilirsiniz.'
-                        : 'Sağ üstteki "Yeni Yönerge" butonuyla ilk yönergeyi oluşturun.'}
-                    </p>
-                  </td>
-                </tr>
-              )}
             </tbody>
+            )}
           </table>
-        </CardContent>
+
+          {regulations.isLoading && (
+            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Yükleniyor...
+            </div>
+          )}
+
+          {!regulations.isLoading && list.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center">
+              <FolderOpen className="mb-3 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-foreground">
+                {hasFilter ? 'Bu seçimle eşleşen yönerge yok' : 'Henüz sınav yönergesi tanımlanmamış'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {hasFilter
+                  ? 'Farklı bir fakülte/bölüm/program seçebilir veya filtreleri sıfırlayabilirsiniz.'
+                  : '"Yeni Yönerge" butonuyla ilk yönergeyi oluşturun.'}
+              </p>
+            </div>
+          )}
+        </div>
       </Card>
 
       {/* ── Form (oluştur/düzenle) ── */}

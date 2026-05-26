@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
 using SIS.Domain.Identity;
 using SIS.Infrastructure.Persistence;
@@ -54,49 +55,52 @@ public class PermissionService : IPermissionService
             return allSet;
         }
 
-        // Aktif vekâletlerden gelen delegator user'larını topla (kendi rolleri ∪ devralınan roller)
+        // Aktif vekâletlerden gelen delegator user'larını topla (kendi rolleri ∪ devralınan roller).
+        // Yalnızca AKTİF (kilitli olmayan) delegator'lar sayılır — kilitli/pasif hesabın yetkileri akmaz (#10).
         var now = DateTime.UtcNow;
-        var delegatorIds = await _context.PermissionDelegations
-            .AsNoTracking()
-            .Where(d => d.DelegateeUserId == userId
-                        && d.RevokedAtUtc == null
-                        && d.StartsAtUtc <= now
-                        && now <= d.EndsAtUtc)
-            .Select(d => d.DelegatorUserId)
+        var nowOffset = DateTimeOffset.UtcNow;
+        var delegatorIds = await (
+            from d in _context.PermissionDelegations.AsNoTracking()
+            where d.DelegateeUserId == userId
+                  && d.RevokedAtUtc == null
+                  && d.StartsAtUtc <= now
+                  && now <= d.EndsAtUtc
+            join u in _context.Users.AsNoTracking() on d.DelegatorUserId equals u.Id
+            where !u.LockoutEnabled || u.LockoutEnd == null || u.LockoutEnd <= nowOffset
+            select d.DelegatorUserId)
             .Distinct()
             .ToListAsync(ct);
 
-        // Delegator'ın SysAdmin rolü varsa: tüm permission'ları üret (delegate edilebilir mi tartışılabilir,
-        // ama kasıtlı vekâlette buna izin veriyoruz; revoke ile geri alınabilir)
-        if (delegatorIds.Count > 0)
-        {
-            var delegatorRoleNames = await (
-                from ur in _context.Set<IdentityUserRole<int>>().AsNoTracking()
-                join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
-                where delegatorIds.Contains(ur.UserId)
-                select r.Name!
-            ).Distinct().ToListAsync(ct);
+        // Bir sonraki vekâlet sınırı (aktif olanın bitişi / pending olanın başlangıcı) cache TTL'ini
+        // kısıtlar — böylece doğal süre bitiminde/başlangıcında yetki seti tam zamanında tazelenir,
+        // 5 dk'lık stale pencere oluşmaz (#6). Pending varsa delegatorIds boş olsa bile kısıtlanır.
+        var nextBoundary = await _context.PermissionDelegations
+            .AsNoTracking()
+            .Where(d => d.DelegateeUserId == userId && d.RevokedAtUtc == null && d.EndsAtUtc > now)
+            .Select(d => (DateTime?)(d.StartsAtUtc > now ? d.StartsAtUtc : d.EndsAtUtc))
+            .OrderBy(t => t)
+            .FirstOrDefaultAsync(ct);
 
-            if (delegatorRoleNames.Contains(SystemAdminRole))
+        var cacheTtl = CacheTtl;
+        if (nextBoundary is { } boundary)
+        {
+            var untilBoundary = boundary - now;
+            if (untilBoundary > TimeSpan.Zero && untilBoundary < cacheTtl)
             {
-                var allKeys = await _context.Permissions
-                    .AsNoTracking()
-                    .Select(p => p.Key)
-                    .ToListAsync(ct);
-                var allSet = new HashSet<string>(allKeys, StringComparer.Ordinal);
-                _cache.Set(cacheKey, allSet, CacheTtl);
-                return allSet;
+                cacheTtl = untilBoundary;
             }
         }
 
-        // Normal user: kendi rolleri + delegator rolleri toplam set
+        // Normal user: kendi rolleri + delegator rolleri toplam set.
+        // SystemAdministrator vekâletle DEVREDİLEMEZ (Create'te de bloke) — burada da dışlanır ki
+        // eski/legacy kayıtlar bile tam-yetki yükseltmesine yol açmasın (güvenlik, tutarlılık).
         var combinedRoleNames = new HashSet<string>(roles, StringComparer.Ordinal);
         if (delegatorIds.Count > 0)
         {
             var extraRoleNames = await (
                 from ur in _context.Set<IdentityUserRole<int>>().AsNoTracking()
                 join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
-                where delegatorIds.Contains(ur.UserId)
+                where delegatorIds.Contains(ur.UserId) && r.Name != SystemAdminRole
                 select r.Name!
             ).Distinct().ToListAsync(ct);
             foreach (var n in extraRoleNames) combinedRoleNames.Add(n);
@@ -105,7 +109,7 @@ public class PermissionService : IPermissionService
         if (combinedRoleNames.Count == 0)
         {
             var emptySet = new HashSet<string>(StringComparer.Ordinal);
-            _cache.Set(cacheKey, emptySet, CacheTtl);
+            _cache.Set(cacheKey, emptySet, cacheTtl);
             return emptySet;
         }
 
@@ -123,7 +127,7 @@ public class PermissionService : IPermissionService
             .ToListAsync(ct);
 
         var resultSet = new HashSet<string>(permissionKeys, StringComparer.Ordinal);
-        _cache.Set(cacheKey, resultSet, CacheTtl);
+        _cache.Set(cacheKey, resultSet, cacheTtl);
         return resultSet;
     }
 
@@ -184,11 +188,12 @@ public class PermissionService : IPermissionService
         int grantedByUserId,
         CancellationToken ct = default)
     {
-        // Replace-all: önce mevcutları sil, sonra yenileri ekle (transaction içinde)
-        var existing = await _context.RolePermissions
-            .Where(rp => rp.RoleId == roleId)
+        // Replace-all SADECE manuel satırlarda: paketten gelen (SourceBundleId IS NOT NULL)
+        // satırlara dokunulmaz; aksi halde matris "Kaydet" paket bağını sessizce silerdi.
+        var existingManual = await _context.RolePermissions
+            .Where(rp => rp.RoleId == roleId && rp.SourceBundleId == null)
             .ToListAsync(ct);
-        _context.RolePermissions.RemoveRange(existing);
+        _context.RolePermissions.RemoveRange(existingManual);
 
         var rolePermissions = permissionIds
             .Distinct()
@@ -196,6 +201,7 @@ public class PermissionService : IPermissionService
             {
                 RoleId = roleId,
                 PermissionId = pid,
+                SourceBundleId = null,
                 GrantedAt = DateTime.UtcNow,
                 GrantedByUserId = grantedByUserId,
             })
@@ -209,11 +215,36 @@ public class PermissionService : IPermissionService
 
     public async Task<List<int>> GetRolePermissionIdsAsync(int roleId, CancellationToken ct = default)
     {
+        // Etkin set: aynı permission hem manuel hem paketten gelirse tek görünür (Distinct).
         return await _context.RolePermissions
             .AsNoTracking()
             .Where(rp => rp.RoleId == roleId)
             .Select(rp => rp.PermissionId)
+            .Distinct()
             .ToListAsync(ct);
+    }
+
+    public async Task<RolePermissionStateDto> GetRolePermissionStateAsync(int roleId, CancellationToken ct = default)
+    {
+        var rows = await _context.RolePermissions
+            .AsNoTracking()
+            .Where(rp => rp.RoleId == roleId)
+            .Select(rp => new { rp.PermissionId, rp.SourceBundleId })
+            .ToListAsync(ct);
+
+        return new RolePermissionStateDto
+        {
+            ManualPermissionIds = rows
+                .Where(r => r.SourceBundleId == null)
+                .Select(r => r.PermissionId)
+                .Distinct()
+                .ToList(),
+            BundlePermissionIds = rows
+                .Where(r => r.SourceBundleId != null)
+                .Select(r => r.PermissionId)
+                .Distinct()
+                .ToList(),
+        };
     }
 
     public void InvalidateUserCache(int userId)

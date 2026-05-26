@@ -28,7 +28,6 @@ public class InstructorController : ControllerBase
         AppDbContext context,
         ISchedulingService schedulingService,
         ISystemConfigProvider systemConfig,
-        IWebModuleSettingsProvider? webSettings = null,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;

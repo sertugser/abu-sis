@@ -18,8 +18,9 @@ export function useDelegations(params: ListDelegationsParams = {}) {
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: [...baseKey] });
-  // Vekâlet permission union'ı + effective-roles + sidebar menü için ilgili cache'leri yenile
-  qc.invalidateQueries({ queryKey: ['my-permissions'] });
+  // Vekâlet permission union'ı + effective-roles + sidebar menü için ilgili cache'leri yenile.
+  // Key, PermissionContext'in gerçek query key'i ['permissions', userId] ile prefix eşleşmeli.
+  qc.invalidateQueries({ queryKey: ['permissions'] });
   qc.invalidateQueries({ queryKey: ['menu'] });
   qc.invalidateQueries({ queryKey: ['me', 'effective-roles'] });
 }

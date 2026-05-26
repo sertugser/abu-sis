@@ -667,6 +667,8 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasIndex("EntityType", "EntityId");
 
+                    b.HasIndex("Timestamp", "Action");
+
                     b.ToTable("AuditLogs");
                 });
 

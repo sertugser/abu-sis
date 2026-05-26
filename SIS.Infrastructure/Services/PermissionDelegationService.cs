@@ -9,6 +9,11 @@ namespace SIS.Infrastructure.Services;
 
 public class PermissionDelegationService : IPermissionDelegationService
 {
+    private const string SystemAdminRole = "SystemAdministrator";
+
+    /// <summary>Reason kolonu DB'de varchar(500) — taşmayı temiz 400 olarak yakalamak için.</summary>
+    private const int MaxReasonLength = 500;
+
     private readonly AppDbContext _db;
     private readonly IPermissionService _permissionService;
 
@@ -17,6 +22,12 @@ public class PermissionDelegationService : IPermissionDelegationService
         _db = db;
         _permissionService = permissionService;
     }
+
+    private Task<bool> IsSystemAdminAsync(int userId, CancellationToken ct) =>
+        (from ur in _db.Set<Microsoft.AspNetCore.Identity.IdentityUserRole<int>>().AsNoTracking()
+         join r in _db.Roles.AsNoTracking() on ur.RoleId equals r.Id
+         where ur.UserId == userId && r.Name == SystemAdminRole
+         select ur.UserId).AnyAsync(ct);
 
     public async Task<IReadOnlyList<PermissionDelegationDto>> ListAsync(
         bool includeInactive,
@@ -45,13 +56,37 @@ public class PermissionDelegationService : IPermissionDelegationService
             query = query.Where(d => d.DelegateeUserId == delegateeUserId.Value);
         }
 
+        return await MaterializeAsync(query, now, ct);
+    }
+
+    public async Task<PermissionDelegationDto> GetAsync(int id, CancellationToken ct = default)
+    {
+        // Tek-id sorgusu (eski tüm-tabloyu-çek + in-memory filtre yerine).
+        var now = DateTime.UtcNow;
+        var query = _db.PermissionDelegations.WithoutScope().AsNoTracking().Where(d => d.Id == id);
+        var match = (await MaterializeAsync(query, now, ct)).FirstOrDefault();
+        if (match is null)
+        {
+            throw new KeyNotFoundException($"Vekâlet kaydı bulunamadı: {id}");
+        }
+        return match;
+    }
+
+    /// <summary>
+    /// Vekâlet kayıtlarını delegator/delegatee kullanıcı bilgileriyle birleştirip DTO'ya çevirir (List + Get ortak).
+    /// Anonim projeksiyon kullanılır — PostgreSQL join çevirisi için güvenli; sıralama ve eşleme in-memory yapılır.
+    /// </summary>
+    private async Task<List<PermissionDelegationDto>> MaterializeAsync(
+        IQueryable<PermissionDelegation> query,
+        DateTime now,
+        CancellationToken ct)
+    {
         var rows = await (
             from d in query
             join delegator in _db.Set<ApplicationUser>().AsNoTracking().IgnoreQueryFilters()
                 on d.DelegatorUserId equals delegator.Id
             join delegatee in _db.Set<ApplicationUser>().AsNoTracking().IgnoreQueryFilters()
                 on d.DelegateeUserId equals delegatee.Id
-            orderby d.CreatedAtUtc descending
             select new
             {
                 d.Id,
@@ -73,6 +108,7 @@ public class PermissionDelegationService : IPermissionDelegationService
         ).ToListAsync(ct);
 
         return rows
+            .OrderByDescending(r => r.CreatedAtUtc)
             .Select(r => new PermissionDelegationDto(
                 r.Id,
                 r.DelegatorUserId,
@@ -93,17 +129,6 @@ public class PermissionDelegationService : IPermissionDelegationService
             .ToList();
     }
 
-    public async Task<PermissionDelegationDto> GetAsync(int id, CancellationToken ct = default)
-    {
-        var list = await ListAsync(includeInactive: true, delegatorUserId: null, delegateeUserId: null, ct);
-        var match = list.FirstOrDefault(d => d.Id == id);
-        if (match is null)
-        {
-            throw new KeyNotFoundException($"Vekâlet kaydı bulunamadı: {id}");
-        }
-        return match;
-    }
-
     public async Task<PermissionDelegationDto> CreateAsync(
         CreateDelegationDto dto,
         int createdByUserId,
@@ -122,6 +147,18 @@ public class PermissionDelegationService : IPermissionDelegationService
         if (string.IsNullOrWhiteSpace(dto.Reason))
         {
             throw new InvalidOperationException("Vekâlet sebebi (Reason) zorunludur.");
+        }
+
+        if (dto.Reason.Trim().Length > MaxReasonLength)
+        {
+            throw new InvalidOperationException($"Vekâlet sebebi en fazla {MaxReasonLength} karakter olabilir.");
+        }
+
+        // SystemAdministrator yetkileri vekâletle devredilemez (yetki yükseltmeyi önler).
+        if (await IsSystemAdminAsync(dto.DelegatorUserId, ct))
+        {
+            throw new InvalidOperationException(
+                "Sistem yöneticisinin yetkileri vekâletle devredilemez.");
         }
 
         var delegatorExists = await _db.Set<ApplicationUser>()
@@ -168,7 +205,16 @@ public class PermissionDelegationService : IPermissionDelegationService
         };
 
         _db.PermissionDelegations.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23P01" })
+        {
+            // DB exclusion constraint: app-level overlap kontrolü ile eşzamanlı bir kayıt araya girdi (yarış).
+            throw new InvalidOperationException(
+                "Bu kullanıcılar arasında, çakışan tarih aralığında aktif bir vekâlet zaten var.");
+        }
 
         // Vekilin permission cache'ini hemen tazele (5dk gecikme yerine)
         _permissionService.InvalidateUserCache(dto.DelegateeUserId);
@@ -195,6 +241,11 @@ public class PermissionDelegationService : IPermissionDelegationService
             throw new InvalidOperationException("Bu vekâlet zaten iptal edilmiş.");
         }
 
+        if (dto.Reason is not null && dto.Reason.Trim().Length > MaxReasonLength)
+        {
+            throw new InvalidOperationException($"İptal sebebi en fazla {MaxReasonLength} karakter olabilir.");
+        }
+
         entity.RevokedAtUtc = DateTime.UtcNow;
         entity.RevokedByUserId = revokedByUserId;
         entity.RevokeReason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim();
@@ -210,15 +261,18 @@ public class PermissionDelegationService : IPermissionDelegationService
         int userId,
         CancellationToken ct = default)
     {
+        // Yalnızca AKTİF (kilitli olmayan) delegator'lar sayılır (#10 — kilitli hesabın rolü akmaz).
         var now = DateTime.UtcNow;
-        var delegatorIds = await _db.PermissionDelegations
-            .WithoutScope()
-            .AsNoTracking()
-            .Where(d => d.DelegateeUserId == userId
-                        && d.RevokedAtUtc == null
-                        && d.StartsAtUtc <= now
-                        && now <= d.EndsAtUtc)
-            .Select(d => d.DelegatorUserId)
+        var nowOffset = DateTimeOffset.UtcNow;
+        var delegatorIds = await (
+            from d in _db.PermissionDelegations.WithoutScope().AsNoTracking()
+            where d.DelegateeUserId == userId
+                  && d.RevokedAtUtc == null
+                  && d.StartsAtUtc <= now
+                  && now <= d.EndsAtUtc
+            join u in _db.Users.AsNoTracking() on d.DelegatorUserId equals u.Id
+            where !u.LockoutEnabled || u.LockoutEnd == null || u.LockoutEnd <= nowOffset
+            select d.DelegatorUserId)
             .Distinct()
             .ToListAsync(ct);
 
@@ -230,7 +284,7 @@ public class PermissionDelegationService : IPermissionDelegationService
         var roleNames = await (
             from ur in _db.Set<Microsoft.AspNetCore.Identity.IdentityUserRole<int>>().AsNoTracking()
             join r in _db.Roles.AsNoTracking() on ur.RoleId equals r.Id
-            where delegatorIds.Contains(ur.UserId) && r.Name != "SystemAdministrator"
+            where delegatorIds.Contains(ur.UserId) && r.Name != SystemAdminRole
             select r.Name!
         ).Distinct().ToListAsync(ct);
 

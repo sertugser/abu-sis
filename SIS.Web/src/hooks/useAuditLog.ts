@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  getAuditLogs, getAuditLogById, getAuditLogStats, getAuditLogAnomalies,
+  getAuditLogs, getAuditLogById, getAuditLogAnomalies,
   type AuditLogFilters,
 } from '../api/auditLog.api';
 import { QUERY_KEYS } from '../lib/constants';
@@ -25,15 +25,6 @@ export function useAuditLogDetail(id: number | null) {
     queryFn: () => getAuditLogById(id!),
     enabled: id !== null,
     staleTime: 60_000,
-  });
-}
-
-export function useAuditLogStats() {
-  return useQuery({
-    queryKey: ['admin', 'auditLogs', 'stats'] as const,
-    queryFn: getAuditLogStats,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
   });
 }
 

@@ -27,7 +27,6 @@ public class CourseController : ControllerBase
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider systemConfig,
-        IWebModuleSettingsProvider? webSettings = null,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;

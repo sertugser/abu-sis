@@ -70,18 +70,19 @@ public class PermissionAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Bir rolün şu an sahip olduğu permission ID listesini döner (matrise checkbox state).
+    /// Bir rolün yetki durumunu manuel/paket ayrımıyla döner (matris checkbox state).
+    /// Manuel olanlar düzenlenebilir; paketten gelenler kilitli gösterilir.
     /// </summary>
     [HttpGet("roles/{roleId:int}")]
-    public async Task<ActionResult<List<int>>> GetRolePermissions(int roleId, CancellationToken ct)
+    public async Task<ActionResult<RolePermissionStateDto>> GetRolePermissions(int roleId, CancellationToken ct)
     {
         if (await IsSystemAdminRoleAsync(roleId))
         {
             return BadRequest(new { error = "SystemAdministrator rolü düzenlenemez (Karar 4 — locked)." });
         }
 
-        var ids = await _permissionService.GetRolePermissionIdsAsync(roleId, ct);
-        return Ok(ids);
+        var state = await _permissionService.GetRolePermissionStateAsync(roleId, ct);
+        return Ok(state);
     }
 
     /// <summary>

@@ -1033,6 +1033,9 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(al => al.Timestamp);
             e.HasIndex(al => new { al.EntityType, al.EntityId });
             e.HasIndex(al => al.UserId);
+            // Action filtre/sıralamada ve stats+anomali sayımlarında ağır kullanılıyor.
+            // (Timestamp, Action) bileşik indeksi "son X saatte Action=Y" anomali sorgularını da kapsar.
+            e.HasIndex(al => new { al.Timestamp, al.Action });
         });
 
         // ── SystemConfig ─────────────────────────────────────────
@@ -1479,38 +1482,39 @@ builder.Entity<GradingCriteria>(e =>
         });
 
         // ── Permission Scope Query Filters (Phase 2) ─────────────
+        // _scope.FacultyIds: kullanıcının erişebildiği fakülteler (kendi + vekâletten devralınan birleşim).
         builder.Entity<Faculty>().HasQueryFilter(faculty =>
-            !_scope.IsActive || _scope.FacultyId == faculty.Id);
+            !_scope.IsActive || _scope.FacultyIds.Contains(faculty.Id));
 
         builder.Entity<Department>().HasQueryFilter(department =>
-            !_scope.IsActive || _scope.FacultyId == department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(department.FacultyId));
 
         builder.Entity<AcademicProgram>().HasQueryFilter(program =>
-            !_scope.IsActive || _scope.FacultyId == program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(program.Department.FacultyId));
 
         builder.Entity<Curriculum>().HasQueryFilter(curriculum =>
-            !_scope.IsActive || _scope.FacultyId == curriculum.Program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(curriculum.Program.Department.FacultyId));
 
         builder.Entity<Course>().HasQueryFilter(course =>
-            !_scope.IsActive || (course.DepartmentId != null && _scope.FacultyId == course.Department!.FacultyId));
+            !_scope.IsActive || (course.Department != null && _scope.FacultyIds.Contains(course.Department.FacultyId)));
 
         builder.Entity<CourseSection>().HasQueryFilter(section =>
-            !_scope.IsActive || (section.Course.DepartmentId != null && _scope.FacultyId == section.Course.Department!.FacultyId));
+            !_scope.IsActive || (section.Course.Department != null && _scope.FacultyIds.Contains(section.Course.Department.FacultyId)));
 
         builder.Entity<Student>().HasQueryFilter(student =>
-            !_scope.IsActive || student.StudentPrograms.Any(program => program.Program.Department.FacultyId == _scope.FacultyId));
+            !_scope.IsActive || student.StudentPrograms.Any(program => _scope.FacultyIds.Contains(program.Program.Department.FacultyId)));
 
         builder.Entity<Instructor>().HasQueryFilter(instructor =>
-            !_scope.IsActive || _scope.FacultyId == instructor.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(instructor.Department.FacultyId));
 
         builder.Entity<ElectiveGroup>().HasQueryFilter(group =>
             !_scope.IsActive
             || (group.DepartmentId == null && group.FacultyId == null)
-            || (group.DepartmentId != null && _scope.FacultyId == group.Department!.FacultyId)
-            || (group.DepartmentId == null && group.FacultyId != null && _scope.FacultyId == group.FacultyId));
+            || (group.DepartmentId != null && _scope.FacultyIds.Contains(group.Department!.FacultyId))
+            || (group.DepartmentId == null && group.FacultyId != null && _scope.FacultyIds.Contains(group.FacultyId.Value)));
 
         builder.Entity<CurriculumElectivePool>().HasQueryFilter(pool =>
-            !_scope.IsActive || _scope.FacultyId == pool.Curriculum.Program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(pool.Curriculum.Program.Department.FacultyId));
 
         // ── RBAC: Permission ────────────────────────────────────
         builder.Entity<Permission>(e =>

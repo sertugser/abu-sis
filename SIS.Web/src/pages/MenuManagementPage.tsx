@@ -89,6 +89,7 @@ export default function MenuManagementPage() {
   const moduleMutationPending =
     createModule.isPending || updateModule.isPending;
   const itemMutationPending = createItem.isPending || updateItem.isPending;
+  const reorderPending = reorderModules.isPending || reorderItems.isPending;
 
   const handleSubmitModule = async (values: {
     slug: string;
@@ -256,6 +257,7 @@ export default function MenuManagementPage() {
               expanded={expanded}
               onToggle={toggleExpand}
               canManage={canManage}
+              reorderPending={reorderPending}
               onEditModule={(m) => setModuleDialog({ mode: 'edit', module: m })}
               onAddSubModule={(parent) =>
                 setModuleDialog({ mode: 'create', parentId: parent.id })
@@ -321,6 +323,7 @@ interface ModuleCardProps {
   expanded: Set<number>;
   onToggle: (id: number) => void;
   canManage: boolean;
+  reorderPending: boolean;
   onEditModule: (m: MenuModuleAdminDto) => void;
   onAddSubModule: (parent: MenuModuleAdminDto) => void;
   onDeleteModule: (m: MenuModuleAdminDto) => void;
@@ -349,6 +352,7 @@ function ModuleCard({
   expanded,
   onToggle,
   canManage,
+  reorderPending,
   onEditModule,
   onAddSubModule,
   onDeleteModule,
@@ -395,7 +399,7 @@ function ModuleCard({
             <Button
               variant="ghost"
               size="icon"
-              disabled={isFirst}
+              disabled={isFirst || reorderPending}
               onClick={() => onMoveModule(siblings, parentId, index, -1)}
               title="Yukarı taşı"
             >
@@ -404,7 +408,7 @@ function ModuleCard({
             <Button
               variant="ghost"
               size="icon"
-              disabled={isLast}
+              disabled={isLast || reorderPending}
               onClick={() => onMoveModule(siblings, parentId, index, 1)}
               title="Aşağı taşı"
             >
@@ -468,7 +472,7 @@ function ModuleCard({
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={i === 0}
+                        disabled={i === 0 || reorderPending}
                         onClick={() => onMoveItem(module.items, module.id, i, -1)}
                         title="Yukarı"
                       >
@@ -477,7 +481,7 @@ function ModuleCard({
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={i === module.items.length - 1}
+                        disabled={i === module.items.length - 1 || reorderPending}
                         onClick={() => onMoveItem(module.items, module.id, i, 1)}
                         title="Aşağı"
                       >
@@ -514,6 +518,7 @@ function ModuleCard({
                   expanded={expanded}
                   onToggle={onToggle}
                   canManage={canManage}
+                  reorderPending={reorderPending}
                   onEditModule={onEditModule}
                   onAddSubModule={onAddSubModule}
                   onDeleteModule={onDeleteModule}

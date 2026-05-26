@@ -169,7 +169,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",         "subelendirme-islemleri-bolum",      1, "menu.subelendirme-islemleri.view"),
             BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",     "ders-veren-ogretim-uyeleri-bolum",  2, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Toplu Danışman Atama",           "/toplu-danisman-atama",           "toplu-danisman-atama-bolum",        3, "menu.toplu-danisman-atama.view"),
-            BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",           "toplu-mufredat-atama-bolum",        4, "menu.toplu-mufredat-atama.view"),
         };
 
         // ─── Modül 8: Öğrenci İşlemleri (kayma: 7 → 8) ───────────────────────────
@@ -308,7 +307,7 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Kullanıcı Tanımlama",                  "/kullanici-yonetimi",                   "kullanici-tanimlama",                 1, "menu.kullanici-tanimlama.view"),
             // "Personel Listesi" buradan kaldırıldı — yeni "Personel İşlemleri" top-level modülüne taşındı (SortOrder 14).
-            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            2, "menu.kullanici-yetki-gruplari.view"),
+            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            2, "system.permission-bundle.view"),
             BuildItem(permissions, "Kullanıcı Rapor Grupları",             "/kullanici-rapor-gruplari",             "kullanici-rapor-gruplari",            3, "menu.kullanici-rapor-gruplari.view"),
             BuildItem(permissions, "Kullanıcı Vekalet İşlemleri",          "/kullanici-vekalet-islemleri",          "kullanici-vekalet-islemleri",         6, "menu.kullanici-vekalet-islemleri.view"),
             BuildItem(permissions, "LOG",                                  "/denetim-kayitlari",                    "audit-log",                           7, "menu.audit-log.view"),

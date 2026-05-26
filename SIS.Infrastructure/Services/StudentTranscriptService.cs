@@ -284,10 +284,20 @@ public class StudentTranscriptService : IStudentTranscriptService
 
     private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
     {
+        // Yalnızca AKTİF dönemin notları "ilan" durumuna bağlıdır: aktif dönemde
+        // kayıtlı olunan, henüz ilan edilmemiş dersler gizlenir. Geçmiş (sonuçlanmış)
+        // dönemlerin notları transkriptte her zaman görünür — hem öğrenci hem yönetici.
+        var activeTermId = await _context.AcademicTerms
+            .AsNoTracking()
+            .ActiveTerm()
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync();
+
         var result = new Dictionary<int, bool>();
         foreach (var termId in termIds.Distinct())
         {
-            result[termId] = await CanStudentSeeLetterGradeAsync(termId);
+            result[termId] = termId != activeTermId
+                || await CanStudentSeeLetterGradeAsync(termId);
         }
 
         return result;

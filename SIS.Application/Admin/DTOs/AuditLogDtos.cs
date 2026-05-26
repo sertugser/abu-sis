@@ -28,13 +28,6 @@ public record AuditLogPagedResponse(
     int Page,
     int PageSize);
 
-public record AuditLogStatsDto(
-    int TodayTotal,
-    int TodayFailedLogins,
-    int TodayErrors,
-    int TodayUnauthorized,
-    int Last7DaysTotal);
-
 public record AuditLogAnomalyDto(
     string Type,
     string Message,

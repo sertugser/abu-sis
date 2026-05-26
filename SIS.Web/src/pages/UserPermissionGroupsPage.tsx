@@ -12,29 +12,34 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, FolderOpen, Loader2, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { AlertCircle, FolderOpen, Loader2, Plus, Trash2, ShieldCheck, Package, Users } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePermissionBundles, useDeleteBundle } from '../hooks/usePermissionBundles';
 import { usePermissions } from '../context/PermissionContext';
 import PermissionBundleFormDialog from '../components/admin/PermissionBundleFormDialog';
+import RolePermissionMatrix from '../components/admin/RolePermissionMatrix';
 import type { PermissionBundleDto } from '../api/permissionBundle.api';
 
 /**
- * RBAC Phase 2 — Yetki paketleri yönetimi.
+ * RBAC Phase 2 — Yetki paketleri + rollere yetki atama.
  *
- * Karar 1: Snapshot — paket güncellenince bağlı role'ler etkilenmez.
- * Karar 3: Sadece SystemAdmin yönetir; system.permission-bundle.manage permission'ı.
- * Karar 4: Sidebar grubu bazlı default seed bundle'lar IsSystemDefault=true ile gelir,
- *          silinemez ama içerik düzenlenebilir.
+ * Tek sayfa, iki bölüm (segment): "Yetki Paketleri" (bundle CRUD) ve
+ * "Rollere Yetki Ata" (RolePermissionMatrix). Segment seçici sayfayla bütünleşik
+ * tek bir başlık şeridindedir.
  */
+type TabKey = 'bundles' | 'roles';
+
 export default function UserPermissionGroupsPage() {
   const { hasPermission } = usePermissions();
   const canManage = hasPermission('system.permission-bundle.manage');
+  const canAssignRoles = hasPermission('system.permission.view');
   const qc = useQueryClient();
 
   const { data: bundles, isLoading, error } = usePermissionBundles();
   const deleteMut = useDeleteBundle();
 
+  const [tab, setTab] = useState<TabKey>('bundles');
   const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PermissionBundleDto | null>(null);
@@ -46,122 +51,164 @@ export default function UserPermissionGroupsPage() {
     qc.invalidateQueries({ queryKey: ['admin', 'permission-bundles'] });
   }
 
-  return (
-    <div className="space-y-6">
+  const segments: { key: TabKey; label: string; icon: typeof Package }[] = [
+    { key: 'bundles', label: 'Yetki Paketleri', icon: Package },
+    { key: 'roles', label: 'Rollere Yetki Ata', icon: Users },
+  ];
+
+  const bundlesPanel = (
+    <div className="flex min-h-0 flex-1 flex-col">
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="m-4 mb-0">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>Paketler yüklenirken hata oluştu.</AlertDescription>
         </Alert>
       )}
 
-      <div className="bg-background border border-border rounded-xl overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center px-4 py-3 border-b border-border bg-muted/40">
-          <p className="text-xs text-muted-foreground">
-            Paketler, sistem yöneticisi tarafından oluşturulur ve rol yetkilendirme matrisinde
-            "Paket Uygula" ile role atanır.
-          </p>
-          {canManage && (
-            <Button onClick={() => setCreateOpen(true)} className="h-9 ml-auto">
-              <Plus className="h-4 w-4 mr-1.5" />
-              Yeni Paket
-            </Button>
-          )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr className="border-b border-border">
+                <th className="border-b border-border px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ad</th>
+                <th className="w-48 border-b border-border px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategori</th>
+                <th className="w-28 border-b border-border px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Yetki</th>
+                <th className="w-24 border-b border-border px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tür</th>
+                <th className="w-12 border-b border-border px-5 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-16 text-center text-sm text-muted-foreground">
+                    <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" />
+                    Yükleniyor...
+                  </td>
+                </tr>
+              )}
+
+              {!isLoading && bundles && bundles.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-20 text-center">
+                    <FolderOpen className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-foreground">Henüz paket tanımlanmamış</p>
+                    {canManage && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Sağ üstteki “Yeni Paket” ile ilk paketi oluşturun.
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              )}
+
+              {!isLoading && bundles && bundles.map(b => (
+                <tr
+                  key={b.id}
+                  className="group cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-primary/[0.04]"
+                  onClick={() => setEditId(b.id)}
+                >
+                  <td className="px-5 py-3.5">
+                    <span className="text-sm font-medium text-foreground">{b.name}</span>
+                    {b.description && (
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{b.description}</p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">
+                    {b.category ?? <span className="italic">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-center">
+                    <Badge variant="outline" className="tabular-nums text-xs">
+                      {b.permissionCount}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-3.5 text-center">
+                    {b.isSystemDefault ? (
+                      <Badge variant="secondary" className="gap-1 text-[10px]">
+                        <ShieldCheck className="h-3 w-3" />
+                        Sistem
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Özel</Badge>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                    {canManage && !b.isSystemDefault && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                        onClick={() => setDeleteTarget(b)}
+                        title="Sil"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        {/* Table */}
-        <table className="w-full">
-          <thead className="bg-muted/20 border-b border-border">
-            <tr>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Ad</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-48">Kategori</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-28">Yetki Sayısı</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-24">Sistem</th>
-              <th className="px-4 py-3 w-12"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {isLoading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
-                  Yükleniyor...
-                </td>
-              </tr>
-            )}
-
-            {!isLoading && bundles && bundles.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-16 text-center">
-                  <FolderOpen className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-foreground">Henüz paket tanımlanmamış</p>
-                  {canManage && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      "Yeni Paket" butonuyla ilk paketi oluşturun.
-                    </p>
-                  )}
-                </td>
-              </tr>
-            )}
-
-            {!isLoading && bundles && bundles.map(b => (
-              <tr
-                key={b.id}
-                className="cursor-pointer hover:bg-muted/20 transition-colors"
-                onClick={() => setEditId(b.id)}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{b.name}</span>
-                  </div>
-                  {b.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{b.description}</p>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
-                  {b.category ?? <span className="italic">—</span>}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <Badge variant="outline" className="tabular-nums text-xs">
-                    {b.permissionCount}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  {b.isSystemDefault ? (
-                    <Badge variant="secondary" className="text-[10px] gap-1">
-                      <ShieldCheck className="h-3 w-3" />
-                      Sistem
-                    </Badge>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground">Özel</span>
-                  )}
-                </td>
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  {canManage && !b.isSystemDefault && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteTarget(b)}
-                      title="Sil"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
         {!isLoading && bundles && bundles.length > 0 && (
-          <div className="px-4 py-2.5 border-t border-border bg-muted/30">
+          <div className="border-t border-border px-5 py-2.5">
             <p className="text-xs text-muted-foreground">
               Toplam <span className="font-medium text-foreground">{bundles.length}</span> paket
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col">
+      {/* Sekmeler + içerik TEK kutuda */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        {/* Kutunun başlık şeridi: segment seçici + bağlamsal aksiyon */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2.5">
+          {canAssignRoles ? (
+            <div className="inline-flex items-center gap-1 rounded-lg bg-muted/60 p-1">
+              {segments.map(s => {
+                const Icon = s.icon;
+                const active = tab === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setTab(s.key)}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
+              <Package className="h-4 w-4 text-primary" />
+              Yetki Paketleri
+            </div>
+          )}
+
+          {tab === 'bundles' && canManage && (
+            <Button onClick={() => setCreateOpen(true)} className="h-9 gap-1.5 shadow-sm">
+              <Plus className="h-4 w-4" />
+              Yeni Paket
+            </Button>
+          )}
+        </div>
+
+        {/* Kutunun gövdesi — kalan yüksekliği doldurur */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          {tab === 'bundles' ? bundlesPanel : <RolePermissionMatrix />}
+        </div>
       </div>
 
       <PermissionBundleFormDialog

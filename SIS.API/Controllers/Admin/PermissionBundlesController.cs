@@ -122,10 +122,10 @@ public class PermissionBundlesController : ControllerBase
     }
 
     [HttpGet("/api/admin/roles/{roleId:int}/applied-bundles")]
-    public async Task<ActionResult<List<int>>> GetAppliedBundles(int roleId, CancellationToken ct)
+    public async Task<ActionResult<List<AppliedBundleDto>>> GetAppliedBundles(int roleId, CancellationToken ct)
     {
-        var ids = await _bundleService.GetAppliedBundleIdsAsync(roleId, ct);
-        return Ok(ids);
+        var applied = await _bundleService.GetAppliedBundlesAsync(roleId, ct);
+        return Ok(applied);
     }
 
     private async Task<bool> IsSystemAdminRoleAsync(int roleId)

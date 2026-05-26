@@ -12,47 +12,11 @@ public static partial class SeedData
             new()
             {
                 ModuleKey = "StudentPanel",
-                Key = "CourseRegistrationEnabled",
-                Value = "true",
-                Category = "Registration",
-                DataType = "bool",
-                Description = "Öğrenci panelinde ders kayıt işlemleri aktif mi?"
-            },
-            new()
-            {
-                ModuleKey = "StudentPanel",
                 Key = "CourseRegistrationOpenAt",
                 Value = "09:00",
                 Category = "Registration",
                 DataType = "time",
                 Description = "Öğrenci panelinde ders kayıt ekranının günlük açılış saati"
-            },
-            new()
-            {
-                ModuleKey = "StudentPanel",
-                Key = "DocumentRequestEnabled",
-                Value = "true",
-                Category = "Documents",
-                DataType = "bool",
-                Description = "Öğrenci panelinde belge talebi butonu aktif mi?"
-            },
-            new()
-            {
-                ModuleKey = "InstructorPanel",
-                Key = "ShowStudentPhone",
-                Value = "false",
-                Category = "Privacy",
-                DataType = "bool",
-                Description = "Akademisyen ekranlarında öğrenci telefon numarası gösterilsin mi?"
-            },
-            new()
-            {
-                ModuleKey = "StaffPanel",
-                Key = "DocumentWorkflowEnabled",
-                Value = "true",
-                Category = "Documents",
-                DataType = "bool",
-                Description = "Personel panelinde belge iş akışı aktif mi?"
             },
             new()
             {
@@ -467,24 +431,6 @@ public static partial class SeedData
                 Category = "ModuleControl",
                 DataType = "string",
                 Description = "Bütünleme harf notu yayın kullanıcı duyurusu"
-            },
-            new()
-            {
-                ModuleKey = "SocialTranscriptStudentApplication",
-                Key = "Mode",
-                Value = "term-event-based",
-                Category = "ModuleControl",
-                DataType = "string",
-                Description = "Sosyal transkript öğrenci başvuru modülünün çalışma modu"
-            },
-            new()
-            {
-                ModuleKey = "SocialTranscriptStudentApplication",
-                Key = "Announcement",
-                Value = "Sosyal transkript başvurusu yalnızca not yayınlama sonrası açık olacaktır.",
-                Category = "ModuleControl",
-                DataType = "string",
-                Description = "Sosyal transkript öğrenci başvuru kullanıcı duyurusu"
             },
             new()
             {

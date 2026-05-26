@@ -10,7 +10,7 @@ export function AnomalyBanner() {
   return (
     <div className="space-y-2">
       {anomalies.map((anomaly, i) => (
-        <Alert key={i} variant={anomaly.severity === 'critical' ? 'destructive' : 'default'} className="py-2">
+        <Alert key={`${anomaly.type}-${anomaly.message}-${i}`} variant={anomaly.severity === 'critical' ? 'destructive' : 'default'} className="py-2">
           {anomaly.severity === 'critical'
             ? <ShieldAlert className="h-4 w-4" />
             : <AlertTriangle className="h-4 w-4" />

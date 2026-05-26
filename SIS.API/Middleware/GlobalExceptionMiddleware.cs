@@ -71,7 +71,13 @@ public sealed class GlobalExceptionMiddleware
             status,
             context.TraceIdentifier);
 
-        await TryWriteAuditLogAsync(context, ex, status);
+        // Yalnızca gerçek sunucu hatalarını (5xx) "SystemError" olarak AuditLog'a yaz.
+        // İş kuralı ihlalleri (InvalidOperationException/ArgumentException → 400),
+        // bulunamayan kayıt (404) ve yetki reddi (403) beklenen 4xx akışlarıdır; bunları
+        // SystemError saymak anomali alarmlarını ve hata istatistiklerini şişirir,
+        // ayrıca her validasyon hatasında 4000 karakterlik stack trace yazılmasına yol açar.
+        if (status >= StatusCodes.Status500InternalServerError)
+            await TryWriteAuditLogAsync(context, ex, status);
 
         if (context.Response.HasStarted)
         {

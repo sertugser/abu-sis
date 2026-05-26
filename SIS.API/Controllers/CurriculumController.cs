@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Curriculum.Services;
 using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -12,7 +13,10 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/curriculum")]
 [Authorize]
-public class CurriculumController(AppDbContext context, IElectiveGroupScopeValidator scopeValidator) : ControllerBase
+public class CurriculumController(
+    AppDbContext context,
+    IElectiveGroupScopeValidator scopeValidator,
+    ICourseStatisticsService courseStatistics) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
@@ -114,13 +118,14 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     // ── İntibak (Müfredat Ders İntibak İşlemleri — toplu PreviousCourse eşleştirmesi) ──
     public record IntibakCurriculumDto(
         int Id, int ProgramId, string ProgramName, string ProgramCode,
-        string DepartmentName, string Version, string? Name,
+        string FacultyName, string DepartmentName, string Version, string? Name,
         bool IsActive, CurriculumStatus Status,
         int CourseCount, int MappedCount);
 
     public record IntibakCourseDto(
         int CourseId, string CourseCode, string CourseName,
         int SuggestedSemester, bool IsCompulsory,
+        int NationalCredit, int Ects,
         int? PreviousCourseId, string? PreviousCourseCode, string? PreviousCourseName);
 
     public record IntibakBulkItem(int CourseId, int? PreviousCourseId);
@@ -637,11 +642,11 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
     {
         var list = await context.Curricula
             .AsNoTracking()
-            .Include(c => c.Program).ThenInclude(p => p.Department)
+            .Include(c => c.Program).ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
             .OrderBy(c => c.Program.Name).ThenByDescending(c => c.Version)
             .Select(c => new IntibakCurriculumDto(
                 c.Id, c.ProgramId, c.Program.Name, c.Program.Code,
-                c.Program.Department.Name, c.Version, c.Name,
+                c.Program.Department.Faculty.Name, c.Program.Department.Name, c.Version, c.Name,
                 c.IsActive, c.Status,
                 c.CurriculumCourses.Count,
                 c.CurriculumCourses.Count(cc => cc.PreviousCourseId != null)))
@@ -669,12 +674,26 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             .Select(cc => new IntibakCourseDto(
                 cc.CourseId, cc.Course.Code, cc.Course.Name,
                 cc.SuggestedSemester, cc.IsCompulsory,
+                cc.Course.NationalCredit, cc.Course.Ects,
                 cc.PreviousCourseId,
                 cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
                 cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
             .ToListAsync(ct);
 
         return Ok(courses);
+    }
+
+    // ── GET /api/curriculum/course/{courseId}/intibak-statistics ── (detay paneli öğrenci sayıları) ──
+    [HttpGet("course/{courseId:int}/intibak-statistics")]
+    [RequirePermission("menu.mufredat-ders-intibak.view")]
+    public async Task<IActionResult> GetCourseIntibakStatistics(int courseId, CancellationToken ct)
+    {
+        var exists = await context.Set<Domain.Entities.Course>().AnyAsync(c => c.Id == courseId, ct);
+        if (!exists)
+            return NotFound(new { message = "Ders bulunamadı." });
+
+        var stats = await courseStatistics.GetCourseIntibakStatisticsAsync(courseId, ct);
+        return Ok(stats);
     }
 
     // ── PUT /api/curriculum/{id}/intibak ── (toplu intibak kaydet) ──

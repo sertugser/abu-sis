@@ -1,21 +1,37 @@
+// KAYNAK: backend AuditInterceptor.AuditedEntityTypes + manuel log üreten action'ların
+// EntityType'ları (Authentication=login, System=hata/yetki, AuditLog=veri erişimi).
+// Yeni bir denetlenen varlık eklerken buraya da bir etiket ekle — ENTITY_TYPE_OPTIONS bundan türetilir.
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
+  // Akademik yapı
+  Faculty: 'Fakülte',
+  Department: 'Bölüm',
+  AcademicProgram: 'Program',
   AcademicTerm: 'Akademik Dönem',
+  Curriculum: 'Müfredat',
+  Course: 'Ders',
   CourseSection: 'Ders Seksiyonu',
-  CourseRegistration: 'Ders Kaydı',
-  Student: 'Öğrenci',
-  ApplicationUser: 'Kullanıcı',
-  SystemConfig: 'Sistem Ayarı',
-  WebModuleSetting: 'Web Modül Ayarı',
+  ClassroomTermAssignment: 'Derslik Dönem Ataması',
   FacultyScheduleApproval: 'Fakülte Program Onayı',
   PromotionRule: 'Yükselme Kuralı',
-  RegistrationPlan: 'Kayıt Planı',
   CourseAccessPolicy: 'Ders Erişim Politikası',
-  ClassroomTermAssignment: 'Derslik Dönem Ataması',
-  Course: 'Ders',
-  Curriculum: 'Müfredat',
+  // Öğrenci
+  Student: 'Öğrenci',
+  StudentProgram: 'Öğrenci Programı',
+  StudentPersonalInfo: 'Öğrenci Kişisel Bilgisi',
+  StudentDocument: 'Öğrenci Belgesi',
+  IssuedDocument: 'Üretilen Belge',
+  StudentScholarshipDetail: 'Öğrenci Bursu',
+  StudentPlacement: 'Öğrenci Yerleştirme',
+  CourseRegistration: 'Ders Kaydı',
+  RegistrationPlan: 'Kayıt Planı',
+  // Not / değerlendirme
   StudentGrade: 'Öğrenci Notu',
   GradeComponent: 'Not Bileşeni',
   GradingCriteria: 'Değerlendirme Kriteri',
+  // Kullanıcı / sistem
+  ApplicationUser: 'Kullanıcı',
+  SystemConfig: 'Sistem Ayarı',
+  WebModuleSetting: 'Web Modül Ayarı',
   Authentication: 'Kimlik Doğrulama',
   System: 'Sistem',
   AuditLog: 'Denetim Kaydı',
@@ -35,21 +51,10 @@ export const ACTION_CONFIG: Record<string, { label: string; color: string; bg: s
   Forbidden:          { label: 'Yasaklı Erişim',    color: 'text-orange-700',  bg: 'bg-orange-50 border-orange-200',  icon: '⛔' },
 };
 
+// ENTITY_TYPE_LABELS'tan türetilir → iki harita asla drift etmez.
 export const ENTITY_TYPE_OPTIONS = [
   { value: 'all', label: 'Tüm Varlıklar' },
-  { value: 'StudentGrade', label: 'Öğrenci Notu' },
-  { value: 'CourseRegistration', label: 'Ders Kaydı' },
-  { value: 'CourseSection', label: 'Ders Seksiyonu' },
-  { value: 'Student', label: 'Öğrenci' },
-  { value: 'ApplicationUser', label: 'Kullanıcı' },
-  { value: 'Course', label: 'Ders' },
-  { value: 'Curriculum', label: 'Müfredat' },
-  { value: 'AcademicTerm', label: 'Akademik Dönem' },
-  { value: 'SystemConfig', label: 'Sistem Ayarı' },
-  { value: 'WebModuleSetting', label: 'Web Modül Ayarı' },
-  { value: 'ClassroomTermAssignment', label: 'Derslik Dönem Ataması' },
-  { value: 'Authentication', label: 'Kimlik Doğrulama' },
-  { value: 'System', label: 'Sistem' },
+  ...Object.entries(ENTITY_TYPE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 export const DEFAULT_PAGE_SIZE = 50;

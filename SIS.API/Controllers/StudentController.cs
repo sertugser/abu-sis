@@ -462,14 +462,9 @@ public class StudentController : ControllerBase
         if (studentId == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
-        var transcriptEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptStudentApplicationEnabled", true);
-        if (!transcriptEnabled)
-            return BadRequest(new { error = "Sosyal transkript başvuru akışı sistem konfigürasyonunda kapalı." });
-
-        var transcriptAccess = await ResolveStudentModuleAccessAsync(studentId.Value, "social-transcript-student-application");
-        if (!transcriptAccess.IsOpen)
-            return BadRequest(new { error = transcriptAccess.Message ?? "Sosyal transkript başvuru akışı şu anda kapalı." });
-
+        // Öğrenci kendi transkriptini her zaman görüntüleyebilir (yetki: menu.transkript.view).
+        // Yalnızca aktif dönemin henüz ilan edilmemiş notları gizlenir; bu kural
+        // GetTranscriptAsync içindeki dönem-bazlı görünürlük mantığıyla uygulanır.
         var transcript = await _transcriptService.GetTranscriptAsync(studentId.Value);
         return transcript == null
             ? NotFound(new { error = "Transkript bilgisi bulunamadi." })

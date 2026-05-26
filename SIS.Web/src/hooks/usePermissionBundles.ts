@@ -3,7 +3,7 @@ import {
   applyBundleToRole,
   createBundle,
   deleteBundle,
-  getAppliedBundleIds,
+  getAppliedBundles,
   getBundle,
   listBundles,
   removeBundleFromRole,
@@ -31,10 +31,10 @@ export function usePermissionBundle(id: number | null) {
   });
 }
 
-export function useAppliedBundleIds(roleId: number | null) {
+export function useAppliedBundles(roleId: number | null) {
   return useQuery({
     queryKey: ['admin', 'permission-bundles', 'role', roleId, 'applied'],
-    queryFn: () => getAppliedBundleIds(roleId as number),
+    queryFn: () => getAppliedBundles(roleId as number),
     enabled: roleId !== null,
     staleTime: 60 * 1000,
   });

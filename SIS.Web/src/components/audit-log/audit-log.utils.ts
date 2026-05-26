@@ -45,6 +45,22 @@ export function getErrorMessage(error: unknown, fallbackMessage: string): string
   return fallbackMessage;
 }
 
+/**
+ * responseType:'blob' isteklerinde hata gövdesi de Blob olarak gelir; bu durumda
+ * blob'u metne çevirip JSON `error` alanını çıkarır. Aksi halde getErrorMessage'a düşer.
+ * Backend'in "50.000 satır sınırı / filtreleri daraltın" mesajının kullanıcıya ulaşmasını sağlar.
+ */
+export async function getBlobErrorMessage(error: unknown, fallbackMessage: string): Promise<string> {
+  const data = (error as { response?: { data?: unknown } })?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text());
+      if (parsed && typeof parsed.error === 'string') return parsed.error;
+    } catch { /* JSON değilse fallback'e düş */ }
+  }
+  return getErrorMessage(error, fallbackMessage);
+}
+
 export function getUserInitials(name: string | undefined): string {
   if (!name) return '#';
   const parts = name.trim().split(' ');

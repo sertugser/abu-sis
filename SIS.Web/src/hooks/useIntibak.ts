@@ -18,6 +18,15 @@ export function useIntibakCourses(curriculumId: number | null) {
   });
 }
 
+export function useCourseIntibakStatistics(courseId: number | null) {
+  return useQuery({
+    queryKey: ['intibak', 'course-statistics', courseId],
+    queryFn: () => intibakApi.getCourseStatistics(courseId as number),
+    enabled: courseId !== null,
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useSaveIntibak(curriculumId: number | null) {
   const qc = useQueryClient();
   return useMutation({

@@ -362,7 +362,7 @@ public static class PermissionSeed
         ("menu.kullanici-tanimlama.set-status",          PermissionCategory.Menu, "Kullanıcı aktif/pasif durumu"),
         ("menu.personel-listesi.view",                   PermissionCategory.Menu, "Personel (instructor) listesi"),
         ("menu.personel-listesi.create",                 PermissionCategory.Menu, "Yeni personel oluşturma"),
-        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası"),
+        // "Kullanıcı Yetki Grupları" sayfası system.permission-bundle.view ile korunur (M-1 standardizasyon).
         ("menu.kullanici-rapor-gruplari.view",           PermissionCategory.Menu, "Kullanıcı rapor grupları sayfası"),
         ("menu.kullanici-vekalet-islemleri.view",        PermissionCategory.Menu, "Kullanıcı vekalet işlemleri sayfası"),
         ("menu.kullanici-vekalet-islemleri.manage",      PermissionCategory.Menu, "Vekâlet oluşturma/iptal etme (audit'li)"),
@@ -396,9 +396,9 @@ public static class PermissionSeed
         ("system.user-scope.view",                       PermissionCategory.System, "Kullanıcı scope bilgisini görüntüleme (admin UI)"),
         ("system.user-scope.assign",                     PermissionCategory.System, "Kullanıcı scope atama/güncelleme/temizleme (admin UI)"),
 
-        // ─── menu.* (Phase 2 — Permission Bundles sayfası) ──────────────────
-        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası görüntüleme"),
-        ("menu.kullanici-yetki-gruplari.manage",         PermissionCategory.Menu, "Kullanıcı yetki grupları oluşturma/düzenleme/silme"),
+        // Not: "Kullanıcı Yetki Grupları" sayfası system.permission-bundle.* anahtarlarını kullanır
+        // (yukarıda Phase 2 bloğunda). Eski menu.kullanici-yetki-gruplari.* anahtarları kaldırıldı —
+        // .view yukarıda Kullanıcı İşlemleri bloğunda zaten tanımlı, .manage hiç kullanılmıyordu.
 
         // ─── menu.* + system.* (Menü Yönetimi — Admin Menu Editor) ─────────
         ("menu.menu-yonetimi.view",                      PermissionCategory.Menu, "Menü yönetimi sayfası görüntüleme"),
@@ -426,6 +426,10 @@ public static class PermissionSeed
 
         var missing = All
             .Where(p => !existingSet.Contains(p.Key))
+            // Defansif dedup: All listesinde yanlışlıkla aynı Key iki kez yazılırsa
+            // (Permissions.Key UNIQUE olduğu için) taze DB seed'inde çökmemesi adına tekilleştir.
+            .GroupBy(p => p.Key, StringComparer.Ordinal)
+            .Select(g => g.First())
             .Select(p => new Permission
             {
                 Key = p.Key,

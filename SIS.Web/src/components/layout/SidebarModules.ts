@@ -14,6 +14,7 @@ import {
   IdCard,
   HelpCircle,
   FileBarChart,
+  Compass,
 } from 'lucide-react';
 
 /**
@@ -38,6 +39,7 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   IdCard,
   HelpCircle,
   FileBarChart,
+  Compass,
 };
 
 export function resolveIcon(name: string | null | undefined): React.ComponentType<{ className?: string }> {

@@ -19,18 +19,23 @@ interface UserSearchResult {
 interface UserSearchComboboxProps {
   value: string;
   onChange: (userId: string) => void;
+  /**
+   * Aramanın yapılacağı endpoint. Çağıran sayfanın yetkisine uygun bir uç verilebilir
+   * (örn. vekâlet sayfası kendi yetkisiyle korunan '/admin/delegations/users' kullanır).
+   */
+  endpoint?: string;
 }
 
-export function UserSearchCombobox({ value, onChange }: UserSearchComboboxProps) {
+export function UserSearchCombobox({ value, onChange, endpoint = '/admin/users' }: UserSearchComboboxProps) {
   const [searchText, setSearchText] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const debouncedSearch = useDebounce(searchText, 300);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { data } = useQuery({
-    queryKey: ['admin', 'users', 'search', debouncedSearch],
+    queryKey: ['admin', 'users', 'search', endpoint, debouncedSearch],
     queryFn: async () => {
-      const { data } = await apiClient.get<UserSearchResult>('/admin/users', {
+      const { data } = await apiClient.get<UserSearchResult>(endpoint, {
         params: { search: debouncedSearch, pageSize: 10 },
       });
       return data;
