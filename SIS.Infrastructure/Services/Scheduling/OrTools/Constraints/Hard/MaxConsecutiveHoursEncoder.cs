@@ -100,21 +100,34 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
                 }
             }
 
-            // Sliding window constraints per consecutive block.
-            int windowSize = _maxHoursPerDay + 1;
+            // Clock-saat sliding window (evaluator H15 ile parite — eskiden SLOT sayardı, 50dk'lık
+            // slotta sınırda ayrışıyordu). Her başlangıç slotundan itibaren kümülatif CLOCK-süre
+            // limitMinutes'i ilk aşan minimal pencere [start..end] bulunur; o pencerenin tamamen
+            // kapatılması (tüm slotların hocaca işgali) yasaklanır → en az bir slot boş → ardışık
+            // teaching süresi limiti aşamaz. (Slot süreleri ctx.Request.TimeSlots'tan; gap'ler
+            // teaching süresine eklenmez — evaluator da blok sürelerini toplar, gap'i değil.)
+            // H2 değişmezi (slot başına ≤1 section) altında sum(covers) = kapalı slot sayısı.
+            int limitMinutes = _maxHoursPerDay * 60;
             foreach (var block in consecutiveBlocks)
             {
-                for (int start = 0; start + windowSize <= block.Count; start++)
+                for (int start = 0; start < block.Count; start++)
                 {
-                    var windowSlots = new List<int>(windowSize);
-                    for (int k = 0; k < windowSize; k++)
-                        windowSlots.Add(block[start + k]);
+                    double cumMinutes = 0;
+                    int end = -1;
+                    for (int k = start; k < block.Count; k++)
+                    {
+                        var slot = ctx.Request.TimeSlots[block[k]];
+                        cumMinutes += (slot.EndTime - slot.StartTime).TotalMinutes;
+                        if (cumMinutes > limitMinutes) { end = k; break; }
+                    }
+                    if (end < 0) continue; // bu start'tan blok sonuna dek limit aşılmıyor
 
                     var windowTerms = new List<LinearExpr>();
                     foreach (var section in sectionList)
                     {
-                        foreach (var slotIdx in windowSlots)
+                        for (int k = start; k <= end; k++)
                         {
+                            var slotIdx = block[k];
                             if (coverageVars.TryGetValue(
                                     (section.Id, ComponentType.Lecture, slotIdx), out var lecCov))
                                 windowTerms.Add(lecCov);
@@ -126,10 +139,11 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
 
                     if (windowTerms.Count == 0) continue;
 
+                    // windowLen = end - start + 1; "tamamı kapalı olamaz" = sum ≤ windowLen - 1.
                     var literal = ctx.Assumptions.Register(Code,
                         primarySectionId: instructorId,
-                        secondarySectionId: windowSlots[0]);
-                    ctx.Model.Add(LinearExpr.Sum(windowTerms) <= _maxHoursPerDay)
+                        secondarySectionId: block[start]);
+                    ctx.Model.Add(LinearExpr.Sum(windowTerms) <= (end - start))
                         .OnlyEnforceIf(literal);
                 }
             }
