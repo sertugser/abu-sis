@@ -91,6 +91,9 @@ public sealed class ScheduleModelBuilder
         //    Maximize(W * sum(present) - sum(penalties))
         //    Primary: schedule as many sections as possible (W heavy weight).
         //    Secondary: minimize soft penalties (tie-breaker).
+        // W=10000 gerçekçi per-section soft penalty'leri (onlarca-yüzlerce) ~50× domine eder; bu
+        // değer pinlenmiş objective testleriyle sabittir. Patolojik biçimde >10000 penalty biriktiren
+        // tek section teorik olarak düşürülebilir, ama gerçek ağırlıklarla görülmedi.
         const int presenceWeight = 10000;
 
         var presenceVars = variables.AllSectionPresent.Values
