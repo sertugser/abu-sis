@@ -12,10 +12,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// üzerinden direkt RuleEngine factory'sine inject edilmesi gerek (Faz 4'te eklenecek).
 /// Bu predicate şu an sadece override > 0 ise enforce eder; default fallback Faz 4'te aktive.
 /// </summary>
-public sealed class HWL_WeeklyLoadRule : IRulePredicate
+public sealed class HWL_WeeklyLoadRule : ISoftRulePredicate
 {
     public string Code => "H-WL";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.HWLWeight default'u (8).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 8;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {

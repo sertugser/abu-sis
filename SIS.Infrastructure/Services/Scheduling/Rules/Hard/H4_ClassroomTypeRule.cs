@@ -14,10 +14,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 ///      Course.RequiredLabClassroomType admin override'ı uygulanır (2026-05-19 — predicate'e
 ///      eklendi, daha önce yalnızca solver biliyordu).
 /// </summary>
-public sealed class H4_ClassroomTypeRule : IRulePredicate
+public sealed class H4_ClassroomTypeRule : ISoftRulePredicate
 {
     public string Code => "H4";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.H4Weight default'u (5).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 5;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {

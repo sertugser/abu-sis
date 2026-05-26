@@ -7,10 +7,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// V1 ile V2 birebir aynı semantik: aynı gün içinde, hocanın derslerini start time'a göre sırala,
 /// gap ≤ BreakDurationMinutes ise blok birikir; max blok > MaxConsecutiveHours olamaz.
 /// </summary>
-public sealed class H15_MaxConsecutiveHoursRule : IRulePredicate
+public sealed class H15_MaxConsecutiveHoursRule : ISoftRulePredicate
 {
     public string Code => "H15";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.H15Weight default'u (6).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 6;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {
