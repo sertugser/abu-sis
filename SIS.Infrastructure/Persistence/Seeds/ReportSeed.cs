@@ -27,6 +27,7 @@ public static class ReportSeed
             ("ders-kayit-listesi", "Ders Kayıt Listesi", "Bir dönem/şubedeki ders kayıtları (öğrenci, ders, durum, not)."),
             ("danisman-ogrenci-listesi", "Danışman Öğrenci Listesi", "Bir danışmana atanmış öğrenciler."),
             ("sube-kontenjan-listesi", "Şube/Kontenjan Listesi", "Şubelerin kapasite ve doluluk durumu."),
+            ("not-durum-cizelgesi", "Not Durum Çizelgesi", "Bir dönem/şubedeki öğrencilerin komponent puanları (vize/final/ödev…)."),
         };
 
         var codes = definitions.Select(d => d.Code).ToArray();
