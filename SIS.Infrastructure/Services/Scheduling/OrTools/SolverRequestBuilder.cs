@@ -470,10 +470,21 @@ public sealed class SolverRequestBuilder
     private async Task<List<CoEnrollmentPairInput>> LoadCoEnrollmentPairsAsync(
         int currentTermId, int minThreshold, CancellationToken ct)
     {
+        // "Son 3 dönem" kronolojiye (TermStart) göre seçilmeli, Id'ye göre değil — Id oluşturma
+        // sırasıdır; geç oluşturulan/backfill edilen bir dönem akademik olarak daha erken olabilir.
+        var currentStart = await _context.AcademicTerms
+            .AsNoTracking()
+            .Where(t => t.Id == currentTermId)
+            .Select(t => (DateTime?)t.TermStart)
+            .FirstOrDefaultAsync(ct);
+
+        if (currentStart == null)
+            return new List<CoEnrollmentPairInput>();
+
         var recentTermIds = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => t.Id < currentTermId)
-            .OrderByDescending(t => t.Id)
+            .Where(t => t.TermStart < currentStart.Value)
+            .OrderByDescending(t => t.TermStart)
             .Take(3)
             .Select(t => t.Id)
             .ToListAsync(ct);

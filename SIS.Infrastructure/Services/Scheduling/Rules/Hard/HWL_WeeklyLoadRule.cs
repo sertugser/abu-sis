@@ -22,10 +22,12 @@ public sealed class HWL_WeeklyLoadRule : IRulePredicate
         var c = ctx.Candidate;
         if (!c.InstructorId.HasValue) return Array.Empty<RuleViolation>();
 
-        // TODO Faz 4: DefaultInstructorMaxWeeklyHours SystemConfig'ten okunup config'e eklenecek.
-        // Şu an V1 paritesi: override > 0 ise enforce, değilse skip (V1 disabled-when-zero).
-        if (c.InstructorMaxWeeklyHours <= 0) return Array.Empty<RuleViolation>();
-        var maxWeekly = c.InstructorMaxWeeklyHours;
+        // V2 WeeklyLoadEncoder ile parite: override > 0 ise onu, değilse kurumsal default'u uygula.
+        // (Eskiden 0 → "limitsiz" sayılıp hiç raporlanmıyordu; solver ise default 30s uyguluyordu → drift.)
+        var maxWeekly = c.InstructorMaxWeeklyHours > 0
+            ? c.InstructorMaxWeeklyHours
+            : ctx.Config.DefaultInstructorMaxWeeklyHours;
+        if (maxWeekly <= 0) return Array.Empty<RuleViolation>(); // hem override hem default 0 → kapalı
 
         var totalHours = ctx.Snapshot.Sections
             .Where(s => s.InstructorId == c.InstructorId && s.SectionId != c.SectionId)

@@ -17,6 +17,14 @@ public sealed class SchedulingConstraintConfig
     public TimeOnly LunchBreakEnd { get; set; }
     public int MaxConsecutiveHours { get; set; }
     public int BreakDurationMinutes { get; set; }
+
+    /// <summary>
+    /// H-WL — instructor.MaxWeeklyHours=0 (girilmemiş) olduğunda uygulanacak kurumsal varsayılan
+    /// haftalık ders saati limiti. V2 WeeklyLoadEncoder ile parite (encoder de override yoksa bunu
+    /// uygular); evaluator eskiden 0'ı "limitsiz" sayıp hiç raporlamıyordu (drift).
+    /// SystemConfig: <c>Schedule.DefaultInstructorMaxWeeklyHours</c> (default 30).
+    /// </summary>
+    public int DefaultInstructorMaxWeeklyHours { get; set; } = 30;
     public int AmphiThreshold { get; set; }
     public int TheoryLabSplitThreshold { get; set; }
 
@@ -104,6 +112,7 @@ public sealed class SchedulingConstraintConfig
 
             // Plan 11 Faz 1.2 — V2 encoder ile parite kaynaklar
             MaxDailyHours = GetInt(config, "Schedule.MaxDailyHoursPerInstructor", 9),
+            DefaultInstructorMaxWeeklyHours = GetInt(config, "Schedule.DefaultInstructorMaxWeeklyHours", 30),
             // 2026-05-19: AmphiThresholdEnabled + ClassroomTypeRequirementEnabled artık
             // H4.Parameters JSON'undan geliyor; ApplyConstraintStateOverrides(state) ile setlensin.
 
