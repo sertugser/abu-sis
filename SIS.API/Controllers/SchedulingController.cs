@@ -214,6 +214,19 @@ public class SchedulingController : ControllerBase
             .Where(ss => ss.CourseSectionId == section2.Id)
             .ToListAsync(cancellationToken);
 
+        // Bağımsız takas (yalnız slot VEYA yalnız derslik) + farklı blok sayısı ill-defined:
+        // SwapSectionScheduleRecordsAsync slot kaynağını (n adet) derslik kaynağıyla (m adet) zip'ler;
+        // n≠m olunca derslikler yanlış slotlara eşlenir / bloklar düşer. Tam takas (ikisi birden) blok
+        // sayısından bağımsız tutarlıdır. Bu yüzden yalnız tek-boyutlu takasta eşit blok sayısı zorunlu.
+        if (request.SwapSlots != request.SwapClassrooms
+            && swapSchedules1.Count != swapSchedules2.Count)
+        {
+            return BadRequest(new
+            {
+                error = "Farklı blok sayısına sahip section'lar yalnızca slot ve derslik birlikte takas edilebilir."
+            });
+        }
+
         // Preserve originals for rollback
         var origClassroomId1 = section1.ClassroomId;
         var origClassroomId2 = section2.ClassroomId;
