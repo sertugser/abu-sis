@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
+using SIS.Application.Reports;
 using SIS.Domain.Identity;
 using SIS.Infrastructure.Persistence;
 
@@ -22,15 +23,18 @@ public class ReportAuthorizationService : IReportAuthorizationService
     private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
+    private readonly IReportAccessResolver _resolver;
 
     public ReportAuthorizationService(
         AppDbContext db,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<int>> roleManager)
+        RoleManager<IdentityRole<int>> roleManager,
+        IReportAccessResolver resolver)
     {
         _db = db;
         _userManager = userManager;
         _roleManager = roleManager;
+        _resolver = resolver;
     }
 
     // ── Categories ───────────────────────────────────────────
@@ -172,244 +176,210 @@ public class ReportAuthorizationService : IReportAuthorizationService
         await _db.SaveChangesAsync(ct);
     }
 
-    // ── Category × Role matrix ───────────────────────────────
+    // ── Kullanıcı grupları ───────────────────────────────────
 
-    public async Task<IReadOnlyList<CategoryRoleMatrixRowDto>> GetCategoryRoleMatrixAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ReportUserGroupDto>> ListGroupsAsync(CancellationToken ct = default) =>
+        await _db.ReportUserGroups.AsNoTracking().OrderBy(g => g.Name)
+            .Select(g => new ReportUserGroupDto(g.Id, g.Name, g.Description, g.Members.Count))
+            .ToListAsync(ct);
+
+    public async Task<ReportUserGroupDto> CreateGroupAsync(CreateReportUserGroupDto dto, CancellationToken ct = default)
     {
-        var categories = await _db.ReportCategories
-            .AsNoTracking()
-            .OrderBy(c => c.Name)
-            .ToListAsync(ct);
-
-        var allMappings = await _db.ReportCategoryRolePermissions
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        return categories
-            .Select(c => new CategoryRoleMatrixRowDto(
-                c.Id,
-                c.Code,
-                c.Name,
-                allMappings.Where(m => m.CategoryId == c.Id).Select(m => m.RoleId).ToList()))
-            .ToList();
+        ValidateName(dto.Name);
+        ValidateOptionalText(dto.Description, DescriptionMaxLength, "Açıklama");
+        if (await _db.ReportUserGroups.AnyAsync(g => g.Name == dto.Name.Trim(), ct))
+            throw new InvalidOperationException($"Grup adı zaten kullanımda: {dto.Name.Trim()}");
+        var entity = new ReportUserGroup { Name = dto.Name.Trim(), Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim() };
+        _db.ReportUserGroups.Add(entity);
+        await _db.SaveChangesAsync(ct);
+        return new ReportUserGroupDto(entity.Id, entity.Name, entity.Description, 0);
     }
 
-    public async Task SetCategoryRolesAsync(SetCategoryRolesDto dto, int grantedByUserId, CancellationToken ct = default)
+    public async Task<ReportUserGroupDto> UpdateGroupAsync(int id, UpdateReportUserGroupDto dto, CancellationToken ct = default)
     {
-        var category = await _db.ReportCategories.FirstOrDefaultAsync(c => c.Id == dto.CategoryId, ct)
-            ?? throw new KeyNotFoundException($"Kategori bulunamadı: {dto.CategoryId}");
+        var entity = await _db.ReportUserGroups.FirstOrDefaultAsync(g => g.Id == id, ct)
+            ?? throw new KeyNotFoundException($"Grup bulunamadı: {id}");
+        ValidateName(dto.Name);
+        ValidateOptionalText(dto.Description, DescriptionMaxLength, "Açıklama");
+        entity.Name = dto.Name.Trim();
+        entity.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        var count = await _db.ReportUserGroupMembers.CountAsync(m => m.GroupId == id, ct);
+        return new ReportUserGroupDto(entity.Id, entity.Name, entity.Description, count);
+    }
 
-        // Replace-all: önce mevcut satırları sil, sonra yenileri ekle
-        var existing = await _db.ReportCategoryRolePermissions
-            .Where(rp => rp.CategoryId == dto.CategoryId)
-            .ToListAsync(ct);
-        _db.ReportCategoryRolePermissions.RemoveRange(existing);
-
-        var roleIds = dto.RoleIds.Distinct().ToList();
-        var validRoleIds = await _db.Roles
-            .Where(r => roleIds.Contains(r.Id))
-            .Select(r => r.Id)
-            .ToListAsync(ct);
-
-        foreach (var rid in validRoleIds)
-        {
-            _db.ReportCategoryRolePermissions.Add(new ReportCategoryRolePermission
-            {
-                CategoryId = dto.CategoryId,
-                RoleId = rid,
-                GrantedAt = DateTime.UtcNow,
-                GrantedByUserId = grantedByUserId,
-            });
-        }
-
+    public async Task DeleteGroupAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _db.ReportUserGroups.FirstOrDefaultAsync(g => g.Id == id, ct);
+        if (entity is null) return;
+        // Bu gruba verilmiş grant'ları da temizle (FK yok — manuel)
+        var grants = await _db.ReportAccessGrants
+            .Where(g => g.SubjectKind == ReportGrantSubjectKind.Group && g.SubjectId == id).ToListAsync(ct);
+        _db.ReportAccessGrants.RemoveRange(grants);
+        _db.ReportUserGroups.Remove(entity); // üyeler cascade
         await _db.SaveChangesAsync(ct);
     }
 
-    // ── Per-report override ──────────────────────────────────
-
-    public async Task<IReadOnlyList<ReportPermissionOverrideDto>> ListOverridesAsync(int? reportId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ReportUserGroupMemberDto>> ListGroupMembersAsync(int groupId, CancellationToken ct = default)
     {
-        var query = _db.ReportPermissionOverrides
-            .AsNoTracking()
-            .Include(o => o.Report)
-            .AsQueryable();
-        if (reportId.HasValue)
-            query = query.Where(o => o.ReportId == reportId.Value);
-
-        var rows = await query.ToListAsync(ct);
-
-        var roleIds = rows.Select(r => r.RoleId).Distinct().ToList();
-        var roleLookup = await _db.Roles
-            .Where(r => roleIds.Contains(r.Id))
-            .ToDictionaryAsync(r => r.Id, r => r.Name ?? string.Empty, ct);
-
-        return rows
-            .OrderByDescending(o => o.CreatedAt)
-            .Select(o => new ReportPermissionOverrideDto(
-                o.Id,
-                o.ReportId,
-                o.Report?.Code ?? string.Empty,
-                o.Report?.Name ?? string.Empty,
-                o.RoleId,
-                roleLookup.GetValueOrDefault(o.RoleId, string.Empty),
-                o.IsAllowed,
-                o.Reason,
-                o.CreatedAt))
+        var members = await _db.ReportUserGroupMembers.AsNoTracking()
+            .Where(m => m.GroupId == groupId).ToListAsync(ct);
+        if (members.Count == 0) return Array.Empty<ReportUserGroupMemberDto>();
+        var userIds = members.Select(m => m.UserId).ToList();
+        var users = await _userManager.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FirstName, u.LastName, u.Email })
+            .ToListAsync(ct);
+        return members
+            .Select(m =>
+            {
+                var u = users.FirstOrDefault(x => x.Id == m.UserId);
+                var fullName = u is null ? $"#{m.UserId}" : $"{u.FirstName} {u.LastName}".Trim();
+                return new ReportUserGroupMemberDto(m.UserId, fullName, u?.Email ?? string.Empty, m.AddedAt);
+            })
+            .OrderBy(m => m.FullName)
             .ToList();
     }
 
-    public async Task<ReportPermissionOverrideDto> UpsertOverrideAsync(
-        CreateReportOverrideDto dto,
-        int createdByUserId,
-        CancellationToken ct = default)
+    public async Task AddGroupMemberAsync(int groupId, int userId, CancellationToken ct = default)
     {
+        if (!await _db.ReportUserGroups.AnyAsync(g => g.Id == groupId, ct))
+            throw new KeyNotFoundException($"Grup bulunamadı: {groupId}");
+        if (await _db.ReportUserGroupMembers.AnyAsync(m => m.GroupId == groupId && m.UserId == userId, ct))
+            return;
+        _db.ReportUserGroupMembers.Add(new ReportUserGroupMember { GroupId = groupId, UserId = userId });
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task RemoveGroupMemberAsync(int groupId, int userId, CancellationToken ct = default)
+    {
+        var member = await _db.ReportUserGroupMembers
+            .FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId, ct);
+        if (member is null) return;
+        _db.ReportUserGroupMembers.Remove(member);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    // ── Birleşik yetki (grant) ───────────────────────────────
+
+    public async Task<IReadOnlyList<ReportAccessGrantDto>> ListGrantsAsync(CancellationToken ct = default)
+    {
+        var grants = await _db.ReportAccessGrants.AsNoTracking().OrderByDescending(g => g.GrantedAt).ToListAsync(ct);
+
+        var categoryIds = grants.Where(g => g.ScopeKind == ReportGrantScopeKind.Category).Select(g => g.TargetId).Distinct().ToList();
+        var reportIds = grants.Where(g => g.ScopeKind == ReportGrantScopeKind.Report).Select(g => g.TargetId).Distinct().ToList();
+        var roleIds = grants.Where(g => g.SubjectKind == ReportGrantSubjectKind.Role).Select(g => g.SubjectId).Distinct().ToList();
+        var userIds = grants.Where(g => g.SubjectKind == ReportGrantSubjectKind.User).Select(g => g.SubjectId).Distinct().ToList();
+        var groupIds = grants.Where(g => g.SubjectKind == ReportGrantSubjectKind.Group).Select(g => g.SubjectId).Distinct().ToList();
+
+        var categories = await _db.ReportCategories.AsNoTracking().Where(c => categoryIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+        var reports = await _db.ReportDefinitions.AsNoTracking().Where(r => reportIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Name, ct);
+        var roles = await _db.Roles.AsNoTracking().Where(r => roleIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.Name ?? string.Empty, ct);
+        var groups = await _db.ReportUserGroups.AsNoTracking().Where(g => groupIds.Contains(g.Id)).ToDictionaryAsync(g => g.Id, g => g.Name, ct);
+        var userLabels = new Dictionary<int, string>();
+        if (userIds.Count > 0)
+        {
+            var users = await _userManager.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.FirstName, u.LastName }).ToListAsync(ct);
+            foreach (var u in users)
+                userLabels[u.Id] = $"{u.FirstName} {u.LastName}".Trim();
+        }
+
+        string TargetLabel(ReportAccessGrant g) => g.ScopeKind == ReportGrantScopeKind.Category
+            ? categories.GetValueOrDefault(g.TargetId, $"Kategori #{g.TargetId}")
+            : reports.GetValueOrDefault(g.TargetId, $"Rapor #{g.TargetId}");
+
+        string SubjectLabel(ReportAccessGrant g) => g.SubjectKind switch
+        {
+            ReportGrantSubjectKind.Role => roles.GetValueOrDefault(g.SubjectId, $"Rol #{g.SubjectId}"),
+            ReportGrantSubjectKind.Group => groups.GetValueOrDefault(g.SubjectId, $"Grup #{g.SubjectId}"),
+            _ => userLabels.GetValueOrDefault(g.SubjectId, $"Kullanıcı #{g.SubjectId}"),
+        };
+
+        return grants.Select(g => new ReportAccessGrantDto(
+            g.Id, (int)g.ScopeKind, g.TargetId, TargetLabel(g),
+            (int)g.SubjectKind, g.SubjectId, SubjectLabel(g),
+            (int)g.Effect, g.Reason, g.GrantedAt)).ToList();
+    }
+
+    public async Task<ReportAccessGrantDto> SetGrantAsync(SetReportAccessGrantDto dto, int grantedByUserId, CancellationToken ct = default)
+    {
+        var scope = (ReportGrantScopeKind)dto.ScopeKind;
+        var subject = (ReportGrantSubjectKind)dto.SubjectKind;
+        var effect = (ReportGrantEffect)dto.Effect;
         ValidateOptionalText(dto.Reason, ReasonMaxLength, "Sebep");
+        await EnsureTargetExistsAsync(scope, dto.TargetId, ct);
+        await EnsureSubjectExistsAsync(subject, dto.SubjectId, ct);
 
-        var report = await _db.ReportDefinitions.FirstOrDefaultAsync(r => r.Id == dto.ReportId, ct)
-            ?? throw new KeyNotFoundException($"Rapor bulunamadı: {dto.ReportId}");
-
-        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Id == dto.RoleId, ct)
-            ?? throw new KeyNotFoundException($"Rol bulunamadı: {dto.RoleId}");
-
-        var existing = await _db.ReportPermissionOverrides
-            .FirstOrDefaultAsync(o => o.ReportId == dto.ReportId && o.RoleId == dto.RoleId, ct);
+        var existing = await _db.ReportAccessGrants.FirstOrDefaultAsync(g =>
+            g.ScopeKind == scope && g.TargetId == dto.TargetId &&
+            g.SubjectKind == subject && g.SubjectId == dto.SubjectId, ct);
 
         if (existing is null)
         {
-            existing = new ReportPermissionOverride
+            existing = new ReportAccessGrant
             {
-                ReportId = dto.ReportId,
-                RoleId = dto.RoleId,
-                IsAllowed = dto.IsAllowed,
-                Reason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim(),
-                CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = createdByUserId,
+                ScopeKind = scope, TargetId = dto.TargetId, SubjectKind = subject, SubjectId = dto.SubjectId,
+                Effect = effect, Reason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim(),
+                GrantedAt = DateTime.UtcNow, GrantedByUserId = grantedByUserId,
             };
-            _db.ReportPermissionOverrides.Add(existing);
+            _db.ReportAccessGrants.Add(existing);
         }
         else
         {
-            existing.IsAllowed = dto.IsAllowed;
+            existing.Effect = effect;
             existing.Reason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim();
+            existing.GrantedAt = DateTime.UtcNow;
+            existing.GrantedByUserId = grantedByUserId;
         }
-
         await _db.SaveChangesAsync(ct);
 
-        return new ReportPermissionOverrideDto(
-            existing.Id, existing.ReportId,
-            report.Code, report.Name,
-            existing.RoleId, role.Name ?? string.Empty,
-            existing.IsAllowed, existing.Reason, existing.CreatedAt);
+        var list = await ListGrantsAsync(ct);
+        return list.First(g => g.Id == existing.Id);
     }
 
-    public async Task DeleteOverrideAsync(int id, CancellationToken ct = default)
+    public async Task DeleteGrantAsync(int id, CancellationToken ct = default)
     {
-        var entity = await _db.ReportPermissionOverrides.FirstOrDefaultAsync(o => o.Id == id, ct);
+        var entity = await _db.ReportAccessGrants.FirstOrDefaultAsync(g => g.Id == id, ct);
         if (entity is null) return;
-
-        _db.ReportPermissionOverrides.Remove(entity);
+        _db.ReportAccessGrants.Remove(entity);
         await _db.SaveChangesAsync(ct);
     }
 
-    // ── Yetki çözümleme ──────────────────────────────────────
-
-    public async Task<bool> CanAccessReportAsync(int userId, string reportCode, CancellationToken ct = default)
+    private async Task EnsureTargetExistsAsync(ReportGrantScopeKind scope, int targetId, CancellationToken ct)
     {
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user is null) return false;
-
-        var roles = await _userManager.GetRolesAsync(user);
-        if (roles.Contains(SystemAdminRole)) return true;
-
-        var report = await _db.ReportDefinitions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Code == reportCode, ct);
-        if (report is null) return false;
-
-        var roleIds = await _db.Roles
-            .AsNoTracking()
-            .Where(r => roles.Contains(r.Name!))
-            .Select(r => r.Id)
-            .ToListAsync(ct);
-
-        return await EvaluateAccessAsync(report.Id, report.CategoryId, roleIds, ct);
+        var exists = scope == ReportGrantScopeKind.Category
+            ? await _db.ReportCategories.AnyAsync(c => c.Id == targetId, ct)
+            : await _db.ReportDefinitions.AnyAsync(r => r.Id == targetId, ct);
+        if (!exists) throw new KeyNotFoundException($"Hedef bulunamadı (scope={scope}, id={targetId}).");
     }
+
+    private async Task EnsureSubjectExistsAsync(ReportGrantSubjectKind subject, int subjectId, CancellationToken ct)
+    {
+        var exists = subject switch
+        {
+            ReportGrantSubjectKind.Role => await _db.Roles.AnyAsync(r => r.Id == subjectId, ct),
+            ReportGrantSubjectKind.Group => await _db.ReportUserGroups.AnyAsync(g => g.Id == subjectId, ct),
+            _ => await _userManager.Users.AnyAsync(u => u.Id == subjectId, ct),
+        };
+        if (!exists) throw new KeyNotFoundException($"Özne bulunamadı (kind={subject}, id={subjectId}).");
+    }
+
+    // ── Yetki çözümleme (tek resolver'a delege) ──────────────
+
+    public Task<bool> CanAccessReportAsync(int userId, string reportCode, CancellationToken ct = default)
+        => _resolver.CanAccessAsync(userId, reportCode, ct);
 
     public async Task<IReadOnlyList<AccessibleReportDto>> ListAccessibleReportsAsync(int userId, CancellationToken ct = default)
     {
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user is null) return Array.Empty<AccessibleReportDto>();
-
-        var roles = await _userManager.GetRolesAsync(user);
-        var isSysAdmin = roles.Contains(SystemAdminRole);
-
-        var allReports = await _db.ReportDefinitions
-            .AsNoTracking()
+        var allowedIds = await _resolver.AccessibleReportIdsAsync(userId, ct);
+        return await _db.ReportDefinitions.AsNoTracking()
             .Include(r => r.Category)
-            .ToListAsync(ct);
-
-        if (isSysAdmin)
-        {
-            return allReports
-                .Select(r => new AccessibleReportDto(r.Id, r.Code, r.Name, r.CategoryId, r.Category!.Name))
-                .OrderBy(r => r.CategoryName).ThenBy(r => r.Name)
-                .ToList();
-        }
-
-        var roleIds = await _db.Roles
-            .AsNoTracking()
-            .Where(r => roles.Contains(r.Name!))
-            .Select(r => r.Id)
-            .ToListAsync(ct);
-        var roleIdSet = new HashSet<int>(roleIds);
-
-        // Single round-trip: tüm category role + override eşleşmelerini çek
-        var categoryRoles = await _db.ReportCategoryRolePermissions
-            .AsNoTracking()
-            .Where(rp => roleIdSet.Contains(rp.RoleId))
-            .Select(rp => new { rp.CategoryId, rp.RoleId })
-            .ToListAsync(ct);
-        var allowedCategories = categoryRoles.Select(c => c.CategoryId).ToHashSet();
-
-        var overrides = await _db.ReportPermissionOverrides
-            .AsNoTracking()
-            .Where(o => roleIdSet.Contains(o.RoleId))
-            .Select(o => new { o.ReportId, o.IsAllowed })
-            .ToListAsync(ct);
-
-        var denySet = overrides.Where(o => !o.IsAllowed).Select(o => o.ReportId).ToHashSet();
-        var allowSet = overrides.Where(o => o.IsAllowed).Select(o => o.ReportId).ToHashSet();
-
-        return allReports
-            .Where(r =>
-            {
-                if (denySet.Contains(r.Id)) return false;
-                if (allowSet.Contains(r.Id)) return true;
-                return allowedCategories.Contains(r.CategoryId);
-            })
+            .Where(r => allowedIds.Contains(r.Id))
+            .OrderBy(r => r.Category!.Name).ThenBy(r => r.Name)
             .Select(r => new AccessibleReportDto(r.Id, r.Code, r.Name, r.CategoryId, r.Category!.Name))
-            .OrderBy(r => r.CategoryName).ThenBy(r => r.Name)
-            .ToList();
-    }
-
-    private async Task<bool> EvaluateAccessAsync(int reportId, int categoryId, List<int> roleIds, CancellationToken ct)
-    {
-        // 1) Deny override?
-        var hasDeny = await _db.ReportPermissionOverrides
-            .AsNoTracking()
-            .AnyAsync(o => o.ReportId == reportId && roleIds.Contains(o.RoleId) && !o.IsAllowed, ct);
-        if (hasDeny) return false;
-
-        // 2) Allow override?
-        var hasAllow = await _db.ReportPermissionOverrides
-            .AsNoTracking()
-            .AnyAsync(o => o.ReportId == reportId && roleIds.Contains(o.RoleId) && o.IsAllowed, ct);
-        if (hasAllow) return true;
-
-        // 3) Kategori-rol eşleşmesi
-        return await _db.ReportCategoryRolePermissions
-            .AsNoTracking()
-            .AnyAsync(rp => rp.CategoryId == categoryId && roleIds.Contains(rp.RoleId), ct);
+            .ToListAsync(ct);
     }
 
     private static void ValidateCode(string code, int maxLength)

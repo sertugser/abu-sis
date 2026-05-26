@@ -307,6 +307,7 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IMenuAdminService, MenuAdminService>();
 builder.Services.AddScoped<IPermissionDelegationService, PermissionDelegationService>();
 builder.Services.AddScoped<IReportAuthorizationService, ReportAuthorizationService>();
+builder.Services.AddScoped<SIS.Application.Reports.IReportAccessResolver, SIS.Infrastructure.Services.Reports.ReportAccessResolver>();
 
 // Rapor motoru (Faz 1): handler registry + tek çatı
 builder.Services.AddScoped<SIS.Application.Reports.IUserRoleReader, SIS.Infrastructure.Services.Reports.UserRoleReader>();

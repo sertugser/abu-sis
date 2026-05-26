@@ -4136,6 +4136,49 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("PermissionDelegations");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.ReportAccessGrant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Effect")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ScopeKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectKind", "SubjectId");
+
+                    b.HasIndex("ScopeKind", "TargetId", "SubjectKind", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("ReportAccessGrants");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -4166,27 +4209,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ReportCategories");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
-                {
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RoleId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("GrantedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("GrantedByUserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("CategoryId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("ReportCategoryRolePermissions");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
@@ -4230,7 +4252,7 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("ReportDefinitions");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroup", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -4241,30 +4263,42 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsAllowed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Reason")
+                    b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
-                    b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleId");
-
-                    b.HasIndex("ReportId", "RoleId")
+                    b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ReportPermissionOverrides");
+                    b.ToTable("ReportUserGroups");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroupMember", b =>
+                {
+                    b.Property<int>("GroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GroupId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ReportUserGroupMembers");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
@@ -5677,23 +5711,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
-                {
-                    b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Category");
-                });
-
             modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
                 {
                     b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
@@ -5705,21 +5722,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroupMember", b =>
                 {
-                    b.HasOne("SIS.Domain.Identity.ReportDefinition", "Report")
-                        .WithMany()
-                        .HasForeignKey("ReportId")
+                    b.HasOne("SIS.Domain.Identity.ReportUserGroup", "Group")
+                        .WithMany("Members")
+                        .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Report");
+                    b.Navigation("Group");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
@@ -5909,6 +5920,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
                 {
                     b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroup", b =>
+                {
+                    b.Navigation("Members");
                 });
 #pragma warning restore 612, 618
         }

@@ -229,7 +229,7 @@ Raporlar tek ortak motorda çalışır; ikibaşlılık (her rapora ayrı sayfa/e
 - **Endpoint'ler:** `GET /api/me/reports/{code}/schema`, `POST .../{code}/run`, `POST .../{code}/export?format=xlsx|pdf` (`ReportRunController`). Rapor listesi: `GET /api/me/reports` (ReportAuthorizationController).
 - **Frontend:** tek çatı — `MyReportsPage` katalog → `ReportRunPanel` (Sheet) → `ReportFilterForm` (şemadan otomatik) → `ReportResultTable` (+ Excel/PDF). `reportRun.api.ts` + `useReportRun.ts`.
 - **Seed:** handler'ı olan raporlar `ReportSeed` ile idempotent eklenir (kategori `genel-raporlar`). İlk rapor: `ogrenci-listesi` (`StudentListReportHandler`).
-- **Yetkilendirme** hâlâ rol bazlı (kategori×rol + rapor×rol override); kişi/grup seviyesi Faz 2'de (birleşik `ReportAccessGrant`). Tasarım: `docs/superpowers/specs/2026-05-26-rapor-sistemi-obs-overhaul-design.md`.
+- **Yetkilendirme (Faz 2):** birleşik `ReportAccessGrant` — *(ScopeKind: Category|Report) × (SubjectKind: Role|User|Group) × (Effect: Allow|Deny)*. Tek `IReportAccessResolver` (öncelik: rapor-Deny > rapor-Allow > kategori-Deny > kategori-Allow > yok); `CanAccessReportAsync` + `ListAccessibleReportsAsync` buna delege. `ReportUserGroup`(+Member) = adlandırılmış kullanıcı kümeleri. Eski `ReportCategoryRolePermission` + `ReportPermissionOverride` migration (`AddReportAccessGrantUnifiedModel`) ile grant'lara taşınıp düşürüldü. Admin uçları: `/api/admin/report-grants`, `/api/admin/report-user-groups`. SystemAdmin bypass. Tasarım: `docs/superpowers/specs/2026-05-26-rapor-sistemi-obs-overhaul-design.md`.
 
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports

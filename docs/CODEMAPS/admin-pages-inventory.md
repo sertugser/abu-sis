@@ -134,27 +134,19 @@
 | **Route** | `/kullanici-rapor-gruplari` |
 | **Dosya** | `SIS.Web/src/pages/UserReportGroupsPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 5 (Dialog: 3, Sheet: 0, AlertDialog: 2) |
+| **Modal sayısı** | 4 (Dialog: 3, Sheet: 0, AlertDialog: 2) |
 
-**Sekmeler (3):**
+**Sekmeler (4):**
 - `categories`
 - `reports`
-- `permissions`
+- `permissions` (grant editörü: rol/kişi/grup × kategori/rapor × izin/yasak)
+- `groups` (kullanıcı grupları + üye yönetimi)
 
-**Veri kancaları (13):**
-- `useCreateReport()`
-- `useCreateReportCategory()`
-- `useDeleteReport()`
-- `useDeleteReportCategory()`
-- `useDeleteReportOverride()`
-- `useReportCategories()`
-- `useReportOverrides()`
-- `useReportPermissionMatrix()`
-- `useReports()`
-- `useSetCategoryRoles()`
-- `useUpdateReport()`
-- `useUpdateReportCategory()`
-- `useUpsertReportOverride()`
+**Veri kancaları:**
+- `useReportCategories()`, `useCreateReportCategory()`, `useUpdateReportCategory()`, `useDeleteReportCategory()`
+- `useReports()`, `useCreateReport()`, `useUpdateReport()`, `useDeleteReport()`
+- `useReportGrants()`, `useSetReportGrant()`, `useDeleteReportGrant()`
+- `useReportUserGroups()`, `useCreateReportUserGroup()`, `useDeleteReportUserGroup()`, `useReportGroupMembers()`, `useAddGroupMember()`, `useRemoveGroupMember()`
 
 ---
 

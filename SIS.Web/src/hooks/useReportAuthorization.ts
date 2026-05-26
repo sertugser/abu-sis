@@ -3,8 +3,9 @@ import {
   reportAuthorizationApi,
   type CreateReportCategoryDto,
   type CreateReportDefinitionDto,
-  type CreateReportOverrideDto,
-  type SetCategoryRolesDto,
+  type CreateReportUserGroupDto,
+  type UpdateReportUserGroupDto,
+  type SetReportAccessGrantDto,
   type UpdateReportCategoryDto,
   type UpdateReportDefinitionDto,
 } from '@/api/reportAuthorization.api';
@@ -78,41 +79,76 @@ export function useDeleteReport() {
   });
 }
 
-// Matrix
-export function useReportPermissionMatrix() {
+// Groups
+export function useReportUserGroups() {
   return useQuery({
-    queryKey: [...baseKey, 'matrix'],
-    queryFn: () => reportAuthorizationApi.getMatrix(),
+    queryKey: [...baseKey, 'groups'],
+    queryFn: () => reportAuthorizationApi.listGroups(),
     staleTime: 30_000,
   });
 }
-export function useSetCategoryRoles() {
+export function useCreateReportUserGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dto: SetCategoryRolesDto) => reportAuthorizationApi.setCategoryRoles(dto),
+    mutationFn: (dto: CreateReportUserGroupDto) => reportAuthorizationApi.createGroup(dto),
+    onSuccess: () => invalidate(qc),
+  });
+}
+export function useUpdateReportUserGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: UpdateReportUserGroupDto }) => reportAuthorizationApi.updateGroup(id, dto),
+    onSuccess: () => invalidate(qc),
+  });
+}
+export function useDeleteReportUserGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => reportAuthorizationApi.deleteGroup(id),
+    onSuccess: () => invalidate(qc),
+  });
+}
+export function useReportGroupMembers(groupId: number | null) {
+  return useQuery({
+    queryKey: [...baseKey, 'group-members', groupId],
+    queryFn: () => reportAuthorizationApi.listGroupMembers(groupId!),
+    enabled: groupId !== null,
+  });
+}
+export function useAddGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: number; userId: number }) => reportAuthorizationApi.addGroupMember(groupId, userId),
+    onSuccess: () => invalidate(qc),
+  });
+}
+export function useRemoveGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: number; userId: number }) => reportAuthorizationApi.removeGroupMember(groupId, userId),
     onSuccess: () => invalidate(qc),
   });
 }
 
-// Overrides
-export function useReportOverrides(reportId?: number) {
+// Grants
+export function useReportGrants() {
   return useQuery({
-    queryKey: [...baseKey, 'overrides', reportId],
-    queryFn: () => reportAuthorizationApi.listOverrides(reportId),
+    queryKey: [...baseKey, 'grants'],
+    queryFn: () => reportAuthorizationApi.listGrants(),
     staleTime: 30_000,
   });
 }
-export function useUpsertReportOverride() {
+export function useSetReportGrant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dto: CreateReportOverrideDto) => reportAuthorizationApi.upsertOverride(dto),
+    mutationFn: (dto: SetReportAccessGrantDto) => reportAuthorizationApi.setGrant(dto),
     onSuccess: () => invalidate(qc),
   });
 }
-export function useDeleteReportOverride() {
+export function useDeleteReportGrant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => reportAuthorizationApi.deleteOverride(id),
+    mutationFn: (id: number) => reportAuthorizationApi.deleteGrant(id),
     onSuccess: () => invalidate(qc),
   });
 }

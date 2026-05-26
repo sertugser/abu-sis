@@ -32,30 +32,22 @@ export interface UpdateReportDefinitionDto {
   categoryId: number;
 }
 
-export interface CategoryRoleMatrixRowDto {
-  categoryId: number;
-  categoryCode: string;
-  categoryName: string;
-  allowedRoleIds: number[];
-}
-export interface SetCategoryRolesDto { categoryId: number; roleIds: number[] }
+// ── Kullanıcı grupları ──
+export interface ReportUserGroupDto { id: number; name: string; description: string | null; memberCount: number }
+export interface CreateReportUserGroupDto { name: string; description?: string | null }
+export interface UpdateReportUserGroupDto { name: string; description?: string | null }
+export interface ReportUserGroupMemberDto { userId: number; fullName: string; email: string; addedAt: string }
 
-export interface ReportPermissionOverrideDto {
+// ── Birleşik yetki (grant) ──
+// scopeKind: 0=Kategori 1=Rapor | subjectKind: 0=Rol 1=Kişi 2=Grup | effect: 0=İzin 1=Yasak
+export interface ReportAccessGrantDto {
   id: number;
-  reportId: number;
-  reportCode: string;
-  reportName: string;
-  roleId: number;
-  roleName: string;
-  isAllowed: boolean;
-  reason: string | null;
-  createdAt: string;
+  scopeKind: number; targetId: number; targetLabel: string;
+  subjectKind: number; subjectId: number; subjectLabel: string;
+  effect: number; reason: string | null; grantedAt: string;
 }
-export interface CreateReportOverrideDto {
-  reportId: number;
-  roleId: number;
-  isAllowed: boolean;
-  reason?: string | null;
+export interface SetReportAccessGrantDto {
+  scopeKind: number; targetId: number; subjectKind: number; subjectId: number; effect: number; reason?: string | null;
 }
 
 export interface AccessibleReportDto {
@@ -105,31 +97,17 @@ export const reportAuthorizationApi = {
     await apiClient.delete(`/admin/reports/${id}`);
   },
 
-  // Matrix
-  getMatrix: async (): Promise<CategoryRoleMatrixRowDto[]> => {
-    const { data } = await apiClient.get<CategoryRoleMatrixRowDto[]>('/admin/report-permissions/matrix');
-    return data;
-  },
-  setCategoryRoles: async (dto: SetCategoryRolesDto): Promise<void> => {
-    await apiClient.put('/admin/report-permissions/matrix', dto);
-  },
+  // Groups
+  listGroups: async (): Promise<ReportUserGroupDto[]> => (await apiClient.get('/admin/report-user-groups')).data,
+  createGroup: async (dto: CreateReportUserGroupDto): Promise<ReportUserGroupDto> => (await apiClient.post('/admin/report-user-groups', dto)).data,
+  updateGroup: async (id: number, dto: UpdateReportUserGroupDto): Promise<ReportUserGroupDto> => (await apiClient.put(`/admin/report-user-groups/${id}`, dto)).data,
+  deleteGroup: async (id: number): Promise<void> => { await apiClient.delete(`/admin/report-user-groups/${id}`); },
+  listGroupMembers: async (id: number): Promise<ReportUserGroupMemberDto[]> => (await apiClient.get(`/admin/report-user-groups/${id}/members`)).data,
+  addGroupMember: async (id: number, userId: number): Promise<void> => { await apiClient.post(`/admin/report-user-groups/${id}/members`, { userId }); },
+  removeGroupMember: async (id: number, userId: number): Promise<void> => { await apiClient.delete(`/admin/report-user-groups/${id}/members/${userId}`); },
 
-  // Overrides
-  listOverrides: async (reportId?: number): Promise<ReportPermissionOverrideDto[]> => {
-    const { data } = await apiClient.get<ReportPermissionOverrideDto[]>(
-      '/admin/report-permissions/overrides',
-      { params: { reportId } },
-    );
-    return data;
-  },
-  upsertOverride: async (dto: CreateReportOverrideDto): Promise<ReportPermissionOverrideDto> => {
-    const { data } = await apiClient.post<ReportPermissionOverrideDto>(
-      '/admin/report-permissions/overrides',
-      dto,
-    );
-    return data;
-  },
-  deleteOverride: async (id: number): Promise<void> => {
-    await apiClient.delete(`/admin/report-permissions/overrides/${id}`);
-  },
+  // Grants
+  listGrants: async (): Promise<ReportAccessGrantDto[]> => (await apiClient.get('/admin/report-grants')).data,
+  setGrant: async (dto: SetReportAccessGrantDto): Promise<ReportAccessGrantDto> => (await apiClient.post('/admin/report-grants', dto)).data,
+  deleteGrant: async (id: number): Promise<void> => { await apiClient.delete(`/admin/report-grants/${id}`); },
 };

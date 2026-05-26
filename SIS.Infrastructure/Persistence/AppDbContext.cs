@@ -117,8 +117,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     // ── RBAC (Phase 3 — Report Authorization) ───────────────────
     public DbSet<ReportCategory> ReportCategories => Set<ReportCategory>();
     public DbSet<ReportDefinition> ReportDefinitions => Set<ReportDefinition>();
-    public DbSet<ReportCategoryRolePermission> ReportCategoryRolePermissions => Set<ReportCategoryRolePermission>();
-    public DbSet<ReportPermissionOverride> ReportPermissionOverrides => Set<ReportPermissionOverride>();
+    public DbSet<ReportUserGroup> ReportUserGroups => Set<ReportUserGroup>();
+    public DbSet<ReportUserGroupMember> ReportUserGroupMembers => Set<ReportUserGroupMember>();
+    public DbSet<ReportAccessGrant> ReportAccessGrants => Set<ReportAccessGrant>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -1443,42 +1444,34 @@ builder.Entity<GradingCriteria>(e =>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── RBAC Phase 3: ReportCategoryRolePermission (composite PK) ─
-        builder.Entity<ReportCategoryRolePermission>(e =>
+        // ── RBAC Phase 3 (Faz 2): ReportUserGroup ───────────────
+        builder.Entity<ReportUserGroup>(e =>
         {
-            e.HasKey(rp => new { rp.CategoryId, rp.RoleId });
-
-            e.HasOne(rp => rp.Category)
-             .WithMany()
-             .HasForeignKey(rp => rp.CategoryId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne<IdentityRole<int>>()
-             .WithMany()
-             .HasForeignKey(rp => rp.RoleId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasIndex(rp => rp.RoleId);
+            e.Property(g => g.Name).HasMaxLength(200).IsRequired();
+            e.Property(g => g.Description).HasMaxLength(500);
+            e.HasIndex(g => g.Name).IsUnique();
         });
 
-        // ── RBAC Phase 3: ReportPermissionOverride ──────────────
-        builder.Entity<ReportPermissionOverride>(e =>
+        builder.Entity<ReportUserGroupMember>(e =>
         {
-            e.Property(o => o.Reason).HasMaxLength(500);
-
-            e.HasOne(o => o.Report)
-             .WithMany()
-             .HasForeignKey(o => o.ReportId)
+            e.HasKey(m => new { m.GroupId, m.UserId });
+            e.HasOne(m => m.Group)
+             .WithMany(g => g.Members)
+             .HasForeignKey(m => m.GroupId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.UserId);
+        });
 
-            e.HasOne<IdentityRole<int>>()
-             .WithMany()
-             .HasForeignKey(o => o.RoleId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            // Aynı (rapor, rol) çiftine tek override
-            e.HasIndex(o => new { o.ReportId, o.RoleId }).IsUnique();
-            e.HasIndex(o => o.RoleId);
+        // ── RBAC Phase 3 (Faz 2): ReportAccessGrant (birleşik) ──
+        builder.Entity<ReportAccessGrant>(e =>
+        {
+            e.Property(g => g.Reason).HasMaxLength(500);
+            e.Property(g => g.ScopeKind).HasConversion<int>();
+            e.Property(g => g.SubjectKind).HasConversion<int>();
+            e.Property(g => g.Effect).HasConversion<int>();
+            // Aynı (hedef, özne) için tek satır → upsert
+            e.HasIndex(g => new { g.ScopeKind, g.TargetId, g.SubjectKind, g.SubjectId }).IsUnique();
+            e.HasIndex(g => new { g.SubjectKind, g.SubjectId });
         });
 
         // ── Permission Scope Query Filters (Phase 2) ─────────────

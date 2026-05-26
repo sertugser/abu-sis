@@ -28,7 +28,8 @@ public class ReportAuthorizationServiceTests
         var roleStore = new Mock<IRoleStore<IdentityRole<int>>>();
         var roleMgr = new Mock<RoleManager<IdentityRole<int>>>(
             roleStore.Object, null!, null!, null!, null!);
-        return new ReportAuthorizationService(ctx, userMgr.Object, roleMgr.Object);
+        var resolver = new Mock<SIS.Application.Reports.IReportAccessResolver>();
+        return new ReportAuthorizationService(ctx, userMgr.Object, roleMgr.Object, resolver.Object);
     }
 
     // ── Kategori ──────────────────────────────────────────────
@@ -106,19 +107,5 @@ public class ReportAuthorizationServiceTests
         var act = () => svc.CreateReportAsync(dto);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*100*");
-    }
-
-    // ── Override ──────────────────────────────────────────────
-
-    [Fact]
-    public async Task UpsertOverride_Throws_WhenReasonExceeds500()
-    {
-        using var ctx = CreateContext();
-        var svc = CreateService(ctx);
-        var dto = new CreateReportOverrideDto(ReportId: 1, RoleId: 1, IsAllowed: true, Reason: new string('r', 501));
-
-        var act = () => svc.UpsertOverrideAsync(dto, createdByUserId: 99);
-
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*500*");
     }
 }
