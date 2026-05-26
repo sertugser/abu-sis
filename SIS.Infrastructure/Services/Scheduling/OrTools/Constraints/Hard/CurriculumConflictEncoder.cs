@@ -73,8 +73,8 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
                     }
                     if (section.LabHours > 0)
                     {
-                        var iv = ctx.Variables.GetLabInterval(section.Id);
-                        if (iv != null) intervals.Add(iv);
+                        // Çoklu-blok lab: tüm bloklar cohort no-overlap'ına girmeli.
+                        intervals.AddRange(ctx.Variables.GetLabIntervals(section.Id));
                     }
                 }
             }
@@ -123,8 +123,8 @@ public sealed class CurriculumConflictEncoder : IConstraintEncoder
         }
         if (section.LabHours > 0)
         {
-            var iv = ctx.Variables.GetLabInterval(section.Id);
-            if (iv != null) intervals.Add(iv);
+            // Çoklu-blok lab: tüm bloklar (cohort mode pair no-overlap).
+            intervals.AddRange(ctx.Variables.GetLabIntervals(section.Id));
         }
     }
 }

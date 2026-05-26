@@ -183,6 +183,11 @@ public sealed class CpSatSolverEngine : ISolverEngine
         sw.Stop();
         var elapsedSeconds = sw.Elapsed.TotalSeconds;
 
+        // Solve sırasında iptal edildiyse StopSearch normal bir status döndürür (genelde Unknown);
+        // bunu "Timeout/kısmi başarı" olarak haritalamak iptali sessizce yutardı. İptali açıkça
+        // yüzeye çıkar → AutoScheduleEngine OperationCanceledException'ı yakalayıp "İşlem iptal edildi" der.
+        cancellationToken.ThrowIfCancellationRequested();
+
         var solverResult = status switch
             {
                 CpSolverStatus.Infeasible => _mapper.MapInfeasible(
@@ -194,6 +199,12 @@ public sealed class CpSatSolverEngine : ISolverEngine
                 unsatCoreEnabled),
             CpSolverStatus.Optimal or CpSolverStatus.Feasible => BuildSuccessResult(
                 solver, build, reducedRequest, elapsedSeconds, status, searchStrategy.UiValue, unsatCoreEnabled),
+            // ModelInvalid = CP-SAT modeli hatalı kuruldu (encoder bug) — "süre doldu" demek yanıltıcı;
+            // gerçek iç hata olarak yüzeye çıkar ki admin "süreyi artır" gibi yanlış yönlendirilmesin.
+            CpSolverStatus.ModelInvalid => throw new InvalidOperationException(
+                "Ders programı modeli geçersiz oluşturuldu (kısıt yapılandırması iç hatası). "
+                + "Lütfen sistem yöneticisine bildirin; bu bir zaman aşımı değildir."),
+            // Unknown vb. = gerçek süre aşımı / kanıtlanamadı.
             _ => BuildTimeoutResult(solver, build, reducedRequest, elapsedSeconds, searchStrategy.UiValue, unsatCoreEnabled)
         };
 

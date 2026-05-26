@@ -37,8 +37,11 @@ public sealed class InstructorConflictEncoder : IConstraintEncoder
                 }
                 if (section.LabHours > 0)
                 {
-                    var iv = ctx.Variables.GetLabInterval(section.Id);
-                    if (iv != null) intervals.Add(iv);
+                    // Çoklu-blok lab: tüm lab blokları instructor no-overlap'a girmeli (yalnız blok 0
+                    // değil). Aksi halde 4 saatlik (2 blok) lab'ın 2. bloğu hocanın başka dersiyle
+                    // çakışabilir ve evaluator (H2) bunu raporlarken solver "geçerli" derdi.
+                    foreach (var labIv in ctx.Variables.GetLabIntervals(section.Id))
+                        intervals.Add(labIv);
                 }
             }
 

@@ -68,7 +68,7 @@ public sealed class AutoScheduleEngine
                 request.TermId,
                 request.FacultyId,
                 request.DepartmentId,
-                request.Seed,
+                seed, // hesaplanan seed (request.Seed null ise fallback) — kaydedilen Seed ile aynı olmalı
                 ct);
             ValidateSolverRequest(solverRequest);
 

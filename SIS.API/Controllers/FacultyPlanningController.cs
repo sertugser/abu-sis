@@ -142,11 +142,18 @@ public class FacultyPlanningController : ControllerBase
             var result = await _service.AutoSchedulePreviewAsync(request, userId.ToString(), ct);
             return Ok(result);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
+            // Yapılandırma/girdi kaynaklı, kullanıcının düzeltebileceği hatalar (zaman dilimi yok,
+            // derslik atanmamış, eşkoşul çifti tanımlı, desteklenmeyen müfredat modu vb.) — spesifik
+            // mesajı kullanıcıya göster ki neyi düzelteceğini bilsin (input guard).
+            _logger.LogWarning(
+                ex,
+                "Auto-schedule rejected (config) for FacultyId={FacultyId}, TermId={TermId}, DepartmentId={DepartmentId}",
+                request.FacultyId, request.TermId, request.DepartmentId);
             return BadRequest(new { error = ex.Message });
         }
-        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or NotSupportedException)
+        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
         {
             _logger.LogWarning(
                 ex,
