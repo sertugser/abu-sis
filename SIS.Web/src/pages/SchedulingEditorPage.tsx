@@ -278,12 +278,15 @@ export default function SchedulingEditorPage() {
     ? Number(urlTermId)
     : activeTerm?.id ?? null;
 
-  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 200);
+  // Editör tüm fakülteyi grid'e yerleştirmek için tek sayfada çeker. 200 cap'i büyük fakültede
+  // section'ları sessizce düşürüyordu; 1000'e çıkarıldı ve aşılırsa kullanıcı uyarılır (totalCount).
+  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 1000);
   const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const conflictsQuery = useFacultyPlanningConflicts(facultyId, termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
   const sections = useMemo(() => sectionsQuery.data?.items ?? [], [sectionsQuery.data]);
+  const sectionsTruncated = (sectionsQuery.data?.totalCount ?? 0) > sections.length;
   const timeSlots = useMemo(() => timeSlotsQuery.data ?? [], [timeSlotsQuery.data]);
 
   /** Gerçek slot süresi — ilk slot'tan hesaplanır. Pool drag için durationMinutes hesabında kullanılır. */
@@ -1061,6 +1064,13 @@ export default function SchedulingEditorPage() {
             </Tooltip>
           </TooltipProvider>
         </header>
+
+        {sectionsTruncated && (
+          <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800">
+            Bu fakültede {sectionsQuery.data?.totalCount} şube var; ilk {sections.length} tanesi gösteriliyor.
+            Tümünü görmek için bölüm/sınıf filtreleyin (Liste sekmesi) — kalan şubeler bu görünümde düzenlenemez.
+          </div>
+        )}
 
         {/* ── Multi-select aksiyon bar'ı ── */}
         {multiSelectMode && (
