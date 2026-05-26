@@ -25,6 +25,8 @@ public static class ReportSeed
             ("ogrenci-listesi", "Öğrenci Listesi", "Duruma, programa ve GNO aralığına göre öğrenci listesi."),
             ("mezun-aday-listesi", "Mezun Aday Listesi", "Tamamlanan yarıyıl ve GNO eşiğini geçen aktif öğrenciler."),
             ("ders-kayit-listesi", "Ders Kayıt Listesi", "Bir dönem/şubedeki ders kayıtları (öğrenci, ders, durum, not)."),
+            ("danisman-ogrenci-listesi", "Danışman Öğrenci Listesi", "Bir danışmana atanmış öğrenciler."),
+            ("sube-kontenjan-listesi", "Şube/Kontenjan Listesi", "Şubelerin kapasite ve doluluk durumu."),
         };
 
         var codes = definitions.Select(d => d.Code).ToArray();
