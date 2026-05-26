@@ -132,37 +132,18 @@ public partial class SchedulingService
             .OrderBy(ts => ts.SlotOrder)
             .ToList();
 
-        var workDayIndices = timeSlots
-            .Select(ts => (int)ts.DayOfWeek - 1)
-            .Distinct()
-            .Where(d => d >= 0 && d <= 4)
-            .OrderBy(d => d)
-            .ToList();
-
-        // TimeSlot yoksa fallback: 8-17
-        if (distinctSlots.Count == 0)
-        {
-            for (int d = 0; d < 5; d++) workDayIndices.Add(d);
-            workDayIndices = workDayIndices.Distinct().OrderBy(d => d).ToList();
-            for (int h = 8; h <= 17; h++)
-            {
-                distinctSlots.Add(new Domain.Entities.TimeSlot
-                {
-                    SlotOrder = h - 7,
-                    StartTime = new TimeOnly(h, 0),
-                    EndTime = new TimeOnly(h, 50),
-                });
-            }
-        }
-
+        // Heatmap hücreleri GERÇEK timeslot'lardan kurulur (kartezyen workdays×slots DEĞİL) → günler
+        // arası değişken slot sayısında payda doğru olur. Yalnız hafta içi (Pzt-Cum). TimeSlot yoksa
+        // fabrikasyon YOK: heatmap boş kalır, occupancy 0 → gerçek "slot tanımlı değil" durumu yansır
+        // (eski 8-17 uydurması olmayan veriyi varmış gibi gösteriyordu).
         var heatmapMap = new Dictionary<(int day, int slotOrder), int>();
-        foreach (var dayIdx in workDayIndices)
+        foreach (var ts in timeSlots)
         {
-            foreach (var slot in distinctSlots)
-            {
-                heatmapMap[(dayIdx, slot.SlotOrder)] = 0;
-            }
+            var dayIdx = (int)ts.DayOfWeek - 1;
+            if (dayIdx < 0 || dayIdx > 4) continue;
+            heatmapMap[(dayIdx, ts.SlotOrder)] = 0;
         }
+        var gridCellCount = heatmapMap.Count;
 
         var timeSlotsPerDay = timeSlots
             .GroupBy(ts => (int)ts.DayOfWeek - 1)
@@ -231,8 +212,9 @@ public partial class SchedulingService
         }
 
         int slotsPerDay = distinctSlots.Count;
-        int totalDays = workDayIndices.Count;
-        int totalSlots = result.TotalClassrooms * totalDays * slotsPerDay;
+        // Payda = derslik × GERÇEK hücre sayısı (günler arası değişken slot sayısını da yansıtır;
+        // eski totalDays × slotsPerDay her günün tüm slotlara sahip olduğunu varsayıp şişiriyordu).
+        int totalSlots = result.TotalClassrooms * gridCellCount;
         int usedSlots = heatmapMap.Values.Sum();
         result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
         result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;
