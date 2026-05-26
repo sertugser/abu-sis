@@ -167,11 +167,22 @@ public class FacultyPlanningController : ControllerBase
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
+        // Güvenlik: batch'teki TÜM atamaların fakültesi doğrulanır (yalnız ilki değil) — aksi halde
+        // ilk atama yetkili fakülteden seçilip kalan atamalara başka fakülte section'ı gizlenebilirdi.
         if (request.Assignments.Count > 0)
         {
-            var facultyId = await _service.ResolveFacultyIdForSectionAsync(request.Assignments[0].SectionId, ct);
-            if (facultyId == null) return NotFound("Bölüm bulunamadı.");
-            if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+            var sectionIds = request.Assignments.Select(a => a.SectionId).Distinct().ToList();
+            var verifiedFaculties = new HashSet<int>();
+            foreach (var sectionId in sectionIds)
+            {
+                var facultyId = await _service.ResolveFacultyIdForSectionAsync(sectionId, ct);
+                if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+                if (verifiedFaculties.Add(facultyId.Value)
+                    && !await HasFacultyAccessAsync(userId, facultyId.Value, ct))
+                {
+                    return Forbid();
+                }
+            }
         }
 
         var result = await _service.ApplyScheduleAsync(request, userId.ToString(), ct);

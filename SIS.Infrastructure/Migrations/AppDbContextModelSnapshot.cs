@@ -3202,9 +3202,12 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClassroomId");
-
                     b.HasIndex("TimeSlotId");
+
+                    b.HasIndex("ClassroomId", "TimeSlotId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SectionSchedules_Classroom_TimeSlot_Unique")
+                        .HasFilter("\"ClassroomId\" IS NOT NULL");
 
                     b.HasIndex("CourseSectionId", "TimeSlotId", "ClassroomId")
                         .IsUnique();

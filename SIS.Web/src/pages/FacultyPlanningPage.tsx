@@ -12,6 +12,7 @@ import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useExportExcel, useExportPdf } from '../hooks/useExcelSchedule';
+import { useScheduleApprovalStatus } from '../hooks/useScheduleApproval';
 import { ConflictBar } from '../components/faculty-planning/ConflictBar';
 import { SectionListTab } from '../components/faculty-planning/SectionListTab';
 import { AutoScheduleTab } from '../components/faculty-planning/AutoScheduleTab';
@@ -34,6 +35,7 @@ export default function FacultyPlanningPage() {
 
   const exportExcel = useExportExcel();
   const exportPdf = useExportPdf();
+  const { data: approvalStatus } = useScheduleApprovalStatus(facultyId, termId ?? undefined);
 
   const [triggerRun, setTriggerRun] = useState(0);
   // Hangi triggerRun değeri çocuk komponentte işlendi.
@@ -240,6 +242,15 @@ export default function FacultyPlanningPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-center mb-3">
           <p className="text-xs text-red-700 font-medium">
             Dönem durumu "{termStatus}" — atama işlemleri yalnızca dönem "Active" (tarih aralığı içinde ve iptal edilmemiş) iken yapılabilir.
+          </p>
+        </div>
+      )}
+
+      {/* Onay uyarısı — program onaylanmışsa düzenleme engellenmez ama operatör bilgilendirilir. */}
+      {approvalStatus?.isApproved && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3">
+          <p className="text-xs text-amber-800 font-medium">
+            Bu fakültenin programı onaylanmış{approvalStatus.approvedByName ? ` (${approvalStatus.approvedByName})` : ''}. Yapacağınız değişiklikler onayın güncelliğini yansıtmayabilir — gerekirse Program Onayı sayfasından yeniden onaylayın.
           </p>
         </div>
       )}

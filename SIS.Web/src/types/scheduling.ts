@@ -4,6 +4,8 @@ export interface ScheduleSlot {
   endTime: string;
   classroomId?: number;
   classroomName?: string;
+  /** Teori/Lab — düzenleyici ayrı blok sürüklediğinde backend'in doğru etiketlemesi için. */
+  blockType?: 'Theory' | 'Lab';
 }
 
 

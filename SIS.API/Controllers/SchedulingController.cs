@@ -543,12 +543,15 @@ public class SchedulingController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Şube bulunamadı." });
 
-        if (!section.Course.DepartmentId.HasValue)
-            return null; // Ortak ders — herkes erişebilir
-
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
             return null;
+
+        if (!section.Course.DepartmentId.HasValue)
+            // Ortak ders (bölümsüz) üniversite-geneli kaynaktır; fakülte/bölüm sahipliği çözülemez.
+            // Yalnız SysAdmin/AdministrativeStaff yönetebilir (yukarıda izin verildi) — Dean/Bölüm
+            // Başkanı bu section üzerinde lock/swap/validate yapamaz (eski "herkes erişebilir" açığı).
+            return Forbid();
 
         var instructor = await _context.Instructors
             .AsNoTracking()

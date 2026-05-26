@@ -616,7 +616,6 @@ export default function SchedulingEditorPage() {
     activeDragSectionRef.current = null;
     const { active, over } = event;
     if (!over) {
-      console.warn('[ScheduleEditor] drag end: over=null', { activeId: active.id, data: active.data.current });
       setFeedback({
         kind: 'error',
         message: 'Sürükleme bir hedef hücreye ulaşmadı. Kartı bir hücrenin üzerine bırakın.',
@@ -731,8 +730,9 @@ export default function SchedulingEditorPage() {
         startTime: b.startTime.slice(0, 5),
         endTime: b.endTime.slice(0, 5),
         classroomId: b.classroomId ?? section.classroomId ?? undefined,
+        blockType: b.blockType,
       }));
-      const newSlot: ScheduleSlot = { day: targetDay, startTime: startHm, endTime: endHm, classroomId };
+      const newSlot: ScheduleSlot = { day: targetDay, startTime: startHm, endTime: endHm, classroomId, blockType: data.blockType };
 
       const poolRequest: AssignSectionRequest = {
         sectionId: section.sectionId,
@@ -785,12 +785,14 @@ export default function SchedulingEditorPage() {
         startTime: b.startTime.slice(0, 5),
         endTime: b.endTime.slice(0, 5),
         classroomId: b.classroomId ?? data.classroomId ?? undefined,
+        blockType: b.blockType,
       })),
       {
         day: targetDay,
         startTime: startHm,
         endTime: endHm,
         classroomId: data.classroomId ?? undefined,
+        blockType: data.blockType,
       },
     ];
 

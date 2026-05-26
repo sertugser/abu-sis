@@ -27,8 +27,15 @@ export async function updateConstraintCategory(id: number, category: 'Hard' | 'S
   await apiClient.put(`/constraints/${id}/category`, { category });
 }
 
-export async function updateConstraintParameters(id: number, parameters: string): Promise<void> {
-  await apiClient.put(`/constraints/${id}/parameters`, { parameters });
+export interface UpdateParametersResult {
+  id: number;
+  parameters: string | null;
+  unmappedKeys: string[];
+}
+
+export async function updateConstraintParameters(id: number, parameters: string): Promise<UpdateParametersResult> {
+  const { data } = await apiClient.put<UpdateParametersResult>(`/constraints/${id}/parameters`, { parameters });
+  return data;
 }
 
 export async function addConstraintException(

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   getConstraints,
   getConstraintDetail,
@@ -16,6 +16,14 @@ import {
 } from '../api/constraint.api';
 import { QUERY_KEYS } from '../lib/constants';
 import type { AddExceptionRequest, CreateExceptionRequestDto, ApprovalActionDto } from '../types/constraint';
+
+// Kısıt durumu (aç/kapat, Hard/Soft, ağırlık, parametre, istisna) otomatik programcı + çakışma
+// hesabını besler → değişince çakışma/derslik-doluluk/fakülte-planı görünümleri de bayatlar.
+function invalidateConstraintDependents(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['schedulingConflicts'] });
+  qc.invalidateQueries({ queryKey: ['classroomDashboard'] });
+  qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+}
 
 export function useConstraints() {
   return useQuery({
@@ -40,6 +48,7 @@ export function useToggleConstraint() {
     mutationFn: (id: number) => toggleConstraint(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
     },
   });
 }
@@ -51,6 +60,7 @@ export function useUpdateConstraintCategory() {
       updateConstraintCategory(id, category),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
     },
   });
 }
@@ -62,6 +72,7 @@ export function useUpdateConstraintParameters() {
       updateConstraintParameters(id, parameters),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraintDetail(variables.id) });
     },
   });
@@ -74,6 +85,7 @@ export function useAddConstraintException() {
       addConstraintException(constraintId, request),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraintDetail(variables.constraintId) });
     },
   });
@@ -85,6 +97,7 @@ export function useDeleteConstraintException() {
     mutationFn: (exceptionId: number) => deleteConstraintException(exceptionId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
       // Invalidate all constraint details
       qc.invalidateQueries({ queryKey: ['constraints', 'detail'] });
     },
@@ -97,6 +110,7 @@ export function useUpdateConstraintWeight() {
     mutationFn: ({ id, weight }: { id: number; weight: number }) => updateConstraintWeight(id, weight),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
     },
   });
 }
@@ -135,6 +149,7 @@ export function useApproveExceptionRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptionRequests });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.constraints });
+      invalidateConstraintDependents(qc);
     },
   });
 }

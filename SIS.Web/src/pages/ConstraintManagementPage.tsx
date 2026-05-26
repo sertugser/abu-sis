@@ -204,7 +204,17 @@ function ConstraintEditDialog({
     paramsMutation.mutate(
       { id: constraint.id, parameters: JSON.stringify(payload) },
       {
-        onSuccess: () => notifySuccess(`${constraint.name} parametreleri kaydedildi.`),
+        onSuccess: (data) => {
+          const unmapped = data?.unmappedKeys ?? [];
+          if (unmapped.length > 0) {
+            toast.showWarning(
+              'Bazı parametreler kaydedilmedi',
+              `Tanınmayan anahtar(lar): ${unmapped.join(', ')}. Diğer parametreler güncellendi.`,
+            );
+          } else {
+            notifySuccess(`${constraint.name} parametreleri kaydedildi.`);
+          }
+        },
         onError: (e) => notifyError(e, 'Parametreler kaydedilemedi.'),
       },
     );

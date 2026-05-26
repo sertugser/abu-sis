@@ -20,6 +20,11 @@ import { CalendarGrid } from './CalendarGrid';
 import { AutoScheduleProgressModal } from './AutoScheduleProgressModal';
 import InlineConfirmButton from './InlineConfirmButton';
 
+function extractError(error: unknown, fallback: string) {
+  const data = (error as { response?: { data?: { error?: string; message?: string; title?: string } } })?.response?.data;
+  return data?.error ?? data?.message ?? data?.title ?? fallback;
+}
+
 interface AutoScheduleTabProps {
   facultyId: number;
   termId: number | null;
@@ -63,6 +68,7 @@ export function AutoScheduleTab({
   const [isResetAllOpen, setIsResetAllOpen] = useState(false);
   const [lastAppliedIds, setLastAppliedIds] = useState<number[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [assignSlot, setAssignSlot] = useState<{
     day: number;
     slotOrder: number;
@@ -104,6 +110,7 @@ export function AutoScheduleTab({
       applyMutation.reset();
       previewMutation.mutate({ facultyId, termId }, {
         onSuccess: () => setShowResultModal(true),
+        onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Otomatik programlama başarısız.') }),
       });
     }
   }, [triggerRun, consumedTriggerRun, onTriggerConsumed, termId, facultyId, previewMutation, applyMutation]);
@@ -123,6 +130,7 @@ export function AutoScheduleTab({
           setLastAppliedIds(items.map(a => a.sectionId));
           setShowResultModal(false);
         },
+        onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Program uygulanamadı.') }),
       });
     }
   }, [previewData, applyMutation]);
@@ -211,6 +219,7 @@ export function AutoScheduleTab({
                     setLastAppliedIds([]);
                     applyMutation.reset();
                   },
+                  onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Geri alma başarısız.') }),
                 })}
                 className="h-7 text-[11px]"
               />
@@ -237,6 +246,19 @@ export function AutoScheduleTab({
 
   return (
     <div className="flex flex-col h-full">
+
+      {feedback && (
+        <div
+          className={`mx-2 mt-1 flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs ${
+            feedback.kind === 'error'
+              ? 'bg-red-50 text-red-700 border border-red-200'
+              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+          }`}
+        >
+          <span>{feedback.message}</span>
+          <button onClick={() => setFeedback(null)} className="shrink-0 underline underline-offset-2">Kapat</button>
+        </div>
+      )}
 
       {/* Aksiyon bar: portal varsa toolbar'a, yoksa yerinde */}
       {actionBar && (actionBarPortal ? createPortal(actionBar, actionBarPortal) : actionBar)}
@@ -317,8 +339,9 @@ export function AutoScheduleTab({
             resetAll.mutate({ facultyId, termId }, {
               onSuccess: (data) => {
                 clearPreview();
-                alert(`${data.resetCount} şubenin ataması sıfırlandı.`);
+                setFeedback({ kind: 'success', message: `${data.resetCount} şubenin ataması sıfırlandı.` });
               },
+              onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Sıfırlama başarısız.') }),
             });
           }}
         />

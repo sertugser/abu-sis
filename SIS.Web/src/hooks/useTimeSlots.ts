@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 
 const BASE = '/admin/time-slots';
@@ -56,6 +56,17 @@ export interface RegenerateTimeSlotsResultDto {
 const QK_BASE = ['admin', 'time-slots'] as const;
 const qk = (termId: number) => [...QK_BASE, termId] as const;
 
+// Slot ekleme/silme/yeniden-üretme SectionSchedule'ları ve slot grid'ini etkiler →
+// çakışma, derslik doluluk, fakülte planı ve onay durumu cache'lerini de tazele.
+// (Aksi halde Ders Saatleri'nden slot silinince Program Onayı hâlâ "Onaylı / %100" gösterir.)
+function invalidateScheduleDependents(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['schedulingConflicts'] });
+  qc.invalidateQueries({ queryKey: ['classroomDashboard'] });
+  qc.invalidateQueries({ queryKey: ['availableClassrooms'] });
+  qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+  qc.invalidateQueries({ queryKey: ['scheduleApproval'] });
+}
+
 export function useTimeSlots(termId: number | null) {
   return useQuery({
     queryKey: termId ? qk(termId) : [...QK_BASE, 'none'],
@@ -75,7 +86,7 @@ export function useCreateTimeSlot() {
       const { data } = await apiClient.post<TimeSlotDto>(BASE, dto);
       return data;
     },
-    onSuccess: (slot) => qc.invalidateQueries({ queryKey: qk(slot.termId) }),
+    onSuccess: (slot) => { qc.invalidateQueries({ queryKey: qk(slot.termId) }); invalidateScheduleDependents(qc); },
   });
 }
 
@@ -86,7 +97,7 @@ export function useUpdateTimeSlot() {
       const { data } = await apiClient.put<TimeSlotDto>(`${BASE}/${id}`, dto);
       return data;
     },
-    onSuccess: (slot) => qc.invalidateQueries({ queryKey: qk(slot.termId) }),
+    onSuccess: (slot) => { qc.invalidateQueries({ queryKey: qk(slot.termId) }); invalidateScheduleDependents(qc); },
   });
 }
 
@@ -109,7 +120,7 @@ export function useDeleteTimeSlot() {
       }
     },
     onSuccess: ({ result, termId }) => {
-      if (result.deleted) qc.invalidateQueries({ queryKey: qk(termId) });
+      if (result.deleted) { qc.invalidateQueries({ queryKey: qk(termId) }); invalidateScheduleDependents(qc); }
     },
   });
 }
@@ -132,7 +143,7 @@ export function useRegenerateTimeSlots() {
       }
     },
     onSuccess: (result) => {
-      if (result.regenerated) qc.invalidateQueries({ queryKey: qk(result.termId) });
+      if (result.regenerated) { qc.invalidateQueries({ queryKey: qk(result.termId) }); invalidateScheduleDependents(qc); }
     },
   });
 }

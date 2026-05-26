@@ -865,6 +865,16 @@ builder.Entity<GradingCriteria>(e =>
             // ClassroomId'nin index'e dahil edilmesi (section, slot, classroom) üçlüsünü unique yapar.
             e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId, ss.ClassroomId }).IsUnique();
 
+            // Çift-rezervasyon koruması (DB seviyesi): aynı derslik + aynı zaman dilimi iki FARKLI
+            // satırda olamaz → cross-section classroom double-booking fiziksel olarak engellenir.
+            // Partial: ClassroomId IS NOT NULL (online dersler hariç). Lab-split bozulmaz (aynı slot
+            // farklı oda = farklı ClassroomId). H1 ClassroomConflict kuralının DB karşılığı; SkipHard/
+            // Force ile yazma yollarının arkasındaki tek güvenlik ağı.
+            e.HasIndex(ss => new { ss.ClassroomId, ss.TimeSlotId })
+             .IsUnique()
+             .HasFilter("\"ClassroomId\" IS NOT NULL")
+             .HasDatabaseName("IX_SectionSchedules_Classroom_TimeSlot_Unique");
+
             e.HasOne(ss => ss.CourseSection)
              .WithMany(cs => cs.SectionSchedules)
              .HasForeignKey(ss => ss.CourseSectionId)
