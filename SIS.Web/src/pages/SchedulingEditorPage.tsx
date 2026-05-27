@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import {
   useAssignSection, useFacultyPlanningConflicts, useFacultyPlanningSections,
   useFacultyPlanningTimeSlots, useUnassignSection,
@@ -261,7 +261,7 @@ export default function SchedulingEditorPage() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const { data: activeTerm, isLoading: termLoading } = useActiveTerm();
-  const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
+  const { data: faculties, isLoading: facultiesLoading } = useFacultyLookup();
   const { isFullscreen, toggle } = useFullscreen();
 
   const urlFacultyId = searchParams.get('facultyId');
@@ -278,12 +278,15 @@ export default function SchedulingEditorPage() {
     ? Number(urlTermId)
     : activeTerm?.id ?? null;
 
-  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 200);
+  // Editör tüm fakülteyi grid'e yerleştirmek için tek sayfada çeker. 200 cap'i büyük fakültede
+  // section'ları sessizce düşürüyordu; 1000'e çıkarıldı ve aşılırsa kullanıcı uyarılır (totalCount).
+  const sectionsQuery = useFacultyPlanningSections(facultyId, termId, undefined, undefined, 1, 1000);
   const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const conflictsQuery = useFacultyPlanningConflicts(facultyId, termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
   const sections = useMemo(() => sectionsQuery.data?.items ?? [], [sectionsQuery.data]);
+  const sectionsTruncated = (sectionsQuery.data?.totalCount ?? 0) > sections.length;
   const timeSlots = useMemo(() => timeSlotsQuery.data ?? [], [timeSlotsQuery.data]);
 
   /** Gerçek slot süresi — ilk slot'tan hesaplanır. Pool drag için durationMinutes hesabında kullanılır. */
@@ -616,7 +619,6 @@ export default function SchedulingEditorPage() {
     activeDragSectionRef.current = null;
     const { active, over } = event;
     if (!over) {
-      console.warn('[ScheduleEditor] drag end: over=null', { activeId: active.id, data: active.data.current });
       setFeedback({
         kind: 'error',
         message: 'Sürükleme bir hedef hücreye ulaşmadı. Kartı bir hücrenin üzerine bırakın.',
@@ -707,7 +709,7 @@ export default function SchedulingEditorPage() {
         const requiredType = section.labHours > 0 && section.theoryHours === 0 ? 'Lab' : 'Lecture';
         try {
           const available = await getAvailableClassrooms(
-            termId, targetDay, startHm, endHm, section.capacity, requiredType,
+            termId, targetDay, startHm, endHm, section.capacity, requiredType, facultyId ?? undefined,
           );
           if (available.length === 0) {
             setFeedback({
@@ -731,8 +733,9 @@ export default function SchedulingEditorPage() {
         startTime: b.startTime.slice(0, 5),
         endTime: b.endTime.slice(0, 5),
         classroomId: b.classroomId ?? section.classroomId ?? undefined,
+        blockType: b.blockType,
       }));
-      const newSlot: ScheduleSlot = { day: targetDay, startTime: startHm, endTime: endHm, classroomId };
+      const newSlot: ScheduleSlot = { day: targetDay, startTime: startHm, endTime: endHm, classroomId, blockType: data.blockType };
 
       const poolRequest: AssignSectionRequest = {
         sectionId: section.sectionId,
@@ -785,12 +788,14 @@ export default function SchedulingEditorPage() {
         startTime: b.startTime.slice(0, 5),
         endTime: b.endTime.slice(0, 5),
         classroomId: b.classroomId ?? data.classroomId ?? undefined,
+        blockType: b.blockType,
       })),
       {
         day: targetDay,
         startTime: startHm,
         endTime: endHm,
         classroomId: data.classroomId ?? undefined,
+        blockType: data.blockType,
       },
     ];
 
@@ -818,7 +823,7 @@ export default function SchedulingEditorPage() {
         setFeedback({ kind: 'error', message: extractError(error, 'Taşıma başarısız.') });
       },
     });
-  }, [sections, timeSlots, assignMutation, unassignMutation, termId]);
+  }, [sections, timeSlots, assignMutation, unassignMutation, termId, facultyId]);
 
   /**
    * Override onay handler — kullanıcı dialog'da "Yine de devam et" derse aynı request'i
@@ -1059,6 +1064,13 @@ export default function SchedulingEditorPage() {
             </Tooltip>
           </TooltipProvider>
         </header>
+
+        {sectionsTruncated && (
+          <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800">
+            Bu fakültede {sectionsQuery.data?.totalCount} şube var; ilk {sections.length} tanesi gösteriliyor.
+            Tümünü görmek için bölüm/sınıf filtreleyin (Liste sekmesi) — kalan şubeler bu görünümde düzenlenemez.
+          </div>
+        )}
 
         {/* ── Multi-select aksiyon bar'ı ── */}
         {multiSelectMode && (

@@ -14,12 +14,18 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  AlertCircle, BarChart3, Building2, Edit2, MoreHorizontal,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  AlertCircle, AlertTriangle, BarChart3, Building2, Edit2, MoreHorizontal,
   Plus, Search, Trash2, X,
 } from 'lucide-react';
 import { useClassrooms, useCreateClassroom, useUpdateClassroom, useDeleteClassroom } from '../hooks/useClassrooms';
-import type { ClassroomDto, CreateClassroomDto } from '../api/classroom.api';
-import ClassroomAnalyticsSheet from '../components/classroom/ClassroomAnalyticsSheet';
+import type { ClassroomDto, CreateClassroomDto, ClassroomScheduleImpact } from '../api/classroom.api';
+import { toApiError } from '../lib/apiError';
+import { TablePagination } from '@/components/ui/table-pagination';
+import ClassroomAnalyticsDialog from '../components/classroom/ClassroomAnalyticsDialog';
 import {
   CLASSROOM_TYPE_CODES,
   getClassroomTypeLabel,
@@ -35,6 +41,10 @@ const emptyForm: CreateClassroomDto = {
   type: 'Lecture',
 };
 
+// Sayfa başına varsayılan 25 derslik; sonrası pagination ile (UI ayarı, iş kuralı değil).
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 function formatLocation(buildingName: string | null | undefined, floor: number | null | undefined): string {
   const building = buildingName?.trim();
   const hasFloor = floor !== null && floor !== undefined;
@@ -45,8 +55,6 @@ function formatLocation(buildingName: string | null | undefined, floor: number |
   if (floorLabel) return floorLabel;
   return '—';
 }
-
-// ── Stat card ──────────────────────────────────────────────────────────────
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
@@ -62,12 +70,20 @@ export default function ClassroomManagementAdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ClassroomDto | null>(null);
+  const [deleteError, setDeleteError] = useState('');
   const [editingClassroom, setEditingClassroom] = useState<ClassroomDto | null>(null);
   const [form, setForm] = useState<CreateClassroomDto>(emptyForm);
   const [error, setError] = useState('');
+
+  // Tip/kapasite değişimi mevcut programları etkiliyorsa backend 409 + etki listesi döner.
+  // Listeyi onay diyaloğunda gösterip kullanıcı "Yine de Kaydet" derse confirm flag'iyle tekrar göndeririz.
+  const [impact, setImpact] = useState<ClassroomScheduleImpact[] | null>(null);
 
   const openCreate = () => {
     setEditingClassroom(null);
@@ -91,14 +107,40 @@ export default function ClassroomManagementAdminPage() {
 
   const confirmDelete = (classroom: ClassroomDto) => {
     setDeleteTarget(classroom);
+    setDeleteError('');
     setDeleteDialogOpen(true);
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
+    setDeleteError('');
     deleteMutation.mutate(deleteTarget.id, {
       onSuccess: () => { setDeleteDialogOpen(false); setDeleteTarget(null); },
+      onError: (e: unknown) => setDeleteError(toApiError(e, 'Derslik silinemedi.').message),
     });
+  };
+
+  // Backend 409 ScheduleImpact gövdesinden etki listesini çıkarır (toApiError bu alanı taşımaz).
+  const extractImpact = (e: unknown): ClassroomScheduleImpact[] | null => {
+    const res = (e as { response?: { status?: number; data?: { code?: string; affected?: ClassroomScheduleImpact[] } } })?.response;
+    if (res?.status === 409 && res.data?.code === 'ScheduleImpact' && Array.isArray(res.data.affected)) {
+      return res.data.affected;
+    }
+    return null;
+  };
+
+  const runUpdate = (id: number, confirmScheduleImpact: boolean) => {
+    updateMutation.mutate(
+      { id, dto: { ...form, confirmScheduleImpact } },
+      {
+        onSuccess: () => { setDialogOpen(false); setImpact(null); },
+        onError: (e: unknown) => {
+          const imp = extractImpact(e);
+          if (imp) { setImpact(imp); return; }
+          setError(toApiError(e, 'Güncelleme başarısız.').message);
+        },
+      },
+    );
   };
 
   const handleSubmit = () => {
@@ -107,14 +149,11 @@ export default function ClassroomManagementAdminPage() {
     if (form.capacity <= 0) { setError('Kapasite sıfırdan büyük olmalıdır.'); return; }
 
     if (editingClassroom) {
-      updateMutation.mutate(
-        { id: editingClassroom.id, dto: form },
-        { onSuccess: () => setDialogOpen(false), onError: (e: unknown) => setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Güncelleme başarısız.') },
-      );
+      runUpdate(editingClassroom.id, false);
     } else {
       createMutation.mutate(form, {
         onSuccess: () => setDialogOpen(false),
-        onError: (e: unknown) => setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Oluşturma başarısız.'),
+        onError: (e: unknown) => setError(toApiError(e, 'Oluşturma başarısız.').message),
       });
     }
   };
@@ -169,12 +208,28 @@ export default function ClassroomManagementAdminPage() {
   }, [all, filterType, filterBuilding, filterFloor, searchQuery]);
 
   const isFiltered = filterType !== 'all' || filterBuilding !== 'all' || filterFloor !== 'all' || searchQuery.trim().length > 0;
+
+  // Filtre/arama değişince ilk sayfaya dön (TablePagination safePage'i clamp'lese de,
+  // kullanıcı listeyi daralttığında 1. sayfa beklenir).
+  const onFilterType = (v: string) => { setFilterType(v); setPage(1); };
+  const onFilterBuilding = (v: string) => { setFilterBuilding(v); setPage(1); };
+  const onFilterFloor = (v: string) => { setFilterFloor(v); setPage(1); };
+  const onSearch = (v: string) => { setSearchQuery(v); setPage(1); };
+
   const clearFilters = () => {
     setFilterType('all');
     setFilterBuilding('all');
     setFilterFloor('all');
     setSearchQuery('');
+    setPage(1);
   };
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const paged = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage, pageSize],
+  );
 
   const floorLabel = (f: number) => (f === 0 ? 'Zemin Kat' : `Kat ${f}`);
 
@@ -190,13 +245,13 @@ export default function ClassroomManagementAdminPage() {
             <Input
               placeholder="Derslik adı veya bina ara..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => onSearch(e.target.value)}
               className="h-9 pl-8 pr-8 text-sm"
             />
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
+                onClick={() => onSearch('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Aramayı temizle"
               >
@@ -205,7 +260,7 @@ export default function ClassroomManagementAdminPage() {
             )}
           </div>
 
-          <Select value={filterType} onValueChange={setFilterType}>
+          <Select value={filterType} onValueChange={onFilterType}>
             <SelectTrigger className="h-9 w-[180px] text-xs">
               <SelectValue placeholder="Tüm Tipler" />
             </SelectTrigger>
@@ -222,7 +277,7 @@ export default function ClassroomManagementAdminPage() {
             </SelectContent>
           </Select>
 
-          <Select value={filterBuilding} onValueChange={setFilterBuilding}>
+          <Select value={filterBuilding} onValueChange={onFilterBuilding}>
             <SelectTrigger className="h-9 w-[180px] text-xs">
               <SelectValue placeholder="Tüm Binalar" />
             </SelectTrigger>
@@ -234,7 +289,7 @@ export default function ClassroomManagementAdminPage() {
             </SelectContent>
           </Select>
 
-          <Select value={filterFloor} onValueChange={setFilterFloor}>
+          <Select value={filterFloor} onValueChange={onFilterFloor}>
             <SelectTrigger className="h-9 w-[150px] text-xs">
               <SelectValue placeholder="Tüm Katlar" />
             </SelectTrigger>
@@ -321,7 +376,7 @@ export default function ClassroomManagementAdminPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map(c => {
+              {paged.map(c => {
                 const location = formatLocation(c.buildingName, c.floor);
                 const barClass = getClassroomTypeBarClass(c.type);
                 const widthPct = maxCapacity > 0 ? Math.max(8, Math.round((c.capacity / maxCapacity) * 100)) : 0;
@@ -381,6 +436,15 @@ export default function ClassroomManagementAdminPage() {
               })}
             </tbody>
           </table>
+          <TablePagination
+            totalCount={filtered.length}
+            page={safePage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            itemLabel="derslik"
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+          />
         </div>
       )}
 
@@ -411,7 +475,12 @@ export default function ClassroomManagementAdminPage() {
                   value={form.buildingName}
                   onChange={e => setForm({ ...form, buildingName: e.target.value })}
                   placeholder="Örn: C Blok, Ana Bina"
+                  list="classroom-building-suggestions"
                 />
+                {/* Mevcut bina adlarını öner — "C Blok"/"C blok" gibi tutarsız yazımları azaltır. */}
+                <datalist id="classroom-building-suggestions">
+                  {buildings.map(b => <option key={b} value={b} />)}
+                </datalist>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Kat</label>
@@ -434,15 +503,21 @@ export default function ClassroomManagementAdminPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Tip *</label>
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={form.type}
-                  onChange={e => setForm({ ...form, type: e.target.value })}
-                >
-                  {CLASSROOM_TYPE_CODES.map(t => (
-                    <option key={t} value={t}>{getClassroomTypeLabel(t)}</option>
-                  ))}
-                </select>
+                <Select value={form.type} onValueChange={v => setForm({ ...form, type: v })}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASSROOM_TYPE_CODES.map(t => (
+                      <SelectItem key={t} value={t}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${getClassroomTypeBarClass(t)}`} />
+                          {getClassroomTypeLabel(t)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {error && (
@@ -479,6 +554,12 @@ export default function ClassroomManagementAdminPage() {
           <p className="text-sm text-slate-600">
             <strong className="text-slate-900">{deleteTarget?.name}</strong> dersliğini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
           </p>
+          {deleteError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>İptal</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
@@ -488,8 +569,45 @@ export default function ClassroomManagementAdminPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Analytics sheet */}
-      <ClassroomAnalyticsSheet
+      {/* Schedule-impact confirmation (Type/Capacity change affects existing schedules) */}
+      <AlertDialog open={impact !== null} onOpenChange={open => { if (!open) setImpact(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+              Mevcut programları etkiliyor
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Bu değişiklik aşağıdaki {impact?.length ?? 0} ders programı atamasını geçersiz kılabilir.
+              Yine de kaydetmek programları gözden geçirmenizi gerektirir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/60 p-2">
+            {impact?.map((a, i) => (
+              <div key={`${a.courseCode}-${a.sectionNumber}-${i}`} className="rounded bg-white px-3 py-2 text-sm shadow-sm">
+                <div className="font-medium text-slate-900">
+                  {a.courseCode} · {a.courseName} <span className="text-slate-400">(Şube {a.sectionNumber})</span>
+                </div>
+                <div className="text-xs text-amber-700">{a.reason}</div>
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (editingClassroom) runUpdate(editingClassroom.id, true); }}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+            >
+              Yine de Kaydet
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Analytics dialog */}
+      <ClassroomAnalyticsDialog
         open={analyticsOpen}
         onOpenChange={setAnalyticsOpen}
         classrooms={all}

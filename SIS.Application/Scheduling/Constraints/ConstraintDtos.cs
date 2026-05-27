@@ -37,23 +37,6 @@ public sealed record ScoreBreakdownDto(
     bool Feasible,
     IReadOnlyList<ConstraintScoreItemDto> Constraints);
 
-public sealed record ConstraintProfileDto(
-    int Id, string Name, string? Description, bool IsDefault,
-    string? CreatedByUserId, DateTime CreatedAt, int ItemCount);
-
-public sealed record ConstraintProfileDetailDto(
-    int Id, string Name, string? Description, bool IsDefault,
-    string? CreatedByUserId, DateTime CreatedAt,
-    IReadOnlyList<ConstraintProfileItemDto> Items);
-
-public sealed record ConstraintProfileItemDto(
-    int Id, int ConstraintDefinitionId, string ConstraintCode, string ConstraintName,
-    bool IsEnabled, string Category, int Weight, string? Parameters);
-
-public sealed record CreateProfileRequest(string Name, string? Description);
-
-public sealed record ApplyProfileResult(int ChangedCount, string? AutoSavedProfileName);
-
 public sealed record ConstraintScoreItemDto(
     string Code,
     string Name,

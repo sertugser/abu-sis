@@ -10,7 +10,8 @@ public static partial class SeedData
     {
         var now = DateTime.UtcNow;
         var activeTerm = await context.AcademicTerms
-            .FirstOrDefaultAsync(term => !term.IsCancelled && term.IsActivated && term.TermStart <= now && term.TermEnd >= now);
+            .ActiveTerm()
+            .FirstOrDefaultAsync();
 
         if (activeTerm == null)
             return;

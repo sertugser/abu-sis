@@ -1,3 +1,5 @@
+using SIS.Application.Identity.DTOs;
+
 namespace SIS.Application.Identity.Services;
 
 public interface IPermissionService
@@ -15,15 +17,21 @@ public interface IPermissionService
     Task<bool> HasPermissionAsync(int userId, string permissionKey, CancellationToken ct = default);
 
     /// <summary>
-    /// Bir rolün permission'larını TOPLU değiştirir (replace-all). Admin UI "Kaydet" butonu.
-    /// Sonrasında ilgili rolün tüm kullanıcılarının cache'i invalidate edilir.
+    /// Bir rolün MANUEL permission'larını TOPLU değiştirir (replace-all). Admin UI "Kaydet" butonu.
+    /// Sadece SourceBundleId IS NULL satırları etkilenir; paketten gelen yetki satırlarına dokunulmaz
+    /// (paket bağı korunur). Sonrasında ilgili rolün tüm kullanıcılarının cache'i invalidate edilir.
     /// </summary>
     Task SetRolePermissionsAsync(int roleId, IReadOnlyList<int> permissionIds, int grantedByUserId, CancellationToken ct = default);
 
     /// <summary>
-    /// Bir rolün mevcut permission ID listesini döner (admin UI matrisi için).
+    /// Bir rolün mevcut permission ID listesini döner (manuel + paket, distinct, etkin set).
     /// </summary>
     Task<List<int>> GetRolePermissionIdsAsync(int roleId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bir rolün yetki durumunu manuel/paket ayrımıyla döner (admin matrisi için).
+    /// </summary>
+    Task<RolePermissionStateDto> GetRolePermissionStateAsync(int roleId, CancellationToken ct = default);
 
     /// <summary>
     /// Belirli bir rol adı için permission key'lerini döner (panel switcher için tek-rol filter).

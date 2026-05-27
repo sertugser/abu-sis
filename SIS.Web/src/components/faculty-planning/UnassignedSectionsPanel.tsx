@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { BookOpen, ChevronDown, ChevronUp, FlaskConical, GripVertical, Inbox, Search, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -104,21 +104,9 @@ export function UnassignedSectionsPanel({
 
   const showAcceptHint = isDragging && canAcceptDrop;
 
-  // <aside> doğrudan ref'lenir — flex-item context'inde getBoundingClientRect doğru ölçer.
-  const asideRef = useRef<HTMLElement | null>(null);
-  // Debug: drag aktif olduğunda pool rect'i ne, isOver ne — kullanıcı drop yapınca ne döndüğünü görelim
-  useEffect(() => {
-    if (!isDragging || !asideRef.current) return;
-    const r = asideRef.current.getBoundingClientRect();
-    // eslint-disable-next-line no-console
-    console.log('[Pool] drag aktif, aside rect:', `${r.left.toFixed(0)},${r.top.toFixed(0)} ${r.width.toFixed(0)}x${r.height.toFixed(0)}`, 'isOver:', isOver);
-  }, [isDragging, isOver]);
   return (
     <aside
-      ref={(node) => {
-        setNodeRef(node);
-        asideRef.current = node;
-      }}
+      ref={setNodeRef}
       className={cn(
         'shrink-0 bg-white border-r border-slate-200 flex flex-col transition-colors',
         collapsed ? 'w-12' : 'w-72',

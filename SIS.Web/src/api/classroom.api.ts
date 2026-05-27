@@ -17,6 +17,19 @@ export interface CreateClassroomDto {
   type: string;
 }
 
+export interface UpdateClassroomDto extends CreateClassroomDto {
+  /** true ise tip/kapasite değişiminin mevcut programlara etkisi onaylanmış sayılır (409 atlanır). */
+  confirmScheduleImpact?: boolean;
+}
+
+/** Tip/kapasite değişiminin etkilediği program satırı (backend 409 ScheduleImpact gövdesi). */
+export interface ClassroomScheduleImpact {
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  reason: string;
+}
+
 export async function getClassrooms(type?: string): Promise<ClassroomDto[]> {
   const params = type ? { type } : undefined;
   const { data } = await apiClient.get<ClassroomDto[]>('/admin/classrooms', { params });
@@ -33,7 +46,7 @@ export async function createClassroom(dto: CreateClassroomDto): Promise<Classroo
   return data;
 }
 
-export async function updateClassroom(id: number, dto: CreateClassroomDto): Promise<ClassroomDto> {
+export async function updateClassroom(id: number, dto: UpdateClassroomDto): Promise<ClassroomDto> {
   const { data } = await apiClient.put<ClassroomDto>(`/admin/classrooms/${id}`, dto);
   return data;
 }

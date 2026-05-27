@@ -119,22 +119,41 @@ public class UpdateReportDefinitionDtoValidator : AbstractValidator<UpdateReport
     }
 }
 
-public class SetCategoryRolesDtoValidator : AbstractValidator<SetCategoryRolesDto>
+public class CreateReportUserGroupDtoValidator : AbstractValidator<CreateReportUserGroupDto>
 {
-    public SetCategoryRolesDtoValidator()
+    public CreateReportUserGroupDtoValidator()
     {
-        RuleFor(x => x.CategoryId).GreaterThan(0);
-        RuleFor(x => x.RoleIds).NotNull();
-        RuleForEach(x => x.RoleIds).GreaterThan(0);
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Description).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.Description));
     }
 }
 
-public class CreateReportOverrideDtoValidator : AbstractValidator<CreateReportOverrideDto>
+public class UpdateReportUserGroupDtoValidator : AbstractValidator<UpdateReportUserGroupDto>
 {
-    public CreateReportOverrideDtoValidator()
+    public UpdateReportUserGroupDtoValidator()
     {
-        RuleFor(x => x.ReportId).GreaterThan(0);
-        RuleFor(x => x.RoleId).GreaterThan(0);
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.Description).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.Description));
+    }
+}
+
+public class AddGroupMemberDtoValidator : AbstractValidator<AddGroupMemberDto>
+{
+    public AddGroupMemberDtoValidator()
+    {
+        RuleFor(x => x.UserId).GreaterThan(0);
+    }
+}
+
+public class SetReportAccessGrantDtoValidator : AbstractValidator<SetReportAccessGrantDto>
+{
+    public SetReportAccessGrantDtoValidator()
+    {
+        RuleFor(x => x.ScopeKind).InclusiveBetween(0, 1);
+        RuleFor(x => x.SubjectKind).InclusiveBetween(0, 2);
+        RuleFor(x => x.Effect).InclusiveBetween(0, 1);
+        RuleFor(x => x.TargetId).GreaterThan(0);
+        RuleFor(x => x.SubjectId).GreaterThan(0);
         RuleFor(x => x.Reason).MaximumLength(500).When(x => !string.IsNullOrWhiteSpace(x.Reason));
     }
 }

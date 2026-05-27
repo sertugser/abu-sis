@@ -51,6 +51,9 @@ export default function MenuModuleFormDialog({
   errorMessage,
 }: Props) {
   const isEdit = Boolean(module);
+  // Edit modunda parent bilgisi düzenlenen modülün kendisinden gelir (page edit'te
+  // parentId prop'unu null geçer); create modunda prop'tan.
+  const effectiveParentId = isEdit ? (module?.parentId ?? null) : (parentId ?? null);
   const [slug, setSlug] = useState('');
   const [label, setLabel] = useState('');
   const [icon, setIcon] = useState<string>('');
@@ -91,9 +94,9 @@ export default function MenuModuleFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modülü Düzenle' : 'Yeni Modül'}</DialogTitle>
           <DialogDescription>
-            {parentId == null
+            {effectiveParentId == null
               ? 'Üst seviye sidebar başlığı.'
-              : 'Bir parent modülün altına nested grup ekleniyor.'}
+              : 'Bir parent modülün altındaki nested grup.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">

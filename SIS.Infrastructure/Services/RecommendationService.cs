@@ -3,6 +3,7 @@ using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.Recommendation.DTOs;
 using SIS.Application.Recommendation.Services;
 using SIS.Application.StudentEligibility.Services;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -40,7 +41,7 @@ public class RecommendationService : IRecommendationService
         var now = DateTime.UtcNow;
         var activeTermId = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
+            .ActiveTerm()
             .Select(t => (int?)t.Id)
             .FirstOrDefaultAsync(cancellationToken);
 

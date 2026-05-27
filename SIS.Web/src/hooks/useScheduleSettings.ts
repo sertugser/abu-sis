@@ -18,6 +18,10 @@ export interface ScheduleSettings {
   eveningSlotCount: number;
   faceToFaceCutoffTime: string;
   weekendOnlineOnly: boolean;
+  /** Schedule.WorkDays — ders yapılabilen günler (System.DayOfWeek numarası). */
+  workDays: DayOfWeekName[];
+  /** Schedule.LunchBreak.IsHard — açıksa öğle arasına slot konulamaz (backend hard kural). */
+  lunchBreakIsHard: boolean;
   isLoading: boolean;
 }
 
@@ -32,7 +36,27 @@ const DEFAULTS: Omit<ScheduleSettings, 'isLoading'> = {
   eveningSlotCount: 2,
   faceToFaceCutoffTime: '18:00',
   weekendOnlineOnly: true,
+  // Schedule.WorkDays seed'i Pzt–Cuma; key hiç yoksa bu fallback kullanılır.
+  workDays: [1, 2, 3, 4, 5],
+  // Backend GetBoolAsync fallback'iyle birebir: key yoksa false (kural pasif).
+  lunchBreakIsHard: false,
 };
+
+/** Gün adı (Schedule.WorkDays formatı) → System.DayOfWeek numarası (Sun=0..Sat=6). */
+const DAY_NAME_TO_NUMBER: Record<string, DayOfWeekName> = {
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+};
+
+/** "Monday,Tuesday,..." → [1,2,...]. Geçersiz/boş ise Pzt–Cuma fallback. */
+function parseWorkDays(raw: string): DayOfWeekName[] {
+  const parsed = raw
+    .split(',')
+    .map(token => token.trim().toLowerCase())
+    .filter(token => token.length > 0)
+    .map(token => DAY_NAME_TO_NUMBER[token])
+    .filter((day): day is DayOfWeekName => day !== undefined);
+  return parsed.length > 0 ? parsed : DEFAULTS.workDays;
+}
 
 export function useScheduleSettings(): ScheduleSettings {
   const { data: configs, isLoading: systemLoading } = useSystemConfigs();
@@ -63,6 +87,8 @@ export function useScheduleSettings(): ScheduleSettings {
       eveningSlotCount:         getInt('Schedule.EveningSlotCount',          DEFAULTS.eveningSlotCount),
       faceToFaceCutoffTime:     get   ('Schedule.FaceToFaceCutoffTime',      DEFAULTS.faceToFaceCutoffTime),
       weekendOnlineOnly:        getBool('Schedule.WeekendOnlineOnly',        DEFAULTS.weekendOnlineOnly),
+      workDays:                 parseWorkDays(get('Schedule.WorkDays', 'Monday,Tuesday,Wednesday,Thursday,Friday')),
+      lunchBreakIsHard:         getBool('Schedule.LunchBreak.IsHard',        DEFAULTS.lunchBreakIsHard),
       isLoading: systemLoading,
     };
   }, [configs, systemLoading]);
@@ -118,11 +144,3 @@ export function findOverlappingSlot<T extends { id: number; dayOfWeek: DayOfWeek
   }
   return null;
 }
-
-// ── Süre preset'leri ─────────────────────────────────────────────────
-
-export const DURATION_PRESETS: Array<{ minutes: number; label: string }> = [
-  { minutes: 50, label: '50 dk (Tek ders)' },
-  { minutes: 90, label: '90 dk (Çift blok)' },
-  { minutes: 120, label: '120 dk (Uzun blok)' },
-];

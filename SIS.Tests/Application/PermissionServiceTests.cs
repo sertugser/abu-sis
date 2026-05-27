@@ -161,4 +161,66 @@ public class PermissionServiceTests
         var result = await svc.GetUserPermissionsAsync(100);
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task SetRolePermissionsAsync_PreservesBundleRows_OnlyReplacesManual()
+    {
+        // C-2 regresyon testi: matris "Kaydet" paketten gelen (SourceBundleId != null)
+        // satırlara dokunmamalı; sadece manuel satırları değiştirmeli.
+        using var ctx = CreateContext();
+        ctx.Roles.Add(new IdentityRole<int> { Id = 10, Name = "Dean", NormalizedName = "DEAN" });
+        ctx.Permissions.AddRange(Perm(1, "menu.a.view"), Perm(2, "menu.b.view"), Perm(3, "menu.c.view"));
+        // 1 = manuel, 2 = paketten (bundle 5), 3 = paketten (bundle 5)
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 1, SourceBundleId = null });
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 2, SourceBundleId = 5 });
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 3, SourceBundleId = 5 });
+        await ctx.SaveChangesAsync();
+
+        var userMgr = CreateUserManagerMock(new ApplicationUser { Id = 1 }, Array.Empty<string>());
+        var svc = new PermissionService(ctx, new MemoryCache(new MemoryCacheOptions()), userMgr.Object);
+
+        // Manuel set'i 1 yerine 4 yap (ama 4 yok; sadece manuel davranışı test edelim → 1'i kaldır, manuel boş)
+        await svc.SetRolePermissionsAsync(roleId: 10, permissionIds: Array.Empty<int>(), grantedByUserId: 99);
+
+        var rows = await ctx.RolePermissions.Where(rp => rp.RoleId == 10).ToListAsync();
+        // Paket satırları (2,3) korunmalı; manuel (1) silinmeli
+        rows.Select(r => r.PermissionId).Should().BeEquivalentTo(new[] { 2, 3 });
+        rows.Should().OnlyContain(r => r.SourceBundleId == 5);
+    }
+
+    [Fact]
+    public async Task GetRolePermissionStateAsync_SplitsManualAndBundle()
+    {
+        using var ctx = CreateContext();
+        ctx.Permissions.AddRange(Perm(1, "menu.a.view"), Perm(2, "menu.b.view"), Perm(3, "menu.c.view"));
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 1, SourceBundleId = null });
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 2, SourceBundleId = 5 });
+        // 3: hem manuel hem paket → ikisinde de görünür
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 3, SourceBundleId = null });
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 3, SourceBundleId = 5 });
+        await ctx.SaveChangesAsync();
+
+        var userMgr = CreateUserManagerMock(new ApplicationUser { Id = 1 }, Array.Empty<string>());
+        var svc = new PermissionService(ctx, new MemoryCache(new MemoryCacheOptions()), userMgr.Object);
+
+        var state = await svc.GetRolePermissionStateAsync(10);
+        state.ManualPermissionIds.Should().BeEquivalentTo(new[] { 1, 3 });
+        state.BundlePermissionIds.Should().BeEquivalentTo(new[] { 2, 3 });
+    }
+
+    [Fact]
+    public async Task GetRolePermissionIdsAsync_IsDistinct_WhenPermissionIsBothManualAndBundle()
+    {
+        using var ctx = CreateContext();
+        ctx.Permissions.Add(Perm(1, "menu.a.view"));
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 1, SourceBundleId = null });
+        ctx.RolePermissions.Add(new RolePermission { RoleId = 10, PermissionId = 1, SourceBundleId = 5 });
+        await ctx.SaveChangesAsync();
+
+        var userMgr = CreateUserManagerMock(new ApplicationUser { Id = 1 }, Array.Empty<string>());
+        var svc = new PermissionService(ctx, new MemoryCache(new MemoryCacheOptions()), userMgr.Object);
+
+        var ids = await svc.GetRolePermissionIdsAsync(10);
+        ids.Should().BeEquivalentTo(new[] { 1 });
+    }
 }

@@ -1,18 +1,34 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Archive, BookOpen, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Copy, Edit, GraduationCap, Loader2, MoreHorizontal, Plus, Printer, Scissors,
-  Settings, Trash2,
+  Send, Settings, Trash2,
 } from 'lucide-react';
-import type { CurriculumListDto } from '../../types/curriculumManagement';
+import type { CurriculumListDto, CurriculumStatusValue } from '../../types/curriculumManagement';
 
 interface RowTarget {
   id: number;
   label: string;
+}
+
+// Müfredat yaşam döngüsü rozeti — Taslak (düzenlenebilir) / Yayında (kilitli) / Arşiv (geçmiş)
+const STATUS_BADGE: Record<CurriculumStatusValue, { label: string; className: string }> = {
+  Draft: { label: 'Taslak', className: 'bg-amber-100 text-amber-700 border-amber-200' },
+  Published: { label: 'Yayında', className: 'bg-green-100 text-green-700 border-green-200' },
+  Archived: { label: 'Arşiv', className: 'bg-slate-100 text-slate-500 border-slate-200' },
+};
+
+function StatusBadge({ status }: { status: CurriculumStatusValue }) {
+  const b = STATUS_BADGE[status] ?? STATUS_BADGE.Draft;
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${b.className}`}>
+      {b.label}
+    </span>
+  );
 }
 
 interface PromotionRulesTarget {
@@ -35,6 +51,8 @@ interface Props {
   onOpenTermRules: (target: RowTarget) => void;
   onCopy: (target: RowTarget) => void;
   onActivate: (target: RowTarget) => void;
+  onPublish: (target: RowTarget) => void;
+  onArchive: (target: RowTarget) => void;
   onDelete: (target: RowTarget) => void;
   onOpenPromotionRules: (target: PromotionRulesTarget) => void;
 }
@@ -57,6 +75,8 @@ export default function CurriculumListView({
   onOpenTermRules,
   onCopy,
   onActivate,
+  onPublish,
+  onArchive,
   onDelete,
   onOpenPromotionRules,
 }: Props) {
@@ -109,6 +129,7 @@ export default function CurriculumListView({
                 <th className="px-3 py-2.5 font-medium whitespace-nowrap">Başl.Tarihi</th>
                 <th className="px-3 py-2.5 font-medium whitespace-nowrap">Bit.Tarihi</th>
                 <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Aktif</th>
+                <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Durum</th>
                 <th className="px-3 py-2.5 font-medium min-w-[180px]">Fakülte</th>
                 <th className="px-3 py-2.5 font-medium min-w-[200px]">Program</th>
                 <th className="px-3 py-2.5 font-medium text-center whitespace-nowrap">Top.Kredi</th>
@@ -161,6 +182,9 @@ export default function CurriculumListView({
                   <td className="px-3 py-2 text-center">
                     {c.isActive && <CheckCircle className="h-4 w-4 text-green-600 mx-auto" />}
                   </td>
+                  <td className="px-3 py-2 text-center">
+                    <StatusBadge status={c.status} />
+                  </td>
                   <td className="px-3 py-2">{c.facultyName}</td>
                   <td className="px-3 py-2">{c.programName}</td>
                   <td className="px-3 py-2 text-center">{c.totalCredit}</td>
@@ -197,6 +221,24 @@ export default function CurriculumListView({
                             <CheckCircle className={`h-4 w-4 mr-2 ${c.isActive ? 'text-green-600' : ''}`} />
                             {c.isActive ? 'Zaten Aktif' : 'Aktif Et'}
                           </DropdownMenuItem>
+                          {/* Yaşam döngüsü: Taslak → Yayınla, Yayında → Arşivle */}
+                          {c.status === 'Draft' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onPublish({ id: c.id, label: rowLabel(c) })}>
+                                <Send className="h-4 w-4 mr-2" /> Yayınla
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {c.status === 'Published' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onArchive({ id: c.id, label: rowLabel(c) })}>
+                                <Archive className="h-4 w-4 mr-2" /> Arşivle
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => onDelete({ id: c.id, label: rowLabel(c) })}

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.CourseRegistration.DTOs;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services;
@@ -15,7 +16,7 @@ public partial class CourseRegistrationService
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(int advisorInstructorId)
     {
         var nowPending = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowPending && t.TermEnd >= nowPending);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
             return new List<PendingApprovalDto>();
 
@@ -42,9 +43,13 @@ public partial class CourseRegistrationService
         if (!registrations.Any())
             return new List<PendingApprovalDto>();
 
-        // Load student user names
+        // Load student user names.
+        // StudentPrograms Include zorunlu: müfredat ilerlemesi (CurriculumTotal*/Completed*)
+        // mainProgram üzerinden hesaplanıyor; Include yoksa StudentPrograms boş gelir ve
+        // müfredat ilerlemesi yanlışlıkla 0/0 görünür.
         var studentIds = registrations.Select(r => r.StudentId).Distinct().ToList();
         var students = await _context.Students
+            .Include(s => s.StudentPrograms)
             .Where(s => studentIds.Contains(s.Id))
             .ToListAsync();
 
@@ -235,7 +240,8 @@ public partial class CourseRegistrationService
         var nowApprove = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowApprove && t.TermEnd >= nowApprove);
+            .ActiveTerm()
+            .FirstOrDefaultAsync();
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -300,6 +306,19 @@ public partial class CourseRegistrationService
 
         await _context.SaveChangesAsync();
 
+        // Bildirim: öğrenciye "kaydınız onaylandı".
+        if (_notifications is not null && registrations.Count > 0)
+        {
+            await _notifications.NotifyAsync(
+                student.UserId,
+                NotificationType.RegistrationApproved,
+                "Ders kaydınız onaylandı",
+                $"{registrations.Count} dersiniz danışmanınız tarafından onaylandı.",
+                link: "/alinan-dersler",
+                severity: NotificationSeverity.Success,
+                entityRef: $"student:{student.Id}");
+        }
+
         return new ApprovalResponseDto
         {
             Success = true,
@@ -323,7 +342,7 @@ public partial class CourseRegistrationService
         }
 
         var nowReject = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowReject && t.TermEnd >= nowReject);
+        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
         {
             return new ApprovalResponseDto
@@ -377,6 +396,20 @@ public partial class CourseRegistrationService
         }
 
         await _context.SaveChangesAsync();
+
+        // Bildirim: öğrenciye "kaydınız reddedildi" (+ varsa danışman notu).
+        if (_notifications is not null && registrations.Count > 0)
+        {
+            var rejectReason = string.IsNullOrWhiteSpace(dto.Note) ? string.Empty : $" Not: {dto.Note}";
+            await _notifications.NotifyAsync(
+                student.UserId,
+                NotificationType.RegistrationRejected,
+                "Ders kaydınız reddedildi",
+                $"{registrations.Count} ders kaydınız danışmanınız tarafından reddedildi.{rejectReason}",
+                link: "/plan",
+                severity: NotificationSeverity.Warning,
+                entityRef: $"student:{student.Id}");
+        }
 
         return new ApprovalResponseDto
         {

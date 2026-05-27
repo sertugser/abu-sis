@@ -53,11 +53,18 @@ public sealed class SameCourseSectionEncoder : IConstraintEncoder
         var intervals = new List<IntervalVar>();
         foreach (var s in sections)
         {
-            var iv = useLectureInterval
-                ? ctx.Variables.GetLectureInterval(s.Id)
-                : ctx.Variables.GetLabInterval(s.Id);
-            if (iv != null)
-                intervals.Add(iv);
+            if (useLectureInterval)
+            {
+                var iv = ctx.Variables.GetLectureInterval(s.Id);
+                if (iv != null)
+                    intervals.Add(iv);
+            }
+            else
+            {
+                // Çoklu-blok lab: section'ın tüm lab bloklarını ekle (yalnız blok 0 değil) →
+                // aynı dersin başka şubesinin lab'ıyla çakışma her blok için engellenir.
+                intervals.AddRange(ctx.Variables.GetLabIntervals(s.Id));
+            }
         }
 
         if (intervals.Count < 2)

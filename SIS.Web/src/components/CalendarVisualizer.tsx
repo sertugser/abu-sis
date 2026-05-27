@@ -18,66 +18,41 @@ import {
 } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
+import { CAT_STYLE, calendarEventCategory, type CalendarEventCategory } from '@/lib/calendarEventTypes';
 import { cn } from '@/lib/utils';
+import {
+  TODAY,
+  addMonths,
+  buildAcademicYearMonths,
+  buildGrid,
+  buildMonthRange,
+  closestMonthTo,
+  collectDropTargetDates,
+  dayDifference,
+  eventDateRange,
+  isMonthInRange,
+  isWeekendDateValue,
+  monthKey,
+  sameMonth,
+  shiftDateValue,
+  shouldRenderWeekdaysOnly,
+  trDate,
+  weekBars,
+  weekdayDateSegments,
+  type RenderedVisualizerEvent,
+  type ViewMonth,
+  type VisualizerEvent,
+} from '@/lib/calendarVisualizer/geometry';
 
-const TODAY = new Date();
+export type { VisualizerEvent } from '@/lib/calendarVisualizer/geometry';
+
 const WEEKDAYS = ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'];
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
 const MAX_LANES = 4;
-
-const CAT_STYLE: Record<CalendarEventCategory, { bg: string; border: string; text: string; label: string }> = {
-  exam:         { bg: 'bg-red-100',    border: 'border-l-red-500',    text: 'text-red-800',    label: 'SINAV' },
-  registration: { bg: 'bg-blue-100',   border: 'border-l-blue-500',   text: 'text-blue-800',   label: 'KAYIT' },
-  holiday:      { bg: 'bg-green-100',  border: 'border-l-green-500',  text: 'text-green-800',  label: 'TATIL' },
-  deadline:     { bg: 'bg-amber-100',  border: 'border-l-amber-500',  text: 'text-amber-800',  label: 'SON GUN' },
-  result:       { bg: 'bg-gray-100',   border: 'border-l-gray-400',   text: 'text-gray-700',   label: 'SONUC' },
-  application:  { bg: 'bg-teal-100',   border: 'border-l-teal-500',   text: 'text-teal-800',   label: 'BASVURU' },
-  academic:     { bg: 'bg-indigo-100', border: 'border-l-indigo-500', text: 'text-indigo-800', label: 'AKADEMIK' },
-};
-
-export interface VisualizerEvent {
-  id: string | number;
-  eventType: string;
-  title: string;
-  startDate: string;
-  endDate: string;
-  note?: string | null;
-  isChangedPreview?: boolean;
-  templateItemKey?: string | null;
-  draggable?: boolean;
-}
-
-type ViewMonth = {
-  y: number;
-  m: number;
-};
-
-interface Day {
-  day: number;
-  isMonth: boolean;
-  isToday: boolean;
-  str: string;
-}
-
-interface RenderedVisualizerEvent extends VisualizerEvent {
-  sourceEventId: VisualizerEvent['id'];
-  sourceStartDate: string;
-  sourceEndDate: string;
-}
-
-interface Bar {
-  event: RenderedVisualizerEvent;
-  cat: CalendarEventCategory;
-  col: number;
-  span: number;
-  lane: number;
-  start: boolean;
-  end: boolean;
-}
+const YEAR_MAX_LANES = 3;
 
 type DragState = {
   eventId: VisualizerEvent['id'];
@@ -166,291 +141,6 @@ function dragStateFromData(data: CalendarDragData): DragState {
     sourceEndDate: data.sourceEndDate,
     dragAnchorDate: data.dragAnchorDate,
   };
-}
-
-function toStr(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function sameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function trDate(iso: string) {
-  return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-function dateOnly(value?: string | null) {
-  return value ? value.slice(0, 10) : '';
-}
-
-function parseDateValue(value: string) {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function isWeekendDateValue(value: string) {
-  const day = parseDateValue(value).getUTCDay();
-  return day === 0 || day === 6;
-}
-
-function shiftDateValue(value: string, days: number) {
-  const shifted = parseDateValue(value);
-  shifted.setUTCDate(shifted.getUTCDate() + days);
-  return shifted.toISOString().substring(0, 10);
-}
-
-function dayDifference(target: string, source: string) {
-  return Math.round((parseDateValue(target).getTime() - parseDateValue(source).getTime()) / (24 * 60 * 60 * 1000));
-}
-
-function eventDateRange(event: VisualizerEvent) {
-  const startDate = dateOnly(event.startDate);
-  const endDate = dateOnly(event.endDate) || startDate;
-  if (!startDate)
-    return null;
-
-  return {
-    startDate,
-    endDate: endDate >= startDate ? endDate : startDate,
-  };
-}
-
-function shouldRenderWeekdaysOnly(event: VisualizerEvent) {
-  return calendarEventCategory(event.eventType, event.title, event.templateItemKey) === 'exam';
-}
-
-function weekdayDateSegments(startDate: string, endDate: string) {
-  const segments: Array<{ startDate: string; endDate: string }> = [];
-  let cursor = startDate;
-  let segmentStart: string | null = null;
-
-  while (cursor <= endDate) {
-    if (isWeekendDateValue(cursor)) {
-      if (segmentStart) {
-        segments.push({ startDate: segmentStart, endDate: shiftDateValue(cursor, -1) });
-        segmentStart = null;
-      }
-    } else if (!segmentStart) {
-      segmentStart = cursor;
-    }
-
-    cursor = shiftDateValue(cursor, 1);
-  }
-
-  if (segmentStart)
-    segments.push({ startDate: segmentStart, endDate });
-
-  return segments.length > 0 ? segments : [{ startDate, endDate }];
-}
-
-function monthKey(month: ViewMonth) {
-  return `${month.y}-${month.m}`;
-}
-
-function sameMonth(left: ViewMonth, right: ViewMonth) {
-  return left.y === right.y && left.m === right.m;
-}
-
-function addMonths(month: ViewMonth, delta: number): ViewMonth {
-  const next = new Date(month.y, month.m + delta, 1);
-  return { y: next.getFullYear(), m: next.getMonth() };
-}
-
-function monthValue(month: ViewMonth) {
-  return month.y * 12 + month.m;
-}
-
-function monthFromDateValue(value?: string | null): ViewMonth | null {
-  const input = dateOnly(value);
-  if (!input) return null;
-
-  const [year, month] = input.split('-').map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12)
-    return null;
-
-  return { y: year, m: month - 1 };
-}
-
-function buildMonthSequence(start: ViewMonth, end: ViewMonth): ViewMonth[] {
-  const months: ViewMonth[] = [];
-  const cursor = { ...start };
-  while (monthValue(cursor) <= monthValue(end)) {
-    months.push({ ...cursor });
-    const next = addMonths(cursor, 1);
-    cursor.y = next.y;
-    cursor.m = next.m;
-  }
-
-  return months;
-}
-
-function buildGrid(year: number, month: number): Day[][] {
-  const first = new Date(year, month, 1);
-  const count = new Date(year, month + 1, 0).getDate();
-  let wd = first.getDay() - 1;
-  if (wd < 0) wd = 6;
-
-  const flat: Day[] = [];
-
-  for (let i = wd - 1; i >= 0; i--) {
-    const d = new Date(year, month, -i);
-    flat.push({ day: d.getDate(), isMonth: false, isToday: sameDay(d, TODAY), str: toStr(d) });
-  }
-  for (let i = 1; i <= count; i++) {
-    const d = new Date(year, month, i);
-    flat.push({ day: i, isMonth: true, isToday: sameDay(d, TODAY), str: toStr(d) });
-  }
-  while (flat.length < 42) {
-    const d = new Date(year, month + 1, flat.length - count - wd + 1);
-    flat.push({ day: d.getDate(), isMonth: false, isToday: sameDay(d, TODAY), str: toStr(d) });
-  }
-
-  const weeks: Day[][] = [];
-  for (let i = 0; i < 42; i += 7) weeks.push(flat.slice(i, i + 7));
-  return weeks;
-}
-
-function weekBars(week: Day[], events: RenderedVisualizerEvent[]): Bar[] {
-  const wStart = week[0].str;
-  const wEnd = week[6].str;
-
-  const active = events.filter(
-    e => e.startDate <= wEnd && e.endDate >= wStart,
-  );
-
-  active.sort((a, b) => {
-    const c = a.startDate.localeCompare(b.startDate);
-    return c !== 0 ? c : b.endDate.localeCompare(a.endDate);
-  });
-
-  const lanes: number[] = [];
-
-  return active.map(ev => {
-    const col = ev.startDate <= wStart
-      ? 0
-      : Math.max(0, week.findIndex(d => d.str >= ev.startDate));
-
-    let endCol = 6;
-    if (ev.endDate < wEnd) {
-      for (let i = 6; i >= 0; i--) {
-        if (week[i].str <= ev.endDate) {
-          endCol = i;
-          break;
-        }
-      }
-    }
-
-    let lane = 0;
-    while (lane < lanes.length && lanes[lane] >= col) lane++;
-    if (lane >= lanes.length) lanes.push(-1);
-    lanes[lane] = endCol;
-
-    return {
-      event: ev,
-      cat: calendarEventCategory(ev.eventType, ev.title, ev.templateItemKey),
-      col,
-      span: endCol - col + 1,
-      lane,
-      start: ev.startDate >= wStart,
-      end: ev.endDate <= wEnd,
-    };
-  });
-}
-
-function buildMonthRange(events: VisualizerEvent[], fallbackMonth: ViewMonth): ViewMonth[] {
-  if (events.length === 0) return [fallbackMonth];
-
-  const dates = events
-    .flatMap(e => [e.startDate, e.endDate])
-    .filter(Boolean)
-    .sort();
-
-  if (dates.length === 0) return [fallbackMonth];
-
-  const minDate = new Date(dates[0]);
-  const maxDate = new Date(dates[dates.length - 1]);
-  minDate.setDate(1);
-  maxDate.setDate(1);
-
-  const months: ViewMonth[] = [];
-  const cursor = new Date(minDate);
-  while (cursor <= maxDate) {
-    months.push({ y: cursor.getFullYear(), m: cursor.getMonth() });
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-
-  return months;
-}
-
-function isMonthInRange(target: ViewMonth, months: ViewMonth[]) {
-  return months.some(month => sameMonth(month, target));
-}
-
-function closestMonthTo(target: ViewMonth, months: ViewMonth[]) {
-  if (months.length === 0) return target;
-
-  return months.reduce((closest, month) => {
-    const currentDistance = Math.abs(monthValue(month) - monthValue(target));
-    const closestDistance = Math.abs(monthValue(closest) - monthValue(target));
-    return currentDistance < closestDistance ? month : closest;
-  });
-}
-
-function buildAcademicYearMonths(events: VisualizerEvent[], fallbackAnchor: ViewMonth, explicitStartYear?: number): ViewMonth[] {
-  const eventMonths = events
-    .flatMap(event => [event.startDate, event.endDate])
-    .filter(Boolean)
-    .map(date => monthFromDateValue(date))
-    .filter((month): month is ViewMonth => month !== null);
-
-  let start: ViewMonth;
-  if (explicitStartYear !== undefined) {
-    start = { y: explicitStartYear, m: 8 };
-  } else {
-    const eventDates = events
-      .flatMap(event => [event.startDate, event.endDate])
-      .filter(Boolean)
-      .map(date => new Date(date))
-      .filter(date => !Number.isNaN(date.getTime()));
-
-    // Find the EARLIEST event date in a fall month (Sep+) to anchor the academic year.
-    // Using earliest prevents summer events that extend into Sep of the next year
-    // from shifting the entire year view forward by one year.
-    const fallEvent = eventDates
-      .filter(date => date.getMonth() >= 8)
-      .sort((left, right) => left.getTime() - right.getTime())[0];
-    const anchor = fallEvent
-      ? { y: fallEvent.getFullYear(), m: fallEvent.getMonth() }
-      : fallbackAnchor;
-    const startYear = anchor.m >= 8 ? anchor.y : anchor.y - 1;
-    start = { y: startYear, m: 8 };
-  }
-
-  let end = addMonths(start, 11);
-  for (const eventMonth of eventMonths) {
-    if (monthValue(eventMonth) < monthValue(start))
-      start = eventMonth;
-    if (monthValue(eventMonth) > monthValue(end))
-      end = eventMonth;
-  }
-
-  return buildMonthSequence(start, end);
-}
-
-function collectDropTargetDates(months: ViewMonth[]) {
-  const dates = new Set<string>();
-
-  for (const month of months) {
-    const weeks = buildGrid(month.y, month.m);
-    for (const week of weeks) {
-      for (const day of week) {
-        dates.add(day.str);
-      }
-    }
-  }
-
-  return Array.from(dates);
 }
 
 function CalendarDropCell({
@@ -856,8 +546,8 @@ export function CalendarVisualizer({
     });
 
     return (
-      <div key={`year-${y}-${m}`} className="min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between bg-[#003366] px-3 py-1.5 text-white">
+      <div key={`year-${y}-${m}`} className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex shrink-0 items-center justify-between bg-[#003366] px-3 py-1.5 text-white">
           <button
             type="button"
             onClick={() => setExpandedMonth({ y, m })}
@@ -875,7 +565,7 @@ export function CalendarVisualizer({
           )}
         </div>
 
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-[9px] font-bold uppercase tracking-wide text-gray-400">
+        <div className="grid shrink-0 grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-[9px] font-bold uppercase tracking-wide text-gray-400">
           {WEEKDAYS.map((day, index) => (
             <div key={day} className={cn('border-r border-gray-100 py-1 last:border-r-0', index >= 5 && 'text-rose-500')}>
               {day.substring(0, 2)}
@@ -885,13 +575,15 @@ export function CalendarVisualizer({
 
         {weeks.map((week, wi) => {
           const { bars, maxLane } = weekData[wi];
-          const eventTopBase = 17;
-          const eventH = maxLane * 12;
-          const cellMinHeight = Math.max(36, eventTopBase + eventH);
+          const visible = bars.filter(b => b.lane < YEAR_MAX_LANES);
+          const overflow = bars.length - visible.length;
+          const eventTopBase = 18;
+          const eventH = Math.min(maxLane, YEAR_MAX_LANES) * 17 + (overflow > 0 ? 12 : 0);
+          const cellMinHeight = Math.max(38, eventTopBase + eventH);
 
           return (
-            <div key={wi} className="relative border-b border-gray-100 last:border-b-0 overflow-hidden">
-              <div className="grid grid-cols-7">
+            <div key={wi} className="relative grow shrink-0 border-b border-gray-100 last:border-b-0 overflow-hidden">
+              <div className="grid h-full grid-cols-7">
                 {week.map((day, di) => {
                   const dropFeedback = visibleDropFeedbackByDate[day.str] ?? null;
                   const isWeekend = isWeekendDateValue(day.str);
@@ -904,8 +596,8 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 px-1 pt-1 text-[10px] leading-none last:border-r-0 transition-colors duration-75',
-                        isWeekend && day.isMonth && 'bg-rose-50/70',
-                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        isWeekend && day.isMonth && 'bg-slate-50',
+                        isWeekend && !day.isMonth && 'bg-slate-50/50',
                         !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
@@ -915,8 +607,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex h-4 w-4 items-center justify-center rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
-                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-slate-400 font-medium' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-slate-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}
@@ -926,7 +618,7 @@ export function CalendarVisualizer({
                 })}
               </div>
 
-              {bars.map((b, i) => {
+              {visible.map((b, i) => {
                 const s = CAT_STYLE[b.cat];
                 const isDraggable = b.event.draggable === true && !dragDisabled && !!onEventDrop;
 
@@ -938,21 +630,23 @@ export function CalendarVisualizer({
                         event={b.event}
                         disabled={!isDraggable}
                         className={cn(
-                          'absolute flex h-3.5 items-center overflow-hidden rounded border-l-[3px] px-1 text-[9px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
+                          'absolute flex h-4 items-center overflow-hidden text-[10px] font-bold leading-none transition-shadow hover:z-10 hover:shadow-md',
                           s.bg,
                           s.border,
                           s.text,
+                          b.start ? 'rounded-l border-l-4 px-1.5' : 'px-0',
+                          b.end && 'rounded-r',
                           b.event.isChangedPreview && 'ring-1 ring-primary bg-primary/20',
                           isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
                           dragState && 'pointer-events-none',
                         )}
                         style={{
-                          top: `${eventTopBase + b.lane * 12}px`,
-                          left: `calc(${(b.col / 7) * 100}% + 2px)`,
-                          width: `calc(${(b.span / 7) * 100}% - 4px)`,
+                          top: `${eventTopBase + b.lane * 17}px`,
+                          left: `calc(${(b.col / 7) * 100}% + ${b.start ? 2 : 0}px)`,
+                          width: `calc(${(b.span / 7) * 100}% - ${(b.start ? 2 : 0) + (b.end ? 2 : 0)}px)`,
                         }}
                       >
-                        <span className="truncate">{b.event.title}</span>
+                        {b.start && <span className="truncate">{b.event.title}</span>}
                       </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>
@@ -965,6 +659,18 @@ export function CalendarVisualizer({
                   </TooltipProvider>
                 );
               })}
+
+              {overflow > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedMonth({ y, m })}
+                  className="absolute left-1 text-[9px] font-bold text-[#003366] transition hover:underline"
+                  style={{ top: `${eventTopBase + YEAR_MAX_LANES * 17}px` }}
+                  title={`${MONTH_NAMES[m]} ${y} ayını büyüt`}
+                >
+                  +{overflow} daha
+                </button>
+              )}
             </div>
           );
         })}
@@ -972,7 +678,8 @@ export function CalendarVisualizer({
     );
   }
 
-  function renderMonth(y: number, m: number) {
+  function renderMonth(y: number, m: number, expanded = false) {
+    const laneCap = expanded ? Number.POSITIVE_INFINITY : MAX_LANES;
     const weeks = buildGrid(y, m);
     const weekData = weeks.map(w => {
       const bars = weekBars(w, renderedEvents);
@@ -1003,9 +710,9 @@ export function CalendarVisualizer({
 
         {weeks.map((week, wi) => {
           const { bars, maxLane } = weekData[wi];
-          const visible = bars.filter(b => b.lane < MAX_LANES);
+          const visible = bars.filter(b => b.lane < laneCap);
           const overflow = bars.length - visible.length;
-          const eventH = Math.min(maxLane, MAX_LANES) * 24 + (overflow > 0 ? 16 : 0);
+          const eventH = Math.min(maxLane, laneCap) * 24 + (overflow > 0 ? 16 : 0);
           const eventTopBase = compact ? 28 : 36;
           const cellMinHeight = Math.max(compact ? 56 : 96, eventTopBase + eventH);
 
@@ -1024,8 +731,8 @@ export function CalendarVisualizer({
                       disabled={!onEventDrop || dragDisabled}
                       className={cn(
                         'border-r border-gray-100 last:border-r-0 px-1 pt-1 transition-colors duration-75 sm:px-2 sm:pt-2',
-                        isWeekend && day.isMonth && 'bg-rose-50/70',
-                        isWeekend && !day.isMonth && 'bg-rose-50/40',
+                        isWeekend && day.isMonth && 'bg-slate-50',
+                        isWeekend && !day.isMonth && 'bg-slate-50/50',
                         !isWeekend && !day.isMonth && 'bg-gray-50/60',
                         getDropFeedbackClass(dropFeedback, day.str),
                       )}
@@ -1035,8 +742,8 @@ export function CalendarVisualizer({
                         className={cn(
                           'inline-flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 text-xs sm:text-sm rounded-full',
                           day.isToday && 'bg-[#003366] text-white font-bold',
-                          !day.isToday && day.isMonth && (isWeekend ? 'text-rose-700 font-semibold' : 'text-gray-800 font-medium'),
-                          !day.isToday && !day.isMonth && (isWeekend ? 'text-rose-300' : 'text-gray-300'),
+                          !day.isToday && day.isMonth && (isWeekend ? 'text-slate-400 font-medium' : 'text-gray-800 font-medium'),
+                          !day.isToday && !day.isMonth && (isWeekend ? 'text-slate-300' : 'text-gray-300'),
                         )}
                       >
                         {day.day}
@@ -1058,10 +765,12 @@ export function CalendarVisualizer({
                         event={b.event}
                         disabled={!isDraggable}
                         className={cn(
-                          'absolute flex h-5 items-center rounded border-l-[3px] px-1 text-[10px] font-medium truncate transition-shadow hover:z-10 hover:shadow-md sm:h-6 sm:px-2 sm:text-[13px]',
+                          'absolute flex h-5 items-center text-[10px] font-medium truncate transition-shadow hover:z-10 hover:shadow-md sm:h-6 sm:text-[13px]',
                           s.bg,
                           s.border,
                           s.text,
+                          b.start ? 'rounded-l border-l-[3px] px-1 sm:px-2' : 'px-0',
+                          b.end && 'rounded-r',
                           isContinuation && 'opacity-90',
                           b.event.isChangedPreview && 'ring-2 ring-primary border-primary bg-primary/20 bg-blend-multiply',
                           isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
@@ -1069,14 +778,18 @@ export function CalendarVisualizer({
                         )}
                         style={{
                           top: `${eventTopBase + b.lane * 24}px`,
-                          left: `calc(${(b.col / 7) * 100}% + 3px)`,
-                          width: `calc(${(b.span / 7) * 100}% - 6px)`,
+                          left: `calc(${(b.col / 7) * 100}% + ${b.start ? 3 : 0}px)`,
+                          width: `calc(${(b.span / 7) * 100}% - ${(b.start ? 3 : 0) + (b.end ? 3 : 0)}px)`,
                         }}
                       >
-                        <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
-                          {s.label}
-                        </span>
-                        <span className="truncate">{b.event.title}</span>
+                        {b.start && (
+                          <>
+                            <span className="uppercase text-[9px] sm:text-[10px] font-bold opacity-60 mr-1.5 shrink-0 hidden sm:inline">
+                              {s.label}
+                            </span>
+                            <span className="truncate">{b.event.title}</span>
+                          </>
+                        )}
                       </DraggableCalendarEvent>
                       <TooltipContent side="top" className="max-w-xs z-[100]">
                         <p className="font-semibold">{b.event.title}</p>
@@ -1099,7 +812,7 @@ export function CalendarVisualizer({
               {overflow > 0 && (
                 <div
                   className="absolute left-1 sm:left-2 text-[10px] sm:text-xs font-semibold text-[#003366]"
-                  style={{ top: `${eventTopBase + MAX_LANES * 24}px` }}
+                  style={{ top: `${eventTopBase + laneCap * 24}px` }}
                 >
                   +{overflow} daha
                 </div>
@@ -1111,14 +824,14 @@ export function CalendarVisualizer({
     );
   }
 
-  function renderLegend(prefix: string, iconClass = 'h-3 w-4', textClass = 'text-[10px] font-semibold text-gray-500') {
+  function renderLegend(prefix: string, iconClass = 'h-3.5 w-5', textClass = 'text-[11px] font-semibold text-gray-600') {
     return (
       <>
         {(Object.entries(CAT_STYLE) as [CalendarEventCategory, typeof CAT_STYLE[CalendarEventCategory]][]).map(([category, s]) => {
           const selected = activeCategory === category;
           const content = (
             <>
-              <div className={cn(iconClass, 'rounded-sm border-l-[3px]', s.bg, s.border)} />
+              <div className={cn(iconClass, 'rounded border-l-4', s.bg, s.border)} />
               <span className={cn(textClass, selected && 'text-[#003366]')}>{s.label}</span>
             </>
           );
@@ -1170,7 +883,7 @@ export function CalendarVisualizer({
     return (
       <>
         <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-6">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">Akademik yıl</p>
               <h2 className="text-xl font-bold text-[#003366] sm:text-2xl">
@@ -1178,18 +891,20 @@ export function CalendarVisualizer({
                 {' - '}
                 {lastMonth && MONTH_NAMES[lastMonth.m]} {lastMonth?.y}
               </h2>
-              <div className="mt-2 flex flex-wrap gap-2">
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="flex flex-wrap gap-2 sm:justify-end">
                 {renderLegend('inline-year-legend')}
               </div>
+              {headerActions && (
+                <div className="flex shrink-0">
+                  {headerActions}
+                </div>
+              )}
             </div>
-            {headerActions && (
-              <div className="flex shrink-0 self-end sm:self-center">
-                {headerActions}
-              </div>
-            )}
           </div>
           <div className="bg-slate-50 p-2">
-            <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+            <div className="grid min-h-0 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
             </div>
           </div>
@@ -1222,7 +937,7 @@ export function CalendarVisualizer({
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto bg-slate-50 p-2 sm:p-4">
-                {renderMonth(expandedMonth.y, expandedMonth.m)}
+                {renderMonth(expandedMonth.y, expandedMonth.m, true)}
               </div>
             </div>
           </div>
@@ -1326,7 +1041,7 @@ export function CalendarVisualizer({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-2">
-              <div className="grid min-h-0 gap-2 lg:grid-cols-4">
+              <div className="grid min-h-0 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {academicYearMonths.map(month => renderYearMonth(month.y, month.m))}
               </div>
             </div>

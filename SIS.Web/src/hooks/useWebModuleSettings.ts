@@ -44,6 +44,8 @@ export function useUpdateWebModuleSetting() {
     ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.webModuleSettings });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.webModuleControlSummaries });
+      qc.invalidateQueries({ queryKey: ['announcements'] });
       qc.invalidateQueries({ queryKey: ['admin', 'auditLogs'] });
     },
   });

@@ -6,9 +6,12 @@ using Xunit;
 namespace SIS.Tests.Domain;
 
 /// <summary>
-/// AcademicTerm.OverrideStart + OverrideEnd davranışı için birim testler.
-/// Kural: OverrideStart varsa efektif başlangıç onun; OverrideEnd varsa efektif bitiş onun.
-/// Null ise TermStart/TermEnd kullanılır.
+/// AcademicTerm aktiflik + EffectiveStart/EffectiveEnd davranışı.
+///
+/// Yeni model (Proliz/Banner): aktiflik manuel <see cref="AcademicTerm.IsActivated"/>
+/// bayrağına bağlıdır; TermStart/TermEnd ve OverrideStart/OverrideEnd tarihleri
+/// aktifliği ARTIK BELİRLEMEZ. Override tarihleri yalnızca EffectiveStart/EffectiveEnd
+/// computed alanlarını besler (görüntüleme/raporlama için dormant kalır).
 /// </summary>
 public class AcademicTermOverrideDatesTests
 {
@@ -16,84 +19,46 @@ public class AcademicTermOverrideDatesTests
         new(y, m, d, 0, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void GetStatus_Returns_Inactive_When_No_Override_And_Today_Before_TermStart()
+    public void GetStatus_Inactive_When_NotActivated_RegardlessOfDate()
     {
         var term = new AcademicTerm
         {
-            TermStart = U(2027, 2, 1),
-            TermEnd = U(2027, 6, 1),
-        };
-
-        var status = term.GetStatus(U(2026, 4, 24));
-
-        status.Should().Be(TermStatus.Inactive);
-        term.EffectiveStart.Should().Be(term.TermStart);
-        term.EffectiveEnd.Should().Be(term.TermEnd);
-    }
-
-    [Fact]
-    public void GetStatus_Returns_Active_When_OverrideStart_Brings_Term_Earlier()
-    {
-        var term = new AcademicTerm
-        {
-            TermStart = U(2027, 2, 1),       // gelecek
-            TermEnd = U(2027, 6, 1),
-            OverrideStart = U(2026, 4, 1),   // erken aktivasyon — bugünden önce
-        };
-
-        var status = term.GetStatus(U(2026, 4, 24));
-
-        status.Should().Be(TermStatus.Active);
-        term.EffectiveStart.Should().Be(U(2026, 4, 1));
-        term.EffectiveEnd.Should().Be(U(2027, 6, 1));
-    }
-
-    [Fact]
-    public void GetStatus_Returns_Active_When_OverrideEnd_Extends_Term()
-    {
-        var term = new AcademicTerm
-        {
-            TermStart = U(2026, 2, 1),
-            TermEnd = U(2026, 3, 1),        // bitmiş
-            OverrideEnd = U(2026, 6, 30),   // uzatma — bugünden sonra
-        };
-
-        var status = term.GetStatus(U(2026, 4, 24));
-
-        status.Should().Be(TermStatus.Active);
-        term.EffectiveEnd.Should().Be(U(2026, 6, 30));
-    }
-
-    [Fact]
-    public void GetStatus_Returns_Inactive_When_OverrideEnd_Also_In_Past()
-    {
-        var term = new AcademicTerm
-        {
-            TermStart = U(2026, 1, 1),
-            TermEnd = U(2026, 2, 1),
-            OverrideEnd = U(2026, 3, 1),    // uzatma ama yine geçmiş
-        };
-
-        var status = term.GetStatus(U(2026, 4, 24));
-
-        status.Should().Be(TermStatus.Inactive);
-    }
-
-    [Fact]
-    public void GetStatus_Cancelled_Trumps_Override()
-    {
-        var term = new AcademicTerm
-        {
+            IsActivated = false,
             TermStart = U(2026, 2, 1),
             TermEnd = U(2026, 6, 1),
-            OverrideStart = U(2026, 1, 1),
-            OverrideEnd = U(2027, 1, 1),
-            IsCancelled = true,
         };
 
-        var status = term.GetStatus(U(2026, 4, 24));
+        // Tarih aralığının içinde olsa bile: açık değil → Inactive.
+        term.GetStatus(U(2026, 4, 24)).Should().Be(TermStatus.Inactive);
+    }
 
-        status.Should().Be(TermStatus.Cancelled);
+    [Fact]
+    public void GetStatus_Active_When_Activated_RegardlessOfDate()
+    {
+        var term = new AcademicTerm
+        {
+            IsActivated = true,
+            TermStart = U(2027, 2, 1),   // gelecek dönem
+            TermEnd = U(2027, 6, 1),
+        };
+
+        // Dönem henüz başlamamış olsa da "Kullanıma Açık" → Active.
+        term.GetStatus(U(2026, 4, 24)).Should().Be(TermStatus.Active);
+    }
+
+    [Fact]
+    public void GetStatus_Cancelled_Trumps_Activated()
+    {
+        var term = new AcademicTerm
+        {
+            IsActivated = true,
+            IsCancelled = true,
+            TermStart = U(2026, 2, 1),
+            TermEnd = U(2026, 6, 1),
+        };
+
+        term.GetStatus(U(2026, 4, 24)).Should().Be(TermStatus.Cancelled);
+        term.IsActive(U(2026, 4, 24)).Should().BeFalse();
     }
 
     [Fact]
@@ -112,17 +77,17 @@ public class AcademicTermOverrideDatesTests
     }
 
     [Fact]
-    public void IsActive_False_For_Cancelled_Even_Within_Override_Range()
+    public void EffectiveStart_Uses_Override_When_Present()
     {
         var term = new AcademicTerm
         {
-            TermStart = U(2026, 2, 1),
-            TermEnd = U(2026, 6, 1),
-            OverrideStart = U(2026, 1, 1),
-            OverrideEnd = U(2027, 1, 1),
-            IsCancelled = true,
+            TermStart = U(2027, 2, 1),
+            TermEnd = U(2027, 6, 1),
+            OverrideStart = U(2026, 4, 1),
+            OverrideEnd = U(2027, 7, 1),
         };
 
-        term.IsActive(U(2026, 4, 24)).Should().BeFalse();
+        term.EffectiveStart.Should().Be(U(2026, 4, 1));
+        term.EffectiveEnd.Should().Be(U(2027, 7, 1));
     }
 }

@@ -10,6 +10,14 @@ export function ConflictBar({ facultyId, termId }: { facultyId: number; termId: 
 
   if (!termId || conflictsQuery.isLoading) return <Skeleton className="h-8 rounded-lg" />;
 
+  if (conflictsQuery.isError) {
+    return (
+      <div className="border-t bg-amber-50 px-4 py-2 text-xs text-amber-700">
+        Çakışmalar yüklenemedi — liste güncel olmayabilir, sayfayı yenileyin.
+      </div>
+    );
+  }
+
   const conflicts = conflictsQuery.data ?? [];
   if (conflicts.length === 0) return null;
 

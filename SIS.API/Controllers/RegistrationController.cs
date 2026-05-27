@@ -102,7 +102,9 @@ public class RegistrationController : ControllerBase
     /// GET api/registrations/history — list the student's course history with grades, grouped by term.
     /// </summary>
     [HttpGet("history")]
-    [RequirePermission("menu.not-listesi.view")]
+    // Paylaşılan uç: "Alınan Dersler" (MyCoursesPage) ve "Not Listesi" (GradeListPage)
+    // sayfalarının ortak veri kaynağı — her iki sayfanın izninden biri yeterlidir (any-of).
+    [RequirePermission("menu.alinan-dersler.view", "menu.not-listesi.view")]
     public async Task<IActionResult> GetCourseHistory()
     {
         var studentId = await GetStudentIdAsync();

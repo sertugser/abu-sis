@@ -59,12 +59,14 @@ interface ClassroomSuggestionDialogProps {
   onApplyAll: (selectedClassroomIds?: number[]) => void;
   applying: boolean;
   applyError: boolean;
+  /** Backend'den dönen kısmi/total atama hataları (HTTP 200 + errors[]). */
+  applyErrors?: string[];
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function ClassroomSuggestionDialog({
-  open, onOpenChange, data, onApplyAll, applying, applyError,
+  open, onOpenChange, data, onApplyAll, applying, applyError, applyErrors = [],
 }: ClassroomSuggestionDialogProps) {
   // Filter state
   const [facultyFilter, setFacultyFilter] = useState<string>('all');
@@ -672,11 +674,28 @@ export default function ClassroomSuggestionDialog({
                 </div>
               )}
 
-              {/* Bulk apply error */}
+              {/* Bulk apply error (ağ/sunucu hatası) */}
               {applyError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>Toplu atama sırasında hata oluştu.</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Kısmi/total atama hataları (HTTP 200 + errors[]) */}
+              {applyErrors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="font-medium">
+                      {applyErrors.length} öneri uygulanamadı:
+                    </div>
+                    <ul className="mt-1 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-4 text-xs">
+                      {applyErrors.map((e, i) => (
+                        <li key={i}>{e}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
                 </Alert>
               )}
             </div>

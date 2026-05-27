@@ -380,9 +380,20 @@ public partial class FacultyPlanningService : IFacultyPlanningService
 
     public async Task<List<AvailableClassroomDto>> GetAvailableClassroomsAsync(
         int termId, DayOfWeek? day = null, TimeOnly? startTime = null, TimeOnly? endTime = null,
-        int? minCapacity = null, string? type = null, CancellationToken ct = default)
+        int? minCapacity = null, string? type = null, int? facultyId = null, CancellationToken ct = default)
     {
-        var classrooms = await _context.Classrooms.AsNoTracking().ToListAsync(ct);
+        // facultyId verilirse yalnız o fakülteye bu dönem ATANMIŞ derslikler (ClassroomTermAssignments) —
+        // hem cross-faculty sızıntısını kapatır (#16) hem de "her fakülte kendi dersliğiyle program yapar"
+        // kuralını uygular (atanmamış oda önerip backend'in reddetmesini önler).
+        var query = _context.Classrooms.AsNoTracking().AsQueryable();
+        if (facultyId.HasValue)
+        {
+            var assignedIds = _context.ClassroomTermAssignments
+                .Where(cta => cta.TermId == termId && cta.FacultyId == facultyId.Value)
+                .Select(cta => cta.ClassroomId);
+            query = query.Where(c => assignedIds.Contains(c.Id));
+        }
+        var classrooms = await query.ToListAsync(ct);
 
         if (minCapacity.HasValue)
             classrooms = classrooms.Where(c => c.Capacity >= minCapacity.Value).ToList();

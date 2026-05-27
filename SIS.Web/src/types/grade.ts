@@ -1,10 +1,13 @@
 // SIS.Web/src/types/grade.ts
 
+export type GradeComponentType = 'Other' | 'Midterm' | 'Final';
+
 export interface GradeComponent {
   id: number;
   name: string;
   weight: number;
   order: number;
+  type: GradeComponentType;
 }
 
 export interface StudentScore {
@@ -17,6 +20,8 @@ export interface GradeSubmitDto {
   grades: StudentScore[];
 }
 
+export type ExamAttendance = 'NotMarked' | 'Present' | 'Absent' | 'Excused';
+
 export interface StudentGradeRow {
   studentId: number;
   studentNumber: string;
@@ -25,6 +30,7 @@ export interface StudentGradeRow {
   letterGrade?: string | null;
   weightedAverage?: number | null;
   scores: Record<number, number | null>;
+  examAttendances?: Record<number, ExamAttendance>;
 }
 
 export interface GradesResponse {
@@ -45,6 +51,7 @@ export interface GradingCriteria {
   ccMin: number;
   dcMin: number;
   ddMin: number;
+  editable?: boolean;
 }
 
 export interface FinalizePreviewItem {
@@ -93,4 +100,97 @@ export interface ImportApplyResponse {
   inserted: number;
   updated: number;
   skipped: number;
+}
+
+// ══════════════════════════════════════════════════════════
+// BÜTÜNLEME (RESIT MAKEUP) TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ButunlemeVizeScore {
+  componentId: number;
+  componentName: string;
+  score: number | null;
+}
+
+export interface ButunlemeFinalScore {
+  componentId: number;
+  componentName: string;
+  score: number | null;
+  makeupScore: number | null;
+}
+
+export interface ButunlemeStudent {
+  studentId: number;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  currentGrade: string | null;
+  vizeScores: ButunlemeVizeScore[];
+  finalScores: ButunlemeFinalScore[];
+}
+
+export interface ButunlemeRosterResponse {
+  sectionId: number;
+  finalComponentId: number | null;
+  students: ButunlemeStudent[];
+}
+
+export interface ButunlemeScoreItem {
+  studentId: number;
+  makeupScore: number;
+}
+
+export interface ButunlemeFinalizeResult {
+  studentId: number;
+  oldGrade: string | null;
+  newGrade: string;
+  weightedAverage: number;
+}
+
+export interface ButunlemeFinalizeResponse {
+  message: string;
+  results: ButunlemeFinalizeResult[];
+}
+
+// ══════════════════════════════════════════════════════════
+// MAZERET (EXCUSE MAKEUP) TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ExcusedComponent {
+  componentId: number;
+  componentName: string;
+  originalScore: number | null;
+  makeupScore: number | null;
+}
+
+export interface MazeretStudent {
+  studentId: number;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  currentGrade: string | null;
+  excusedComponents: ExcusedComponent[];
+}
+
+export interface MazeretRosterResponse {
+  sectionId: number;
+  students: MazeretStudent[];
+}
+
+export interface MazeretScoreItem {
+  studentId: number;
+  componentId: number;
+  makeupScore: number;
+}
+
+export interface MazeretFinalizeResult {
+  studentId: number;
+  oldGrade: string | null;
+  newGrade: string;
+  weightedAverage: number;
+}
+
+export interface MazeretFinalizeResponse {
+  message: string;
+  results: MazeretFinalizeResult[];
 }

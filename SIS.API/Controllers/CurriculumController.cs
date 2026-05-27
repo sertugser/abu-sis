@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.Curriculum.Services;
 using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -12,7 +13,10 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/curriculum")]
 [Authorize]
-public class CurriculumController(AppDbContext context, IElectiveGroupScopeValidator scopeValidator) : ControllerBase
+public class CurriculumController(
+    AppDbContext context,
+    IElectiveGroupScopeValidator scopeValidator,
+    ICourseStatisticsService courseStatistics) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
@@ -47,7 +51,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool IsMainGroupCourse, bool IsFormationCourse,
         bool ExcludedFromCreditTotal, bool ExcludedFromTranscriptTotal,
         bool AutoAddOnNewRegistration, bool ShowAtTakenCurriculum,
-        bool ShowInstructorAtRegistration, bool HasCustomExamCurriculum,
+        bool ShowInstructorAtRegistration,
         // Phase 2 — decision metadata
         DateTime? DecisionDate, string? DecisionNo, string? DecisionNote,
         // Phase 2 — curriculum-specific description
@@ -81,7 +85,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool IsMainGroupCourse = false, bool IsFormationCourse = false,
         bool ExcludedFromCreditTotal = false, bool ExcludedFromTranscriptTotal = false,
         bool AutoAddOnNewRegistration = false, bool ShowAtTakenCurriculum = false,
-        bool ShowInstructorAtRegistration = true, bool HasCustomExamCurriculum = false,
+        bool ShowInstructorAtRegistration = true,
         // Phase 2 decision metadata
         DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
         // Phase 2 description
@@ -98,7 +102,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool? IsMainGroupCourse = null, bool? IsFormationCourse = null,
         bool? ExcludedFromCreditTotal = null, bool? ExcludedFromTranscriptTotal = null,
         bool? AutoAddOnNewRegistration = null, bool? ShowAtTakenCurriculum = null,
-        bool? ShowInstructorAtRegistration = null, bool? HasCustomExamCurriculum = null,
+        bool? ShowInstructorAtRegistration = null,
         // Phase 2 decision metadata (string? where null = no change; ClearXxx flags allow setting to null)
         DateTime? DecisionDate = null, string? DecisionNo = null, string? DecisionNote = null,
         bool ClearDecisionDate = false,
@@ -110,6 +114,22 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         bool ClearPreviousCourse = false);
 
     public record CopyCurriculumRequest(string NewVersion);
+
+    // ── İntibak (Müfredat Ders İntibak İşlemleri — toplu PreviousCourse eşleştirmesi) ──
+    public record IntibakCurriculumDto(
+        int Id, int ProgramId, string ProgramName, string ProgramCode,
+        string FacultyName, string DepartmentName, string Version, string? Name,
+        bool IsActive, CurriculumStatus Status,
+        int CourseCount, int MappedCount);
+
+    public record IntibakCourseDto(
+        int CourseId, string CourseCode, string CourseName,
+        int SuggestedSemester, bool IsCompulsory,
+        int NationalCredit, int Ects,
+        int? PreviousCourseId, string? PreviousCourseCode, string? PreviousCourseName);
+
+    public record IntibakBulkItem(int CourseId, int? PreviousCourseId);
+    public record IntibakBulkRequest(List<IntibakBulkItem> Items);
 
     public record CurriculumElectivePoolDto(
         int Id, int ElectiveGroupId, string GroupName, string GroupCode,
@@ -241,7 +261,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                     cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    cc.ShowInstructorAtRegistration,
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description
@@ -406,7 +426,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 cc.IsMainGroupCourse, cc.IsFormationCourse,
                 cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                 cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                cc.ShowInstructorAtRegistration,
                 cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                 cc.CurriculumDescription,
                 // Phase 3
@@ -471,7 +491,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             AutoAddOnNewRegistration = req.AutoAddOnNewRegistration,
             ShowAtTakenCurriculum = req.ShowAtTakenCurriculum,
             ShowInstructorAtRegistration = req.ShowInstructorAtRegistration,
-            HasCustomExamCurriculum = req.HasCustomExamCurriculum,
             // Phase 2 decision metadata
             DecisionDate = req.DecisionDate,
             DecisionNo = req.DecisionNo,
@@ -508,7 +527,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
             saved.IsMainGroupCourse, saved.IsFormationCourse,
             saved.ExcludedFromCreditTotal, saved.ExcludedFromTranscriptTotal,
             saved.AutoAddOnNewRegistration, saved.ShowAtTakenCurriculum,
-            saved.ShowInstructorAtRegistration, saved.HasCustomExamCurriculum,
+            saved.ShowInstructorAtRegistration,
             saved.DecisionDate, saved.DecisionNo, saved.DecisionNote,
             saved.CurriculumDescription,
             // Phase 3
@@ -555,7 +574,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         if (req.AutoAddOnNewRegistration.HasValue) cc.AutoAddOnNewRegistration = req.AutoAddOnNewRegistration.Value;
         if (req.ShowAtTakenCurriculum.HasValue) cc.ShowAtTakenCurriculum = req.ShowAtTakenCurriculum.Value;
         if (req.ShowInstructorAtRegistration.HasValue) cc.ShowInstructorAtRegistration = req.ShowInstructorAtRegistration.Value;
-        if (req.HasCustomExamCurriculum.HasValue) cc.HasCustomExamCurriculum = req.HasCustomExamCurriculum.Value;
 
         // Phase 2 — decision metadata
         if (req.ClearDecisionDate) cc.DecisionDate = null;
@@ -607,6 +625,132 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
         await context.SaveChangesAsync(ct);
 
         return NoContent();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // İntibak (Müfredat Ders İntibak İşlemleri) — standalone toplu yönetim
+    // PreviousCourse (müfredata özel, tek yönlü yeni→eski) eşleştirmesi.
+    // CourseEquivalency ile KARIŞTIRILMAZ (o ayrı: katalog, simetrik).
+    // ════════════════════════════════════════════════════════════════
+
+    // ── GET /api/curriculum/intibak/curricula ── (intibak sayfası müfredat seçici) ──
+    [HttpGet("intibak/curricula")]
+    [RequirePermission("menu.mufredat-ders-intibak.view")]
+    public async Task<IActionResult> ListIntibakCurricula(CancellationToken ct)
+    {
+        var list = await context.Curricula
+            .AsNoTracking()
+            .Include(c => c.Program).ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
+            .OrderBy(c => c.Program.Name).ThenByDescending(c => c.Version)
+            .Select(c => new IntibakCurriculumDto(
+                c.Id, c.ProgramId, c.Program.Name, c.Program.Code,
+                c.Program.Department.Faculty.Name, c.Program.Department.Name, c.Version, c.Name,
+                c.IsActive, c.Status,
+                c.CurriculumCourses.Count,
+                c.CurriculumCourses.Count(cc => cc.PreviousCourseId != null)))
+            .ToListAsync(ct);
+
+        return Ok(list);
+    }
+
+    // ── GET /api/curriculum/{id}/intibak ── (seçili müfredatın ders+intibak listesi) ──
+    [HttpGet("{id:int}/intibak")]
+    [RequirePermission("menu.mufredat-ders-intibak.view")]
+    public async Task<IActionResult> GetIntibak(int id, CancellationToken ct)
+    {
+        var exists = await context.Curricula.AnyAsync(c => c.Id == id, ct);
+        if (!exists)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+
+        var courses = await context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => cc.CurriculumId == id)
+            .Include(cc => cc.Course)
+            .Include(cc => cc.PreviousCourse)
+            .OrderBy(cc => cc.SuggestedSemester)
+            .ThenBy(cc => cc.Course.Code)
+            .Select(cc => new IntibakCourseDto(
+                cc.CourseId, cc.Course.Code, cc.Course.Name,
+                cc.SuggestedSemester, cc.IsCompulsory,
+                cc.Course.NationalCredit, cc.Course.Ects,
+                cc.PreviousCourseId,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Code : null,
+                cc.PreviousCourse != null ? cc.PreviousCourse.Name : null))
+            .ToListAsync(ct);
+
+        return Ok(courses);
+    }
+
+    // ── GET /api/curriculum/course/{courseId}/intibak-statistics ── (detay paneli öğrenci sayıları) ──
+    [HttpGet("course/{courseId:int}/intibak-statistics")]
+    [RequirePermission("menu.mufredat-ders-intibak.view")]
+    public async Task<IActionResult> GetCourseIntibakStatistics(int courseId, CancellationToken ct)
+    {
+        var exists = await context.Set<Domain.Entities.Course>().AnyAsync(c => c.Id == courseId, ct);
+        if (!exists)
+            return NotFound(new { message = "Ders bulunamadı." });
+
+        var stats = await courseStatistics.GetCourseIntibakStatisticsAsync(courseId, ct);
+        return Ok(stats);
+    }
+
+    // ── PUT /api/curriculum/{id}/intibak ── (toplu intibak kaydet) ──
+    [HttpPut("{id:int}/intibak")]
+    [RequirePermission("menu.mufredat-ders-intibak.edit")]
+    public async Task<IActionResult> SaveIntibak(int id, [FromBody] IntibakBulkRequest req, CancellationToken ct)
+    {
+        var curriculum = await context.Curricula.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (curriculum is null)
+            return NotFound(new { message = "Müfredat bulunamadı." });
+        if (curriculum.Status == Domain.Enums.CurriculumStatus.Published)
+            return BadRequest(new { message = "Yayındaki müfredatın intibakı düzenlenemez. Yeni sürüm oluşturun." });
+        if (curriculum.Status == Domain.Enums.CurriculumStatus.Archived)
+            return BadRequest(new { message = "Arşiv durumundaki müfredat değiştirilemez." });
+
+        var items = req.Items ?? new List<IntibakBulkItem>();
+        if (items.Count == 0)
+            return Ok(new { updated = 0, message = "Değişiklik yok." });
+
+        // Self-reference guard
+        var selfRef = items.FirstOrDefault(i => i.PreviousCourseId.HasValue && i.PreviousCourseId.Value == i.CourseId);
+        if (selfRef is not null)
+            return BadRequest(new { message = "Bir ders kendisinin önceki dersi olamaz." });
+
+        // Curriculum'daki dersler
+        var ccByCourse = await context.CurriculumCourses
+            .Where(cc => cc.CurriculumId == id)
+            .ToDictionaryAsync(cc => cc.CourseId, ct);
+
+        var unknownInCurriculum = items.Where(i => !ccByCourse.ContainsKey(i.CourseId)).Select(i => i.CourseId).ToList();
+        if (unknownInCurriculum.Count > 0)
+            return BadRequest(new { message = $"Şu ders(ler) bu müfredatta yok: {string.Join(", ", unknownInCurriculum)}" });
+
+        // Seçilen önceki derslerin varlığını tek sorguda doğrula
+        var previousIds = items.Where(i => i.PreviousCourseId.HasValue).Select(i => i.PreviousCourseId!.Value).Distinct().ToList();
+        if (previousIds.Count > 0)
+        {
+            var existingIds = await context.Set<Domain.Entities.Course>()
+                .Where(c => previousIds.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToListAsync(ct);
+            var missing = previousIds.Except(existingIds).ToList();
+            if (missing.Count > 0)
+                return BadRequest(new { message = $"İntibak için seçilen önceki ders(ler) bulunamadı: {string.Join(", ", missing)}" });
+        }
+
+        var updated = 0;
+        foreach (var item in items)
+        {
+            var cc = ccByCourse[item.CourseId];
+            if (cc.PreviousCourseId == item.PreviousCourseId) continue;
+            cc.PreviousCourseId = item.PreviousCourseId;
+            updated++;
+        }
+
+        if (updated > 0)
+            await context.SaveChangesAsync(ct);
+
+        return Ok(new { updated, message = $"{updated} ders için intibak güncellendi." });
     }
 
     // ── POST /api/curriculum/{id}/copy ────────────────────────────
@@ -670,7 +814,6 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                 AutoAddOnNewRegistration = cc.AutoAddOnNewRegistration,
                 ShowAtTakenCurriculum = cc.ShowAtTakenCurriculum,
                 ShowInstructorAtRegistration = cc.ShowInstructorAtRegistration,
-                HasCustomExamCurriculum = cc.HasCustomExamCurriculum,
                 // Phase 2 — decision metadata
                 DecisionDate = cc.DecisionDate,
                 DecisionNo = cc.DecisionNo,
@@ -731,7 +874,7 @@ public class CurriculumController(AppDbContext context, IElectiveGroupScopeValid
                     cc.IsMainGroupCourse, cc.IsFormationCourse,
                     cc.ExcludedFromCreditTotal, cc.ExcludedFromTranscriptTotal,
                     cc.AutoAddOnNewRegistration, cc.ShowAtTakenCurriculum,
-                    cc.ShowInstructorAtRegistration, cc.HasCustomExamCurriculum,
+                    cc.ShowInstructorAtRegistration,
                     // Phase 2 — decision metadata
                     cc.DecisionDate, cc.DecisionNo, cc.DecisionNote,
                     // Phase 2 — curriculum-specific description

@@ -1,10 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -28,7 +35,9 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
+  BarChart2,
 } from 'lucide-react';
+import { computeScoreStats, letterDistribution, passFailCounts } from '@/lib/gradeStats';
 import {
   useGrades,
   useComponents,
@@ -42,12 +51,37 @@ import {
   useDownloadTemplate,
   usePreviewImport,
   useApplyImport,
+  useSetExamAttendance,
 } from '../hooks/useGradeData';
+import { ButunlemePanel, MazeretPanel } from '../components/grade/MakeupSections';
 import type {
+  ExamAttendance,
+  GradeComponentType,
   GradingCriteria,
   FinalizePreviewItem,
   ImportPreviewResponse,
 } from '../types/grade';
+
+/* ── Bileşen türü etiketleri ── */
+const COMPONENT_TYPE_LABELS: Record<GradeComponentType, string> = {
+  Other: 'Diğer',
+  Midterm: 'Ara Sınav',
+  Final: 'Final',
+};
+
+const COMPONENT_TYPE_BADGE_CLASS: Record<GradeComponentType, string> = {
+  Other: 'bg-slate-100 text-slate-600',
+  Midterm: 'bg-blue-50 text-blue-600',
+  Final: 'bg-purple-50 text-purple-700',
+};
+
+/* ── Sınav katılım ── */
+const ATTENDANCE_OPTIONS: { value: ExamAttendance; label: string }[] = [
+  { value: 'NotMarked', label: '—' },
+  { value: 'Present',   label: 'Girdi' },
+  { value: 'Absent',    label: 'Girmedi' },
+  { value: 'Excused',   label: 'Mazeretli' },
+];
 
 /* ── Harf notu stilleri ── */
 const GRADE_STYLE: Record<string, { bg: string; text: string }> = {
@@ -83,6 +117,160 @@ function GradeChip({ grade }: { grade: string }) {
   );
 }
 
+/* ── Score histogram buckets ── */
+const HISTOGRAM_BUCKETS: { label: string; min: number; max: number }[] = [
+  { label: '0–49', min: 0, max: 49 },
+  { label: '50–59', min: 50, max: 59 },
+  { label: '60–69', min: 60, max: 69 },
+  { label: '70–79', min: 70, max: 79 },
+  { label: '80–89', min: 80, max: 89 },
+  { label: '90–100', min: 90, max: 100 },
+];
+
+const LETTER_ORDER = ['AA', 'BA', 'BB', 'CB', 'CC', 'DC', 'DD', 'FF', 'NA'] as const;
+
+/* ── Letter distribution mini-row ── */
+function LetterDistBar({ dist, total }: { dist: Record<string, number>; total: number }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {LETTER_ORDER.map((letter) => {
+        const n = dist[letter] ?? 0;
+        if (n === 0) return null;
+        const style = GRADE_STYLE[letter];
+        return (
+          <span
+            key={letter}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold font-mono ${style?.bg ?? 'bg-muted'} ${style?.text ?? 'text-foreground'}`}
+            title={`${Math.round((n / total) * 100)}%`}
+          >
+            {letter}
+            <span className="opacity-75">{n}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Class statistics panel ── */
+interface ClassStatsPanelProps {
+  scores: number[];
+  resolve: (score: number) => string;
+}
+
+function ClassStatsPanel({ scores, resolve }: ClassStatsPanelProps) {
+  const stats = useMemo(() => computeScoreStats(scores), [scores]);
+  const dist = useMemo(() => letterDistribution(scores, resolve), [scores, resolve]);
+  const pf = useMemo(() => passFailCounts(scores, resolve), [scores, resolve]);
+
+  if (!stats) return null;
+
+  const bucketCounts = HISTOGRAM_BUCKETS.map((b) => ({
+    label: b.label,
+    count: scores.filter((s) => s >= b.min && s <= b.max).length,
+  }));
+  const maxBucketCount = Math.max(...bucketCounts.map((b) => b.count), 1);
+
+  const passRate = stats.count > 0 ? Math.round((pf.pass / stats.count) * 100) : 0;
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+          <BarChart2 className="h-4 w-4 text-primary" />
+          Sınıf İstatistikleri
+          <span className="ml-auto text-xs text-muted-foreground font-normal">
+            {stats.count} notlu öğrenci
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 space-y-4">
+        {/* Key metrics */}
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {[
+            { label: 'Ortalama', value: stats.mean.toFixed(1) },
+            { label: 'Std. Sapma', value: stats.stdDev.toFixed(1) },
+            { label: 'Medyan', value: stats.median.toFixed(1) },
+            { label: 'En Düşük', value: stats.min.toFixed(0) },
+            { label: 'En Yüksek', value: stats.max.toFixed(0) },
+            { label: 'Geçme %', value: `%${passRate}` },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+              <div className="text-[11px] text-muted-foreground leading-none mb-1">{label}</div>
+              <div className="text-sm font-bold font-mono text-foreground">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Histogram */}
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">Puan Dağılımı</p>
+          <div className="flex items-end gap-1.5 h-16">
+            {bucketCounts.map(({ label, count }) => {
+              const heightPct = Math.round((count / maxBucketCount) * 100);
+              return (
+                <div key={label} className="flex flex-col items-center gap-0.5 flex-1">
+                  <span className="text-[10px] text-muted-foreground font-mono leading-none">{count > 0 ? count : ''}</span>
+                  <div className="w-full rounded-sm bg-primary/20 flex items-end" style={{ height: '40px' }}>
+                    <div
+                      className="w-full rounded-sm bg-primary/60 transition-all"
+                      style={{ height: `${heightPct}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground leading-none">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Letter distribution */}
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">Harf Dağılımı</p>
+          <LetterDistBar dist={dist} total={stats.count} />
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="text-emerald-600 font-medium">Geçen: {pf.pass}</span>
+            <span className="text-red-600 font-medium">Kalan: {pf.fail}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Live letter-distribution preview for criteria dialog ── */
+interface CriteriaPreviewProps {
+  scores: number[];
+  criteria: import('../types/grade').GradingCriteria;
+}
+
+function CriteriaPreview({ scores, criteria }: CriteriaPreviewProps) {
+  const resolve = (s: number) => resolveGrade(s, criteria);
+  const dist = useMemo(() => letterDistribution(scores, resolve), [scores, criteria]);
+  const pf = useMemo(() => passFailCounts(scores, resolve), [scores, criteria]);
+  const total = scores.length;
+
+  if (total === 0) return null;
+
+  return (
+    <div className="rounded-md border bg-muted/30 px-4 py-3 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        Bu Eşiklerle Dağılım Önizlemesi ({total} öğrenci)
+      </p>
+      <LetterDistBar dist={dist} total={total} />
+      <div className="flex items-center gap-3 text-xs">
+        <span className="text-emerald-600 font-semibold">Geçen: {pf.pass}</span>
+        <span className="text-red-600 font-semibold">Kalan: {pf.fail}</span>
+        {total > 0 && (
+          <span className="text-muted-foreground ml-auto">
+            Geçme oranı: %{Math.round((pf.pass / total) * 100)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════ */
 
 export default function GradeEntryPage() {
@@ -103,12 +291,13 @@ export default function GradeEntryPage() {
   const downloadTemplateMut = useDownloadTemplate(id);
 const previewImportMut = usePreviewImport(id);
 const applyImportMut = useApplyImport(id);
+const setAttendanceMut = useSetExamAttendance(id);
 
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<number, string>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [newComponent, setNewComponent] = useState({ name: '', weight: '' });
+  const [newComponent, setNewComponent] = useState<{ name: string; weight: string; type: GradeComponentType }>({ name: '', weight: '', type: 'Other' });
   const [showCriteriaDialog, setShowCriteriaDialog] = useState(false);
   const [editCriteria, setEditCriteria] = useState<GradingCriteria | null>(null);
   const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
@@ -116,6 +305,7 @@ const applyImportMut = useApplyImport(id);
   const [showImportDialog, setShowImportDialog] = useState(false);
 const [selectedFile, setSelectedFile] = useState<File | null>(null);
 const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>(null);
+  const [optimisticAttendance, setOptimisticAttendance] = useState<Record<number, ExamAttendance>>({});
 
   const isFinalized = gradesData?.isFinalized ?? false;
   const currentCriteria = criteria ?? {
@@ -131,6 +321,12 @@ const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>
   const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
   const activeComponent = components?.find(c => c.id === activeComponentId);
   const hideStatistics = gradesData?.hideStatistics ?? false;
+
+  // Collect non-null weightedAverage values for statistics (available after grades are saved)
+  const weightedAverageScores = useMemo(
+    () => (gradesData?.students ?? []).map(s => s.weightedAverage).filter((v): v is number => v != null),
+    [gradesData],
+  );
 
   useEffect(() => {
     if (!gradesData || !activeComponentId) return;
@@ -217,11 +413,11 @@ const [previewResult, setPreviewResult] = useState<ImportPreviewResponse | null>
   const handleAddComponent = () => {
     if (!newComponent.name || !newComponent.weight) return;
     addComponentMut.mutate(
-      { name: newComponent.name, weight: Number(newComponent.weight), order: 0 },
+      { name: newComponent.name, weight: Number(newComponent.weight), order: 0, type: newComponent.type },
       {
         onSuccess: () => {
           setShowAddDialog(false);
-          setNewComponent({ name: '', weight: '' });
+          setNewComponent({ name: '', weight: '', type: 'Other' });
         },
       }
     );
@@ -314,6 +510,23 @@ const handleApplyImport = () => {
     },
   });
 };
+
+  const handleAttendanceChange = (studentId: number, attendance: ExamAttendance) => {
+    if (!activeComponentId || isFinalized) return;
+    setOptimisticAttendance(prev => ({ ...prev, [studentId]: attendance }));
+    setAttendanceMut.mutate(
+      { componentId: activeComponentId, items: [{ studentId, attendance }] },
+      {
+        onSettled: () => {
+          setOptimisticAttendance(prev => {
+            const next = { ...prev };
+            delete next[studentId];
+            return next;
+          });
+        },
+      },
+    );
+  };
 
   /* ── Filter students ── */
   const filteredStudents = gradesData.students.filter(s => {
@@ -442,6 +655,15 @@ const handleApplyImport = () => {
               <span className={`font-mono text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                 %{comp.weight}
               </span>
+              {comp.type && comp.type !== 'Other' && (
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  isActive
+                    ? 'bg-primary-foreground/15 text-primary-foreground/80'
+                    : COMPONENT_TYPE_BADGE_CLASS[comp.type]
+                }`}>
+                  {COMPONENT_TYPE_LABELS[comp.type]}
+                </span>
+              )}
               {!isFinalized && (
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteComponentMut.mutate(comp.id); }}
@@ -479,6 +701,14 @@ const handleApplyImport = () => {
           </span>
         </div>
       </div>
+
+      {/* ═══ CLASS STATISTICS PANEL ═══ */}
+      {!hideStatistics && weightedAverageScores.length > 0 && (
+        <ClassStatsPanel
+          scores={weightedAverageScores}
+          resolve={(s) => resolveGrade(Math.round(s), currentCriteria)}
+        />
+      )}
 
       {/* ═══ MAIN CONTENT — Grade Table ═══ */}
       <Card className="flex-1">
@@ -535,6 +765,7 @@ const handleApplyImport = () => {
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-14">#</th>
                       <th className="text-left py-3 px-4 font-medium text-muted-foreground">Öğrenci No</th>
                       <th className="text-left py-3 px-4 font-medium text-muted-foreground">Ad Soyad</th>
+                      <th className="text-center py-3 px-4 font-medium text-muted-foreground w-36">Katılım</th>
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-32">Puan</th>
                       <th className="text-center py-3 px-4 font-medium text-muted-foreground w-24">Harf</th>
                     </tr>
@@ -550,7 +781,15 @@ const handleApplyImport = () => {
                          scoreNum >= 0 &&
                          scoreNum <= 100;
 
-                      const previewLetterGrade = isValidScore
+                      const serverAttendance: ExamAttendance =
+                        (activeComponentId && student.examAttendances?.[activeComponentId]) || 'NotMarked';
+                      const attendance: ExamAttendance =
+                        optimisticAttendance[student.studentId] ?? serverAttendance;
+                      const isAbsent = attendance === 'Absent';
+                      const isExcused = attendance === 'Excused';
+                      const scoreDisabled = isAbsent || isExcused;
+
+                      const previewLetterGrade = isValidScore && !scoreDisabled
                           ? resolveGrade(Math.round(scoreNum), currentCriteria)
                           : null;
 
@@ -571,7 +810,45 @@ const handleApplyImport = () => {
                           </td>
                           <td className="py-3 px-4 text-center">
                             {isFinalized ? (
-                              <span className="font-mono text-sm font-semibold">{scoreStr || '—'}</span>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
+                                isAbsent  ? 'bg-red-50 text-red-600' :
+                                isExcused ? 'bg-amber-50 text-amber-600' :
+                                attendance === 'Present' ? 'bg-emerald-50 text-emerald-600' :
+                                'text-muted-foreground'
+                              }`}>
+                                {ATTENDANCE_OPTIONS.find(o => o.value === attendance)?.label ?? '—'}
+                              </span>
+                            ) : (
+                              <select
+                                value={attendance}
+                                onChange={(e) =>
+                                  handleAttendanceChange(student.studentId, e.target.value as ExamAttendance)
+                                }
+                                disabled={student.studentId in optimisticAttendance}
+                                className={`h-8 rounded-md border text-xs font-medium px-2 pr-6 appearance-none bg-background cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 ${
+                                  isAbsent  ? 'border-red-300 text-red-600 bg-red-50' :
+                                  isExcused ? 'border-amber-300 text-amber-600 bg-amber-50' :
+                                  attendance === 'Present' ? 'border-emerald-300 text-emerald-600 bg-emerald-50' :
+                                  'border-input text-muted-foreground'
+                                }`}
+                              >
+                                {ATTENDANCE_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {isFinalized ? (
+                              <span className="font-mono text-sm font-semibold">
+                                {isAbsent ? '0 (Girmedi)' : isExcused ? 'Mazeretli' : scoreStr || '—'}
+                              </span>
+                            ) : scoreDisabled ? (
+                              <span className={`text-xs font-mono font-medium ${isAbsent ? 'text-red-500' : 'text-amber-500'}`}>
+                                {isAbsent ? '0 (Girmedi)' : 'Mazeretli'}
+                              </span>
                             ) : (
                               <Input
                                type="number"
@@ -633,6 +910,22 @@ const handleApplyImport = () => {
               />
             </div>
             <div className="space-y-2">
+              <Label className="text-sm font-medium">Tür</Label>
+              <Select
+                value={newComponent.type}
+                onValueChange={(val) => setNewComponent(prev => ({ ...prev, type: val as GradeComponentType }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Other">Diğer</SelectItem>
+                  <SelectItem value="Midterm">Ara Sınav</SelectItem>
+                  <SelectItem value="Final">Final</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label className="text-sm font-medium">Ağırlık (%)</Label>
               <Input
                 type="number"
@@ -661,6 +954,12 @@ const handleApplyImport = () => {
           </DialogHeader>
           {editCriteria && (
             <div className="space-y-4 pt-2">
+              {criteria?.editable === false && (
+                <div className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
+                  Bu dersin harf aralıkları sınav yönergesinde kilitli — değiştirilemez.
+                </div>
+              )}
+
               <p className="text-sm text-muted-foreground">
                 Her harf notu için minimum puan değerini belirleyin.
               </p>
@@ -697,15 +996,29 @@ const handleApplyImport = () => {
                       value={editCriteria[key]}
                       onChange={(e) => setEditCriteria(prev => prev ? { ...prev, [key]: Number(e.target.value) } : null)}
                       className="font-mono"
+                      disabled={criteria?.editable === false}
                     />
                   </div>
                 ))}
               </div>
+
+              {/* Live distribution preview — shown for all (editable or locked) when scores exist */}
+              {!hideStatistics && weightedAverageScores.length > 0 && (
+                <CriteriaPreview
+                  scores={weightedAverageScores}
+                  criteria={editCriteria}
+                />
+              )}
             </div>
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setShowCriteriaDialog(false)}>İptal</Button>
-            <Button onClick={handleSaveCriteria} disabled={updateCriteriaMut.isPending}>Kaydet</Button>
+            <Button
+              onClick={handleSaveCriteria}
+              disabled={updateCriteriaMut.isPending || criteria?.editable === false}
+            >
+              Kaydet
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -728,7 +1041,8 @@ const handleApplyImport = () => {
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
                 <p className="text-sm text-foreground leading-relaxed">
                   Bu işlem tüm öğrencilerin ağırlıklı ortalamalarını hesaplayıp harf notlarını belirleyecektir.
-                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.
+                  Eksik notu olan öğrenciler <span className="font-mono font-bold text-red-600">NA</span> alacaktır.{' '}
+                  Mazeretli (sınava mazeretli girmeyen) öğrenciler <span className="font-mono font-bold text-amber-600">I</span> (Eksik) alır; mazeret sınavı sonrası yeniden sonuçlandırılır.
                   {!hideStatistics && (
                     <> Tüm öğrencilerin <span className="font-semibold">CGPA/SGPA</span> değerleri güncellenecektir.</>
                   )}
@@ -789,6 +1103,14 @@ const handleApplyImport = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ═══ BÜTÜNLEME & MAZERET PANELS (post-finalize only) ═══ */}
+      {isFinalized && (
+        <>
+          <ButunlemePanel sectionId={id} />
+          <MazeretPanel sectionId={id} />
+        </>
+      )}
 
       {/* Excel Import Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>

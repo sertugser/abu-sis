@@ -11,10 +11,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// Theory penceresi tespit: RuntimeBlock'lar üzerinde TheoryHours saat süren (Day, Start, End)
 /// pencere theory'dir; kalan bloklar lab. Multi-block lab desteklenir.
 /// </summary>
-public sealed class H16_TheoryLabDaySplitRule : IRulePredicate
+public sealed class H16_TheoryLabDaySplitRule : ISoftRulePredicate
 {
     public string Code => "H16";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.H16Weight default'u (5).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 5;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {

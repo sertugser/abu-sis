@@ -3,23 +3,29 @@ import { AlertCircle, Search, ShieldAlert, UserCheck, Users, X } from 'lucide-re
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TablePagination } from '@/components/ui/table-pagination';
 import BulkOperationResultPanel from '@/components/academic-operations/BulkOperationResultPanel';
 import DepartmentOperationsLayout from '@/components/academic-operations/DepartmentOperationsLayout';
 import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
-import { useAcademicOperationsContext, useBulkAdvisorAssignment, useDepartmentStudents } from '../hooks/useAcademicOperations';
+import {
+  useAcademicOperationsContext,
+  useBulkAdvisorAssignment,
+  useDepartmentCurriculumOptions,
+  useDepartmentStudents,
+} from '../hooks/useAcademicOperations';
 import { useDepartmentInstructors } from '../hooks/useCourseOpening';
 import { usePermissions } from '../hooks/usePermissions';
 import type { BulkAcademicOperationResult, DepartmentStudentListItem } from '../types/academicOperations';
 import type { InstructorOptionDto } from '../types/courseOpening';
+
+const DEFAULT_PAGE_SIZE = 25;
 
 const STUDENT_STATUS_LABELS: Record<string, string> = {
   Active: 'Aktif',
@@ -30,29 +36,58 @@ const STUDENT_STATUS_LABELS: Record<string, string> = {
   Graduated: 'Mezun',
 };
 
-const STUDENT_STATUS_ORDER = Object.keys(STUDENT_STATUS_LABELS);
+const STUDENT_STATUS_OPTIONS = [
+  { value: 'all', label: 'Tüm öğrenci durumları' },
+  ...Object.entries(STUDENT_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+];
+
+const CLASS_OPTIONS = [
+  { value: 'all', label: 'Tüm sınıflar' },
+  { value: '1', label: '1. sınıf' },
+  { value: '2', label: '2. sınıf' },
+  { value: '3', label: '3. sınıf' },
+  { value: '4', label: '4. sınıf' },
+];
+
+const ADVISOR_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tüm öğrenciler' },
+  { value: 'with', label: 'Danışmanlı' },
+  { value: 'none', label: 'Danışmansız' },
+];
+
+const TABLE_COLUMN_COUNT = 7;
 const EMPTY_STUDENTS: DepartmentStudentListItem[] = [];
 const EMPTY_INSTRUCTORS: InstructorOptionDto[] = [];
+
+/** Sayfalar arası seçim için tutulan minimal öğrenci bilgisi. */
+interface SelectedStudent {
+  studentId: number;
+  studentNumber: string;
+  studentName: string;
+}
 
 export default function BulkAdvisorAssignmentPage() {
   const contextQuery = useAcademicOperationsContext();
   const { hasPermission } = usePermissions();
   const canAssignAdvisors = hasPermission('menu.toplu-danisman-atama.assign');
+
   const [departmentId, setDepartmentId] = useState<number | null>(null);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [programFilter, setProgramFilter] = useState('all');
   const [classFilter, setClassFilter] = useState('all');
   const [curriculumFilter, setCurriculumFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
-  const [selectedAdvisorId, setSelectedAdvisorId] = useState('none');
-  const [replaceExisting, setReplaceExisting] = useState(false);
-  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(() => new Set());
+  const [studentNoFrom, setStudentNoFrom] = useState('');
+  const [studentNoTo, setStudentNoTo] = useState('');
+  const [enrollmentFrom, setEnrollmentFrom] = useState('');
+  const [enrollmentTo, setEnrollmentTo] = useState('');
+  const [selectedStudents, setSelectedStudents] = useState<Map<number, SelectedStudent>>(() => new Map());
+  const [assignOpen, setAssignOpen] = useState(false);
   const [lastResult, setLastResult] = useState<BulkAcademicOperationResult | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [assignmentMode] = useState<'single' | 'per-student'>('single');
-  const [perStudentAdvisorIds, setPerStudentAdvisorIds] = useState<Record<number, number>>({});
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   useEffect(() => {
     if (departmentId === null && contextQuery.data) {
@@ -61,297 +96,169 @@ export default function BulkAdvisorAssignmentPage() {
     }
   }, [contextQuery.data, departmentId]);
 
+  // Bölüm değişince filtre/seçim/sonuç sıfırlanır.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearchInput('');
     setSearch('');
     setStatusFilter('all');
     setProgramFilter('all');
     setClassFilter('all');
     setCurriculumFilter('all');
     setAdvisorFilter('all');
-    setSelectedAdvisorId('none');
-    setReplaceExisting(false);
-    setSelectedStudentIds(new Set());
-    setPerStudentAdvisorIds({});
+    setStudentNoFrom('');
+    setStudentNoTo('');
+    setEnrollmentFrom('');
+    setEnrollmentTo('');
+    setSelectedStudents(new Map());
     setLastResult(null);
+    setPage(1);
   }, [departmentId]);
 
-  const studentsQuery = useDepartmentStudents(departmentId, {}, departmentId !== null);
+  // Arama debounce (server-side).
+  useEffect(() => {
+    const handle = setTimeout(() => setSearch(searchInput.trim()), 350);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  // Filtre değişince ilk sayfaya dön.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, statusFilter, programFilter, classFilter, curriculumFilter, advisorFilter, studentNoFrom, studentNoTo, enrollmentFrom, enrollmentTo]);
+
+  const hasAdvisorParam = advisorFilter === 'with' ? true : advisorFilter === 'none' ? false : undefined;
+
+  const studentsQuery = useDepartmentStudents(
+    departmentId,
+    {
+      search: search || undefined,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      programId: programFilter !== 'all' ? Number(programFilter) : undefined,
+      curriculumId: curriculumFilter !== 'all' ? Number(curriculumFilter) : undefined,
+      classYear: classFilter !== 'all' ? Number(classFilter) : undefined,
+      hasAdvisor: hasAdvisorParam,
+      studentNoFrom: studentNoFrom.trim() || undefined,
+      studentNoTo: studentNoTo.trim() || undefined,
+      enrollmentFrom: enrollmentFrom || undefined,
+      enrollmentTo: enrollmentTo || undefined,
+      page,
+      pageSize,
+    },
+    departmentId !== null,
+  );
+  const curriculaQuery = useDepartmentCurriculumOptions(departmentId, departmentId !== null);
+  // Atanacak danışman: erişilebilir TÜM hocalar (atama modalında aranır).
   const advisorsQuery = useDepartmentInstructors(null, null, true);
   const assignmentMutation = useBulkAdvisorAssignment(departmentId);
 
   const students = studentsQuery.data?.students ?? EMPTY_STUDENTS;
+  const totalStudents = studentsQuery.data?.totalStudents ?? 0;
+  const withoutAdvisorCount = studentsQuery.data?.withoutAdvisorCount ?? 0;
   const instructors = advisorsQuery.data ?? EMPTY_INSTRUCTORS;
   const departmentOptions = contextQuery.data?.accessibleDepartments ?? [];
+  const curricula = useMemo(() => curriculaQuery.data ?? [], [curriculaQuery.data]);
 
+  const pageCount = Math.max(1, Math.ceil(totalStudents / pageSize));
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedStudentIds(previous => {
-      const validIds = new Set(
-        students
-          .filter(student => replaceExisting || student.advisorId === null)
-          .map(student => student.studentId),
-      );
-      const next = new Set([...previous].filter(studentId => validIds.has(studentId)));
-      return next.size === previous.size ? previous : next;
-    });
-  }, [replaceExisting, students]);
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
 
   const programOptions = useMemo(() => {
-    const map = new Map<number, { id: number; label: string }>();
-    students.forEach(student => {
-      map.set(student.programId, { id: student.programId, label: `${student.programCode} - ${student.programName}` });
-    });
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [students]);
-
-  const statusOptions = useMemo(() => {
-    const statuses = [...new Set(students.map(student => student.status).filter(Boolean))];
-    const sortedStatuses = statuses.sort((a, b) => {
-      const firstIndex = STUDENT_STATUS_ORDER.indexOf(a);
-      const secondIndex = STUDENT_STATUS_ORDER.indexOf(b);
-      if (firstIndex !== -1 || secondIndex !== -1) {
-        return (firstIndex === -1 ? Number.MAX_SAFE_INTEGER : firstIndex)
-          - (secondIndex === -1 ? Number.MAX_SAFE_INTEGER : secondIndex);
-      }
-      return a.localeCompare(b, 'tr');
-    });
-
-    return [
-      { value: 'all', label: 'Tüm öğrenci durumları' },
-      ...sortedStatuses.map(status => ({ value: status, label: STUDENT_STATUS_LABELS[status] ?? status })),
-    ];
-  }, [students]);
-
-  const classOptions = useMemo(() => {
-    const classYears = new Set(students.map(getStudentClassYear));
-    return [...classYears]
-      .sort((a, b) => a - b)
-      .map(classYear => ({ value: String(classYear), label: `${classYear}. sınıf` }));
-  }, [students]);
-
-  const curriculumOptions = useMemo(() => {
-    const map = new Map<number, { id: number; label: string }>();
-    students.forEach(student => {
-      map.set(student.curriculumId, {
-        id: student.curriculumId,
-        label: `${student.programCode} - ${student.curriculumName} (${student.curriculumVersion})`,
-      });
-    });
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [students]);
-
-  const advisorFilterOptions = useMemo(() => {
     const map = new Map<number, string>();
-    students.forEach(student => {
-      if (student.advisorId !== null && student.advisorName?.trim()) {
-        map.set(student.advisorId, student.advisorName.trim());
-      }
+    curricula.forEach(curriculum => {
+      map.set(curriculum.programId, `${curriculum.programCode} - ${curriculum.programName}`);
     });
-
-    const assignedAdvisorOptions = [...map.entries()]
-      .map(([advisorId, advisorName]) => ({ value: String(advisorId), label: advisorName }))
+    return [...map.entries()]
+      .map(([id, label]) => ({ value: String(id), label }))
       .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+  }, [curricula]);
 
-    return [
-      { value: 'all', label: 'Tüm öğrenciler' },
-      { value: 'none', label: 'Danışmansız' },
-      ...assignedAdvisorOptions,
-    ];
-  }, [students]);
-
-  const filteredStudents = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('tr-TR');
-    return students.filter(student => {
-      if (statusFilter !== 'all' && student.status !== statusFilter) return false;
-      if (programFilter !== 'all' && student.programId !== Number(programFilter)) return false;
-      if (classFilter !== 'all' && getStudentClassYear(student) !== Number(classFilter)) return false;
-      if (curriculumFilter !== 'all' && student.curriculumId !== Number(curriculumFilter)) return false;
-      if (advisorFilter === 'none' && student.advisorId !== null) return false;
-      if (advisorFilter !== 'all' && advisorFilter !== 'none' && student.advisorId !== Number(advisorFilter)) return false;
-      if (!query) return true;
-
-      const advisorSearchValue = student.advisorName?.trim() || 'danismansiz atanmamis';
-
-      return [
-        student.studentNumber,
-        student.studentName,
-        student.email,
-        student.programCode,
-        student.programName,
-        student.curriculumName,
-        student.curriculumVersion,
-        advisorSearchValue,
-      ].some(value => value.toLocaleLowerCase('tr-TR').includes(query));
-    });
-  }, [advisorFilter, classFilter, curriculumFilter, programFilter, search, statusFilter, students]);
-
-  const selectedStudents = useMemo(
-    () => students.filter(student => selectedStudentIds.has(student.studentId)),
-    [selectedStudentIds, students],
+  const curriculumOptions = useMemo(
+    () => curricula
+      .map(curriculum => ({
+        value: String(curriculum.curriculumId),
+        label: `${curriculum.programCode} - ${curriculum.curriculumName} (${curriculum.curriculumVersion})`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'tr')),
+    [curricula],
   );
 
-  const selectableFilteredStudents = useMemo(
-    () => filteredStudents.filter(student => replaceExisting || student.advisorId === null),
-    [filteredStudents, replaceExisting],
-  );
+  const pageAllSelected = canAssignAdvisors && students.length > 0
+    && students.every(student => selectedStudents.has(student.studentId));
 
-  // Filtre değişimleri → ilk sayfaya dön
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrentPage(1);
-  }, [search, statusFilter, programFilter, classFilter, curriculumFilter, advisorFilter]);
-
-  // Liste daralırsa açık sayfa son sayfanın ötesine düşmesin
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-  const safePage = Math.min(currentPage, totalPages);
-  const pageStudents = useMemo(
-    () => filteredStudents.slice((safePage - 1) * pageSize, safePage * pageSize),
-    [filteredStudents, safePage, pageSize],
-  );
-
-  const visibleAllSelected = selectableFilteredStudents.length > 0
-    && selectableFilteredStudents.every(student => selectedStudentIds.has(student.studentId));
-
-  const selectedAdvisor = selectedAdvisorId === 'none'
-    ? null
-    : instructors.find(instructor => instructor.instructorId === Number(selectedAdvisorId)) ?? null;
-
-  const stats = useMemo(
-    () => ({ withoutAdvisor: students.filter(student => student.advisorId === null).length }),
-    [students],
-  );
-
-  function canSelectStudent(student: DepartmentStudentListItem) {
-    return canAssignAdvisors && (replaceExisting || student.advisorId === null);
-  }
-
-  function handleReplaceExistingChange(checked: boolean) {
-    setReplaceExisting(checked);
-
-    if (!checked) {
-      const advisorlessIds = new Set(
-        students
-          .filter(student => student.advisorId === null)
-          .map(student => student.studentId),
-      );
-      setSelectedStudentIds(previous => new Set([...previous].filter(studentId => advisorlessIds.has(studentId))));
-    }
-  }
-
-  function toggleStudent(studentId: number) {
-    const student = students.find(currentStudent => currentStudent.studentId === studentId);
-    if (!student || !canSelectStudent(student)) return;
-
-    setSelectedStudentIds(previous => {
-      const next = new Set(previous);
-      if (next.has(studentId)) next.delete(studentId);
-      else next.add(studentId);
+  function toggleStudent(student: DepartmentStudentListItem) {
+    if (!canAssignAdvisors) return;
+    setSelectedStudents(previous => {
+      const next = new Map(previous);
+      if (next.has(student.studentId)) {
+        next.delete(student.studentId);
+      } else {
+        next.set(student.studentId, {
+          studentId: student.studentId,
+          studentNumber: student.studentNumber,
+          studentName: student.studentName,
+        });
+      }
       return next;
     });
   }
 
-  function toggleVisibleStudents() {
-    if (!canAssignAdvisors) return;
-    setSelectedStudentIds(previous => {
-      const next = new Set(previous);
-      if (visibleAllSelected) {
-        selectableFilteredStudents.forEach(student => next.delete(student.studentId));
+  function togglePageSelection() {
+    if (!canAssignAdvisors || students.length === 0) return;
+    setSelectedStudents(previous => {
+      const next = new Map(previous);
+      if (pageAllSelected) {
+        students.forEach(student => next.delete(student.studentId));
       } else {
-        selectableFilteredStudents.forEach(student => next.add(student.studentId));
+        students.forEach(student => next.set(student.studentId, {
+          studentId: student.studentId,
+          studentNumber: student.studentNumber,
+          studentName: student.studentName,
+        }));
       }
       return next;
     });
   }
 
   function clearSelection() {
-    setSelectedStudentIds(new Set());
+    setSelectedStudents(new Map());
   }
 
-  function runAssignment() {
-    if (!canAssignAdvisors || departmentId === null || selectedStudentIds.size === 0) return;
+  // Modalda danışman seçilince atama yapılır.
+  function assignAdvisor(advisor: InstructorOptionDto) {
+    if (!canAssignAdvisors || departmentId === null || selectedStudents.size === 0) return;
 
-    if (assignmentMode === 'single') {
-      if (selectedAdvisor === null) return;
-      assignmentMutation.mutate(
-        {
-          departmentId,
-          advisorId: selectedAdvisor.instructorId,
-          replaceExisting,
-          studentIds: [...selectedStudentIds],
-        },
-        {
-          onSuccess: result => {
-            setLastResult(result);
-            const failedIds = result.results.filter(item => !item.success).map(item => item.studentId);
-            setSelectedStudentIds(new Set(failedIds));
-          },
-        },
-      );
-      return;
-    }
-
-    // Per-student modu: aynı hocaya gidenleri grupla, her grup için ayrı API çağrısı
-    const groups = new Map<number, number[]>();
-    for (const studentId of selectedStudentIds) {
-      const advisorId = perStudentAdvisorIds[studentId];
-      if (!advisorId) continue;
-      const list = groups.get(advisorId) ?? [];
-      list.push(studentId);
-      groups.set(advisorId, list);
-    }
-    if (groups.size === 0) return;
-
-    const assignmentRequests = [...groups.entries()].map(([advisorId, studentIds]) =>
-      assignmentMutation.mutateAsync({
+    assignmentMutation.mutate(
+      {
         departmentId,
-        advisorId,
-        replaceExisting,
-        studentIds,
-      })
-        .then(result => ({ ok: true as const, result }))
-        .catch(error => ({ ok: false as const, error, studentIds })),
+        advisorId: advisor.instructorId,
+        replaceExisting: true, // atama her zaman mevcut danışmanın üzerine yazar (Proliz davranışı)
+        studentIds: [...selectedStudents.keys()],
+      },
+      {
+        onSuccess: result => {
+          setLastResult(result);
+          setAssignOpen(false);
+          const failed = new Map<number, SelectedStudent>();
+          result.results
+            .filter(item => !item.success)
+            .forEach(item => failed.set(item.studentId, {
+              studentId: item.studentId,
+              studentNumber: item.studentNumber,
+              studentName: item.studentName,
+            }));
+          setSelectedStudents(failed);
+        },
+      },
     );
-
-    Promise.all(assignmentRequests).then(outcomes => {
-      const successfulOutcomes = outcomes.filter(
-        (outcome): outcome is { ok: true; result: BulkAcademicOperationResult } => outcome.ok,
-      );
-      const failedOutcomes = outcomes.filter(
-        (outcome): outcome is { ok: false; error: unknown; studentIds: number[] } => !outcome.ok,
-      );
-      const results = successfulOutcomes.map(outcome => outcome.result);
-      // Tüm sonuçları birleştir
-      const merged: BulkAcademicOperationResult = {
-        requestedCount: results.reduce((sum, r) => sum + r.requestedCount, 0)
-          + failedOutcomes.reduce((sum, outcome) => sum + outcome.studentIds.length, 0),
-        successCount: results.reduce((sum, r) => sum + r.successCount, 0),
-        failedCount: results.reduce((sum, r) => sum + r.failedCount, 0)
-          + failedOutcomes.reduce((sum, outcome) => sum + outcome.studentIds.length, 0),
-        results: results.flatMap(r => r.results),
-        errors: [
-          ...results.flatMap(r => r.errors ?? []),
-          ...failedOutcomes.map(outcome =>
-            getAcademicOperationsErrorMessage(outcome.error, 'Danışman ataması tamamlanamadı.'),
-          ),
-        ],
-      };
-      setLastResult(merged);
-      const failedIds = [
-        ...merged.results.filter(item => !item.success).map(item => item.studentId),
-        ...failedOutcomes.flatMap(outcome => outcome.studentIds),
-      ];
-      setSelectedStudentIds(new Set(failedIds));
-    });
   }
 
   const mutationError = assignmentMutation.isError
     ? getAcademicOperationsErrorMessage(assignmentMutation.error, 'Danışman ataması tamamlanamadı.')
     : null;
+  const loading = studentsQuery.isLoading;
 
   return (
     <DepartmentOperationsLayout
@@ -388,172 +295,194 @@ export default function BulkAdvisorAssignmentPage() {
           </Alert>
         )}
 
-        <Card>
-          <CardContent className="p-3">
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
-              <div className="space-y-2">
-                <div className="grid gap-2 md:grid-cols-2">
-                  {departmentOptions.length > 1 && (
-                    <div className="space-y-1">
-                      <Label className="text-xs">Bölüm</Label>
-                      <select
-                        value={departmentId ?? ''}
-                        onChange={event => setDepartmentId(Number(event.target.value))}
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        {departmentOptions.map(department => (
-                          <option key={department.departmentId} value={department.departmentId}>
-                            {department.departmentCode} - {department.departmentName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className={`space-y-1 ${departmentOptions.length > 1 ? '' : 'md:col-span-2'}`}>
-                    <Label className="text-xs">Arama</Label>
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={search}
-                        onChange={event => setSearch(event.target.value)}
-                        placeholder="Öğrenci, numara veya danışman ara..."
-                        className="h-8 pl-8 text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                  <FilterSelect label="Öğrenci durumu" value={statusFilter} onValueChange={setStatusFilter} options={statusOptions} />
-                  <FilterSelect
-                    label="Program"
-                    value={programFilter}
-                    onValueChange={setProgramFilter}
-                    options={[
-                      { value: 'all', label: 'Tüm programlar' },
-                      ...programOptions.map(program => ({ value: String(program.id), label: program.label })),
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Sınıf"
-                    value={classFilter}
-                    onValueChange={setClassFilter}
-                    options={[
-                      { value: 'all', label: 'Tüm sınıflar' },
-                      ...classOptions,
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Müfredat"
-                    value={curriculumFilter}
-                    onValueChange={setCurriculumFilter}
-                    options={[
-                      { value: 'all', label: 'Tüm müfredatlar' },
-                      ...curriculumOptions.map(curriculum => ({ value: String(curriculum.id), label: curriculum.label })),
-                    ]}
-                  />
-                  <FilterSelect
-                    label="Mevcut danışman"
-                    value={advisorFilter}
-                    onValueChange={setAdvisorFilter}
-                    options={advisorFilterOptions}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <FilterSelect
-                  label="Yeni danışman"
-                  value={selectedAdvisorId}
-                  onValueChange={setSelectedAdvisorId}
-                  disabled={!canAssignAdvisors}
-                  options={[
-                    { value: 'none', label: 'Danışman seçin' },
-                    ...instructors.map(instructor => ({
-                      value: String(instructor.instructorId),
-                      label: formatAdvisorOption(instructor),
-                    })),
-                  ]}
-                />
-
-                <div className="flex min-h-[52px] items-end">
-                  <div className="flex h-8 w-full items-center justify-between rounded-md border px-2.5">
-                    <Label htmlFor="replace-existing" className="text-xs">Danışmanı olan öğrencileri de yeniden ata</Label>
-                    <Switch
-                      id="replace-existing"
-                      checked={replaceExisting}
-                      onCheckedChange={handleReplaceExistingChange}
-                      disabled={!canAssignAdvisors}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5 text-center text-xs sm:col-span-2">
-                  <SmallStat label="Toplam" value={students.length} loading={studentsQuery.isLoading} />
-                  <SmallStat label="Danışmansız" value={stats.withoutAdvisor} loading={studentsQuery.isLoading} />
-                  <SmallStat label="Seçili" value={selectedStudentIds.size} loading={studentsQuery.isLoading} />
-                </div>
-
-                <div className="flex gap-2 sm:col-span-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 px-3 text-xs"
-                    onClick={clearSelection}
-                    disabled={selectedStudents.length === 0}
+        {/* Tek bütün panel — Proliz tarzı */}
+        <div className="flex min-h-[calc(100vh-9rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-sm">
+          {/* Filtre bandı */}
+          <div className="border-b bg-muted/30 p-3">
+            <div className="grid gap-x-3 gap-y-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {departmentOptions.length > 1 && (
+                <Field label="Bölüm">
+                  <select
+                    value={departmentId ?? ''}
+                    onChange={event => setDepartmentId(Number(event.target.value))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                   >
-                    <X className="h-3.5 w-3.5" />
-                    Temizle
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-8 px-3 text-xs"
-                    onClick={runAssignment}
-                    disabled={
-                      !canAssignAdvisors
-                      || selectedStudents.length === 0
-                      || selectedAdvisor === null
-                      || assignmentMutation.isPending
-                    }
-                  >
-                    <UserCheck className="h-3.5 w-3.5" />
-                    {assignmentMutation.isPending ? 'Atanıyor' : 'Danışman Ata'}
-                  </Button>
+                    {departmentOptions.map(department => (
+                      <option key={department.departmentId} value={department.departmentId}>
+                        {department.departmentCode} - {department.departmentName}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              <FilterSelect label="Program" value={programFilter} onValueChange={setProgramFilter}
+                options={[{ value: 'all', label: 'Tüm programlar' }, ...programOptions]} />
+              <FilterSelect label="Müfredat" value={curriculumFilter} onValueChange={setCurriculumFilter}
+                options={[{ value: 'all', label: 'Tüm müfredatlar' }, ...curriculumOptions]} />
+              <FilterSelect label="Sınıf" value={classFilter} onValueChange={setClassFilter} options={CLASS_OPTIONS} />
+              <FilterSelect label="Öğrenci durumu" value={statusFilter} onValueChange={setStatusFilter} options={STUDENT_STATUS_OPTIONS} />
+              <FilterSelect label="Mevcut danışman" value={advisorFilter} onValueChange={setAdvisorFilter} options={ADVISOR_FILTER_OPTIONS} />
+              <Field label="Öğrenci No aralığı">
+                <div className="flex items-center gap-1">
+                  <Input value={studentNoFrom} onChange={e => setStudentNoFrom(e.target.value)} placeholder="Baş." className="h-9 text-sm" inputMode="numeric" />
+                  <span className="text-muted-foreground">–</span>
+                  <Input value={studentNoTo} onChange={e => setStudentNoTo(e.target.value)} placeholder="Bitiş" className="h-9 text-sm" inputMode="numeric" />
                 </div>
-              </div>
+              </Field>
+              <Field label="Kayıt tarihi aralığı">
+                <div className="flex items-center gap-1">
+                  <Input type="date" value={enrollmentFrom} onChange={e => setEnrollmentFrom(e.target.value)} className="h-9 text-sm" />
+                  <span className="text-muted-foreground">–</span>
+                  <Input type="date" value={enrollmentTo} onChange={e => setEnrollmentTo(e.target.value)} className="h-9 text-sm" />
+                </div>
+              </Field>
+              <Field label="Arama" className="md:col-span-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={searchInput} onChange={event => setSearchInput(event.target.value)}
+                    placeholder="Öğrenci, numara veya e-posta ara..." className="h-9 pl-8 text-sm" />
+                </div>
+              </Field>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <StudentTable
-          students={pageStudents}
-          loading={studentsQuery.isLoading}
-          selectedStudentIds={selectedStudentIds}
-          visibleAllSelected={visibleAllSelected}
-          canSelect={canAssignAdvisors}
-          canSelectStudent={canSelectStudent}
-          onToggleStudent={toggleStudent}
-          onToggleVisible={toggleVisibleStudents}
-          perStudentMode={assignmentMode === 'per-student'}
-          availableAdvisors={instructors}
-          perStudentAdvisorIds={perStudentAdvisorIds}
-          onPerStudentAdvisorChange={(studentId, advisorId) =>
-            setPerStudentAdvisorIds(prev => ({ ...prev, [studentId]: advisorId }))}
-          paginationFooter={
+          {/* Aksiyon şeridi — butonlar sağda (Proliz düzeni) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5">
+            <div className="flex items-center gap-3 text-xs">
+              <Stat label="Toplam" value={totalStudents} loading={loading} />
+              <span className="h-5 w-px bg-border" />
+              <Stat label="Danışmansız" value={withoutAdvisorCount} loading={loading} />
+              <span className="h-5 w-px bg-border" />
+              <Stat label="Seçili" value={selectedStudents.size} loading={false} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" className="h-9 px-3 text-xs" onClick={clearSelection} disabled={selectedStudents.size === 0}>
+                <X className="h-3.5 w-3.5" />
+                Temizle
+              </Button>
+              <Button
+                type="button"
+                className="h-9 px-4 text-xs"
+                onClick={() => setAssignOpen(true)}
+                disabled={!canAssignAdvisors || selectedStudents.size === 0 || assignmentMutation.isPending}
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                Danışman Ata
+              </Button>
+            </div>
+          </div>
+
+          {/* Liste başlık şeridi */}
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <span className="text-sm font-semibold">Öğrenciler</span>
+            <Badge variant="outline">{totalStudents} kayıt</Badge>
+          </div>
+
+          {/* Tablo — sayfayı dolduran tek parça */}
+          <div className="flex-1 overflow-auto">
+            <Table className="[&_td]:px-4 [&_td]:py-3 [&_th]:px-4 [&_th]:py-3">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="w-[44px]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-input"
+                      checked={pageAllSelected}
+                      disabled={!canAssignAdvisors || students.length === 0}
+                      onChange={togglePageSelection}
+                      aria-label="Bu sayfadaki öğrencileri seç"
+                    />
+                  </TableHead>
+                  <TableHead className="w-[110px]">Öğrenci No</TableHead>
+                  <TableHead>Ad Soyad</TableHead>
+                  <TableHead className="w-[70px] text-center">Sınıf</TableHead>
+                  <TableHead className="w-[110px] text-center">Kayıt Tarihi</TableHead>
+                  <TableHead>Danışman</TableHead>
+                  <TableHead>Program</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, index) => (
+                    <TableRow key={`s-${index}`}>
+                      <TableCell colSpan={TABLE_COLUMN_COUNT}><Skeleton className="h-6 w-full" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : students.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={TABLE_COLUMN_COUNT}>
+                      <div className="flex flex-col items-center justify-center py-24 text-center">
+                        <Users className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                        <p className="text-sm font-medium">Filtreye uygun öğrenci bulunamadı.</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Arama, program veya danışman filtresini değiştirin.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  students.map(student => (
+                    <TableRow
+                      key={student.studentId}
+                      data-state={selectedStudents.has(student.studentId) ? 'selected' : undefined}
+                    >
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input"
+                          checked={selectedStudents.has(student.studentId)}
+                          disabled={!canAssignAdvisors}
+                          onChange={() => toggleStudent(student)}
+                          aria-label={`${student.studentName} seç`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{student.studentNumber}</TableCell>
+                      <TableCell className="font-medium">{student.studentName}</TableCell>
+                      <TableCell className="text-center text-sm">{getStudentClassYear(student)}</TableCell>
+                      <TableCell className="text-center text-xs text-muted-foreground">{formatDate(student.enrollmentDate)}</TableCell>
+                      <TableCell>
+                        {student.advisorName ? student.advisorName : <span className="text-muted-foreground">Atanmamış</span>}
+                      </TableCell>
+                      <TableCell className="text-xs">{student.programCode} - {student.programName}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Sayfalama */}
+          <div className="border-t">
             <TablePagination
-              totalCount={filteredStudents.length}
-              page={safePage}
+              totalCount={totalStudents}
+              page={page}
               pageSize={pageSize}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
               itemLabel="öğrenci"
             />
-          }
-        />
+          </div>
+        </div>
 
         <BulkOperationResultPanel result={lastResult ?? null} title="Son Danışman Atama Sonucu" />
       </div>
+
+      <AssignAdvisorModal
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        instructors={instructors}
+        selectedCount={selectedStudents.size}
+        onAssign={assignAdvisor}
+        isPending={assignmentMutation.isPending}
+      />
     </DepartmentOperationsLayout>
+  );
+}
+
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={`space-y-1 ${className ?? ''}`}>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
   );
 }
 
@@ -571,10 +500,9 @@ function FilterSelect({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
+    <Field label={label}>
       <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger className="h-8 text-xs">
+        <SelectTrigger className="h-9 text-sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -585,156 +513,139 @@ function FilterSelect({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Field>
   );
 }
 
-function SmallStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
+function Stat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
-    <div className="rounded-md border bg-muted/20 px-2 py-1.5">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      {loading ? <Skeleton className="mx-auto mt-1 h-4 w-9" /> : <div className="text-base font-semibold leading-5">{value}</div>}
+    <div className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}:</span>
+      {loading ? <Skeleton className="h-4 w-6" /> : <span className="font-semibold">{value}</span>}
     </div>
   );
 }
 
-function StudentTable({
-  students,
-  loading,
-  selectedStudentIds,
-  visibleAllSelected,
-  canSelect,
-  canSelectStudent,
-  onToggleStudent,
-  onToggleVisible,
-  paginationFooter,
-  perStudentMode = false,
-  availableAdvisors = [],
-  perStudentAdvisorIds = {},
-  onPerStudentAdvisorChange,
+/**
+ * Proliz'deki "Danışman Ata → arama ekranı" karşılığı: önce öğrenciler seçilir, "Danışman Ata"ya
+ * basınca bu modal açılır; ada/bölüme göre aranan danışman seçilince atama yapılır.
+ */
+function AssignAdvisorModal({
+  open,
+  onOpenChange,
+  instructors,
+  selectedCount,
+  onAssign,
+  isPending,
 }: {
-  students: DepartmentStudentListItem[];
-  loading: boolean;
-  selectedStudentIds: Set<number>;
-  visibleAllSelected: boolean;
-  canSelect: boolean;
-  canSelectStudent: (student: DepartmentStudentListItem) => boolean;
-  onToggleStudent: (studentId: number) => void;
-  onToggleVisible: () => void;
-  paginationFooter?: ReactNode;
-  perStudentMode?: boolean;
-  availableAdvisors?: InstructorOptionDto[];
-  perStudentAdvisorIds?: Record<number, number>;
-  onPerStudentAdvisorChange?: (studentId: number, advisorId: number) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  instructors: InstructorOptionDto[];
+  selectedCount: number;
+  onAssign: (advisor: InstructorOptionDto) => void;
+  isPending: boolean;
 }) {
-  const hasSelectableStudents = students.some(canSelectStudent);
+  const [query, setQuery] = useState('');
+  const [facultyFilter, setFacultyFilter] = useState('all');
+  const [titleFilter, setTitleFilter] = useState('all');
+
+  const facultyOptions = useMemo(
+    () => [...new Set(instructors.map(i => i.facultyName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
+    [instructors],
+  );
+  const titleOptions = useMemo(
+    () => [...new Set(instructors.map(i => i.title).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr')),
+    [instructors],
+  );
+
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('tr-TR');
+    return instructors.filter(instructor => {
+      if (facultyFilter !== 'all' && instructor.facultyName !== facultyFilter) return false;
+      if (titleFilter !== 'all' && instructor.title !== titleFilter) return false;
+      if (!normalized) return true;
+      return instructor.personName.toLocaleLowerCase('tr-TR').includes(normalized)
+        || instructor.title.toLocaleLowerCase('tr-TR').includes(normalized)
+        || (instructor.departmentCode || '').toLocaleLowerCase('tr-TR').includes(normalized)
+        || (instructor.departmentName || '').toLocaleLowerCase('tr-TR').includes(normalized)
+        || (instructor.facultyName || '').toLocaleLowerCase('tr-TR').includes(normalized);
+    });
+  }, [instructors, query, facultyFilter, titleFilter]);
+
+  // Modal kapanınca arama/filtreleri sıfırla.
+  useEffect(() => {
+    if (!open) { setQuery(''); setFacultyFilter('all'); setTitleFilter('all'); }
+  }, [open]);
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm">Öğrenciler</CardTitle>
-          <Badge variant="outline">{students.length} kayıt</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        {loading ? (
-          <div className="p-3">
-            <Skeleton className="h-[360px] rounded-lg" />
-          </div>
-        ) : students.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Users className="mb-3 h-9 w-9 text-muted-foreground/45" />
-            <p className="text-sm font-medium">Filtreye uygun öğrenci bulunamadı.</p>
-            <p className="mt-1 text-sm text-muted-foreground">Arama, program veya danışman filtresini değiştirin.</p>
-          </div>
-        ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[52px]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-input"
-                  checked={visibleAllSelected}
-                  disabled={!canSelect || !hasSelectableStudents}
-                  onChange={onToggleVisible}
-                  aria-label="Görünen öğrencileri seç"
-                />
-              </TableHead>
-              <TableHead>Öğrenci</TableHead>
-              <TableHead>Program / Müfredat</TableHead>
-              <TableHead className="w-[90px]">Sınıf</TableHead>
-              <TableHead>Mevcut danışman</TableHead>
-              {perStudentMode && <TableHead className="w-[220px]">Atanacak danışman</TableHead>}
-              <TableHead className="w-[140px]">Öğrenci durumu</TableHead>
-              <TableHead className="w-[120px] text-right">GNO</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {students.map(student => {
-              const studentSelectable = canSelectStudent(student);
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Danışman Ata</DialogTitle>
+          <DialogDescription>Seçili {selectedCount} öğrenciye atanacak danışmanı arayıp seçin.</DialogDescription>
+        </DialogHeader>
 
-              return (
-                <TableRow
-                  key={student.studentId}
-                  data-state={selectedStudentIds.has(student.studentId) ? 'selected' : undefined}
-                  className={studentSelectable ? undefined : 'opacity-60'}
-                >
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input"
-                      checked={selectedStudentIds.has(student.studentId)}
-                      disabled={!studentSelectable}
-                      onChange={() => onToggleStudent(student.studentId)}
-                      aria-label={`${student.studentName} seç`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{student.studentName}</div>
-                    <div className="text-xs text-muted-foreground">{student.studentNumber} · {student.email}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div>{student.programCode} - {student.programName}</div>
-                    <div className="text-xs text-muted-foreground">{student.curriculumName} ({student.curriculumVersion})</div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{getStudentClassYear(student)}. sınıf</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {student.advisorName ? student.advisorName : <span className="text-muted-foreground">Atanmamış</span>}
-                  </TableCell>
-                  {perStudentMode && (
-                    <TableCell>
-                      <select
-                        value={perStudentAdvisorIds[student.studentId] ?? ''}
-                        onChange={event => onPerStudentAdvisorChange?.(student.studentId, Number(event.target.value))}
-                        disabled={!studentSelectable}
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                      >
-                        <option value="">Seçiniz...</option>
-                        {availableAdvisors.map(advisor => (
-                          <option key={advisor.instructorId} value={advisor.instructorId}>
-                            {formatAdvisorOption(advisor)}
-                          </option>
-                        ))}
-                      </select>
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <StatusBadge status={student.status} />
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{student.cgpa.toFixed(2)}</TableCell>
+        <div className="grid gap-2 sm:grid-cols-[1fr_180px_180px]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Ad, bölüm veya fakülte ara..." className="h-9 pl-8" autoFocus />
+          </div>
+          <Select value={facultyFilter} onValueChange={setFacultyFilter}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Fakülte" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm fakülteler</SelectItem>
+              {facultyOptions.map(faculty => <SelectItem key={faculty} value={faculty}>{faculty}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={titleFilter} onValueChange={setTitleFilter}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Unvan" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm unvanlar</SelectItem>
+              {titleOptions.map(title => <SelectItem key={title} value={title}>{title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="text-xs text-muted-foreground">{filtered.length} danışman</div>
+
+        <div className="max-h-[440px] overflow-auto rounded-md border">
+          <Table className="[&_td]:px-3 [&_td]:py-2.5 [&_th]:px-3">
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead className="w-[120px]">Unvan</TableHead>
+                <TableHead>Ad Soyad</TableHead>
+                <TableHead className="w-[90px]">Bölüm</TableHead>
+                <TableHead className="w-[170px]">Fakülte</TableHead>
+                <TableHead className="w-[70px] text-center">Yük</TableHead>
+                <TableHead className="w-[80px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">Eşleşen danışman bulunamadı.</TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-        )}
-      </CardContent>
-      {paginationFooter}
-    </Card>
+              ) : (
+                filtered.map(instructor => (
+                  <TableRow key={instructor.instructorId} className="hover:bg-muted/40">
+                    <TableCell className="text-xs text-muted-foreground">{instructor.title || '—'}</TableCell>
+                    <TableCell className="font-medium">{instructor.personName}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{instructor.departmentCode || instructor.departmentName}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{instructor.facultyName || '—'}</TableCell>
+                    <TableCell className="text-center text-xs tabular-nums">{instructor.currentStudentCount}</TableCell>
+                    <TableCell className="text-right">
+                      <Button type="button" size="sm" className="h-7 px-4 text-xs" disabled={isPending} onClick={() => onAssign(instructor)}>
+                        {isPending ? '...' : 'Seç'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -742,16 +653,8 @@ function getStudentClassYear(student: DepartmentStudentListItem) {
   return Math.min(4, Math.max(1, Math.floor(student.completedSemesters / 2) + 1));
 }
 
-function formatAdvisorOption(instructor: InstructorOptionDto) {
-  const departmentLabel = instructor.departmentCode || instructor.departmentName;
-  return departmentLabel ? `${instructor.fullName} · ${departmentLabel}` : instructor.fullName;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant: 'success' | 'info' | 'secondary' = status === 'Active'
-    ? 'success'
-    : status === 'Graduated'
-      ? 'info'
-      : 'secondary';
-  return <Badge variant={variant}>{STUDENT_STATUS_LABELS[status] ?? status}</Badge>;
+function formatDate(value: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('tr-TR');
 }

@@ -30,7 +30,8 @@ import {
   useCreateElectiveGroup,
 } from '../hooks/useElectiveGroups';
 import { useElectiveSubtypeList } from '../hooks/useElectiveSubtypes';
-import { useAdminFaculties, useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import { useAdminDepartmentsByStructure } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import type {
   ElectiveGroupListDto,
   CreateElectiveGroupRequest,
@@ -59,7 +60,7 @@ function CreateElectiveGroupDialog({ open, onOpenChange }: CreateDialogProps) {
   const { data: subtypes, isLoading: subtypesLoading } = useElectiveSubtypeList(false);
   const selectedSubtype = subtypes?.find(s => s.id === subtypeId) ?? null;
 
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const facultyIdNum = facultyId ? Number(facultyId) : undefined;
   const { data: departments } = useAdminDepartmentsByStructure(facultyIdNum);
   const createMutation = useCreateElectiveGroup();
@@ -338,7 +339,7 @@ export default function ElectiveGroupManagementPage({
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const facultyFilterIdNum = facultyFilter !== 'all' ? Number(facultyFilter) : undefined;
   const { data: filterDepartments } = useAdminDepartmentsByStructure(facultyFilterIdNum);
   // Faz B B3c-3: DB-driven subtype listesi (sadece aktif tipler — pasif tipler

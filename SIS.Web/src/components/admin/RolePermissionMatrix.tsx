@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, Info, Save, RotateCcw, Package } from 'lucide-react';
+import { ChevronDown, ChevronRight, Info, Save, RotateCcw, Package, Lock, Trash2, RefreshCw, AlertTriangle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getRoleDisplayLabel } from '../../lib/roles';
 import {
@@ -27,7 +26,9 @@ import {
 } from '../../hooks/useRolePermissions';
 import {
   useApplyBundleToRole,
+  useAppliedBundles,
   usePermissionBundles,
+  useRemoveBundleFromRole,
 } from '../../hooks/usePermissionBundles';
 import { usePermissions } from '../../context/PermissionContext';
 import type { PermissionDto } from '../../api/permissionAdmin.api';
@@ -160,10 +161,12 @@ export function RolePermissionMatrix() {
   const { data: permissionsData, isLoading: permsLoading } = useAllPermissions();
   const { data: rolesData, isLoading: rolesLoading } = useAssignableRoles();
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-  const { data: rolePermIdsData, isLoading: rolePermsLoading } = useRolePermissions(selectedRoleId);
+  const { data: roleStateData, isLoading: rolePermsLoading } = useRolePermissions(selectedRoleId);
   const updateMutation = useUpdateRolePermissions();
   const { data: bundlesData } = usePermissionBundles();
+  const { data: appliedBundlesData } = useAppliedBundles(selectedRoleId);
   const applyBundleMut = useApplyBundleToRole();
+  const removeBundleMut = useRemoveBundleFromRole();
   const { hasPermission } = usePermissions();
   const canApplyBundle = hasPermission('system.permission-bundle.apply');
 
@@ -173,26 +176,33 @@ export function RolePermissionMatrix() {
   const permissions = useMemo(() => permissionsData ?? [], [permissionsData]);
   const roles = useMemo(() => rolesData ?? [], [rolesData]);
   const bundles = useMemo(() => bundlesData ?? [], [bundlesData]);
-  const rolePermIds = useMemo<readonly number[]>(
-    () => rolePermIdsData ?? EMPTY_NUMBER_ARRAY,
-    [rolePermIdsData],
+  const appliedBundles = useMemo(() => appliedBundlesData ?? [], [appliedBundlesData]);
+
+  // Manuel (düzenlenebilir) ve paketten gelen (kilitli) permission ID'leri ayrı.
+  const manualIds = useMemo<readonly number[]>(
+    () => roleStateData?.manualPermissionIds ?? EMPTY_NUMBER_ARRAY,
+    [roleStateData],
+  );
+  const bundleSet = useMemo<Set<number>>(
+    () => new Set(roleStateData?.bundlePermissionIds ?? []),
+    [roleStateData],
   );
 
-  // Local draft (optimistic) — Set<permissionId>
+  // Local draft (optimistic) — Set<permissionId>, SADECE manuel yetkiler.
   const [draft, setDraft] = useState<Set<number>>(new Set());
 
-  // Server'dan rol permission'ları gelince draft'ı senkronize et — adjust-state-during-render
+  // Server'dan rol state gelince draft'ı (manuel set) senkronize et — adjust-state-during-render
   // pattern (React 19+: useEffect içinde setState yasaklandı, yerine prev-tracking ile render'da update).
-  const [prevRolePermIds, setPrevRolePermIds] = useState(rolePermIds);
+  const [prevManualIds, setPrevManualIds] = useState(manualIds);
   const [prevSelectedRoleId, setPrevSelectedRoleId] = useState(selectedRoleId);
-  if (prevRolePermIds !== rolePermIds || prevSelectedRoleId !== selectedRoleId) {
-    setPrevRolePermIds(rolePermIds);
+  if (prevManualIds !== manualIds || prevSelectedRoleId !== selectedRoleId) {
+    setPrevManualIds(manualIds);
     setPrevSelectedRoleId(selectedRoleId);
-    setDraft(new Set(rolePermIds));
+    setDraft(new Set(manualIds));
   }
 
   const grouped = useMemo(() => groupByCategoryAndResource(permissions), [permissions]);
-  const original = useMemo(() => new Set(rolePermIds), [rolePermIds]);
+  const original = useMemo(() => new Set(manualIds), [manualIds]);
 
   const diff = useMemo(() => {
     const added: number[] = [];
@@ -202,21 +212,26 @@ export function RolePermissionMatrix() {
     return { added, removed, isDirty: added.length > 0 || removed.length > 0 };
   }, [draft, original]);
 
+  // Paketten gelen yetkiler kilitlidir; matris toggle'ları sadece manuel-edilebilir
+  // (bundleSet'te olmayan) yetkilere dokunur.
   function toggleResourceAll(resourcePerms: PermissionDto[]) {
-    const allChecked = resourcePerms.every(p => draft.has(p.id));
+    const editable = resourcePerms.filter(p => !bundleSet.has(p.id));
+    if (editable.length === 0) return;
+    const allChecked = editable.every(p => draft.has(p.id));
     setDraft(prev => {
       const next = new Set(prev);
       if (allChecked) {
-        resourcePerms.forEach(p => next.delete(p.id));
+        editable.forEach(p => next.delete(p.id));
       } else {
-        resourcePerms.forEach(p => next.add(p.id));
+        editable.forEach(p => next.add(p.id));
       }
       return next;
     });
   }
 
   function setResourceBucket(resourcePerms: PermissionDto[], bucket: PermissionBucket, checked: boolean) {
-    const { view, edit, advanced } = splitResourcePermissions(resourcePerms);
+    const editablePerms = resourcePerms.filter(p => !bundleSet.has(p.id));
+    const { view, edit, advanced } = splitResourcePermissions(editablePerms);
     setDraft(prev => {
       const next = new Set(prev);
       if (bucket === 'view' && checked) {
@@ -241,7 +256,7 @@ export function RolePermissionMatrix() {
   }
 
   function reset() {
-    setDraft(new Set(rolePermIds));
+    setDraft(new Set(manualIds));
   }
 
   function save() {
@@ -256,45 +271,66 @@ export function RolePermissionMatrix() {
     applyBundleMut.mutate({ bundleId, roleId: selectedRoleId });
   }
 
+  function reapplyBundle(bundleId: number) {
+    if (selectedRoleId === null) return;
+    applyBundleMut.mutate({ bundleId, roleId: selectedRoleId });
+  }
+
+  function removeBundle(bundleId: number) {
+    if (selectedRoleId === null) return;
+    removeBundleMut.mutate({ bundleId, roleId: selectedRoleId });
+  }
+
+  const bundleNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    bundles.forEach(b => map.set(b.id, b.name));
+    return map;
+  }, [bundles]);
+
   if (permsLoading || rolesLoading) {
     return <Skeleton className="h-96 w-full" />;
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+    <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[300px_1fr]">
       {/* Sol: Rol listesi */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">Rol Seç</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          {roles.map(role => (
-            <button
-              key={role.id}
-              type="button"
-              onClick={() => setSelectedRoleId(role.id)}
-              className={cn(
-                'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                selectedRoleId === role.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted',
-              )}
-            >
-              {getRoleDisplayLabel(role.name)}
-              <div className="text-[11px] opacity-70">{role.name}</div>
-            </button>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="flex min-h-0 flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r">
+        <div className="border-b border-border px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Rol Seç</span>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+          {roles.map(role => {
+            const active = selectedRoleId === role.id;
+            return (
+              <button
+                key={role.id}
+                type="button"
+                onClick={() => setSelectedRoleId(role.id)}
+                className={cn(
+                  'w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                  active
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'hover:bg-muted',
+                )}
+              >
+                <div className="font-medium">{getRoleDisplayLabel(role.name)}</div>
+                <div className={cn('text-[11px]', active ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+                  {role.name}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Sağ: Permission matrisi */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-semibold">Yetki Matrisi</CardTitle>
+      <div className="flex min-h-0 flex-col overflow-hidden">
+        <div className="flex flex-row items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+          <div className="min-w-0">
+            <span className="text-base font-semibold">Yetki Matrisi</span>
             {selectedRoleId !== null && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {permissions.length} permission · {original.size} atanmış
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {permissions.length} yetki · {original.size} manuel · {bundleSet.size} paketten
               </p>
             )}
           </div>
@@ -305,8 +341,8 @@ export function RolePermissionMatrix() {
                 onValueChange={applyBundle}
                 disabled={applyBundleMut.isPending || rolePermsLoading}
               >
-                <SelectTrigger className="w-[260px] h-9 text-xs">
-                  <Package className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                <SelectTrigger className="h-9 w-[240px] text-xs">
+                  <Package className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
                   <SelectValue placeholder={applyBundleMut.isPending ? 'Uygulanıyor…' : 'Paket Uygula'} />
                 </SelectTrigger>
                 <SelectContent>
@@ -325,9 +361,9 @@ export function RolePermissionMatrix() {
             )}
             {diff.isDirty && (
               <Badge variant="outline" className="text-xs">
-                <span className="text-emerald-600 font-medium">+{diff.added.length}</span>
+                <span className="font-medium text-emerald-600">+{diff.added.length}</span>
                 <span className="mx-1 text-muted-foreground">·</span>
-                <span className="text-destructive font-medium">−{diff.removed.length}</span>
+                <span className="font-medium text-destructive">−{diff.removed.length}</span>
               </Badge>
             )}
             <Button
@@ -350,30 +386,95 @@ export function RolePermissionMatrix() {
               {updateMutation.isPending ? 'Kaydediliyor…' : 'Kaydet'}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col p-4">
           {selectedRoleId === null ? (
-            <p className="text-sm text-muted-foreground">Soldan bir rol seçin.</p>
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-muted-foreground">
+              <Users className="mb-3 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-foreground">Bir rol seçin</p>
+              <p className="mt-1 text-xs">Soldaki listeden bir rol seçerek yetkilerini düzenleyin.</p>
+            </div>
           ) : rolePermsLoading ? (
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-full min-h-64 w-full" />
           ) : (
-            <ScrollArea className="h-[600px] pr-4">
-              <div className="space-y-4">
-                {Object.entries(grouped).map(([category, resources]) => (
-                  <CategoryGroup
-                    key={category}
-                    category={category}
-                    resources={resources}
-                    draft={draft}
-                    onToggleResourceAll={toggleResourceAll}
-                    onSetResourceBucket={setResourceBucket}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
+            <>
+              {appliedBundles.length > 0 && (
+                <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <Package className="h-3.5 w-3.5" />
+                    Uygulanmış Paketler
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {appliedBundles.map(ab => {
+                      const name = bundleNameById.get(ab.bundleId) ?? `#${ab.bundleId}`;
+                      const busy = applyBundleMut.isPending || removeBundleMut.isPending;
+                      return (
+                        <div
+                          key={ab.bundleId}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
+                            ab.isStale
+                              ? 'border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30'
+                              : 'border-border bg-background',
+                          )}
+                        >
+                          <span className="font-medium">{name}</span>
+                          {ab.isStale && (
+                            <span
+                              className="flex items-center gap-1 text-amber-700 dark:text-amber-400"
+                              title="Paket içeriği güncellendi; role uygulanmış hali eski. Yeniden uygulayın."
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              güncel değil
+                            </span>
+                          )}
+                          {canApplyBundle && ab.isStale && (
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-900/40"
+                              title="Yeniden uygula"
+                              disabled={busy}
+                              onClick={() => reapplyBundle(ab.bundleId)}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {canApplyBundle && (
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                              title="Paketi rolden kaldır"
+                              disabled={busy}
+                              onClick={() => removeBundle(ab.bundleId)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <ScrollArea className="min-h-0 flex-1 pr-4">
+                <div className="space-y-4">
+                  {Object.entries(grouped).map(([category, resources]) => (
+                    <CategoryGroup
+                      key={category}
+                      category={category}
+                      resources={resources}
+                      draft={draft}
+                      bundleSet={bundleSet}
+                      onToggleResourceAll={toggleResourceAll}
+                      onSetResourceBucket={setResourceBucket}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -382,6 +483,7 @@ interface CategoryGroupProps {
   category: string;
   resources: Record<string, PermissionDto[]>;
   draft: Set<number>;
+  bundleSet: Set<number>;
   onToggleResourceAll: (perms: PermissionDto[]) => void;
   onSetResourceBucket: (perms: PermissionDto[], bucket: PermissionBucket, checked: boolean) => void;
 }
@@ -390,13 +492,15 @@ function CategoryGroup({
   category,
   resources,
   draft,
+  bundleSet,
   onToggleResourceAll,
   onSetResourceBucket,
 }: CategoryGroupProps) {
   const [open, setOpen] = useState(true);
   const label = CATEGORY_LABELS[category] ?? category;
   const allPerms = Object.values(resources).flat();
-  const checkedCount = allPerms.filter(p => draft.has(p.id)).length;
+  // Etkin sayım: manuel (draft) ∪ paketten (bundleSet)
+  const checkedCount = allPerms.filter(p => draft.has(p.id) || bundleSet.has(p.id)).length;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -421,6 +525,7 @@ function CategoryGroup({
               resource={resource}
               perms={perms}
               draft={draft}
+              bundleSet={bundleSet}
               onToggleResourceAll={onToggleResourceAll}
               onSetResourceBucket={onSetResourceBucket}
             />
@@ -434,6 +539,7 @@ interface ResourceGroupProps {
   resource: string;
   perms: PermissionDto[];
   draft: Set<number>;
+  bundleSet: Set<number>;
   onToggleResourceAll: (perms: PermissionDto[]) => void;
   onSetResourceBucket: (perms: PermissionDto[], bucket: PermissionBucket, checked: boolean) => void;
 }
@@ -442,13 +548,18 @@ function ResourceGroup({
   resource,
   perms,
   draft,
+  bundleSet,
   onToggleResourceAll,
   onSetResourceBucket,
 }: ResourceGroupProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const checkedCount = perms.filter(p => draft.has(p.id)).length;
-  const allChecked = checkedCount === perms.length && perms.length > 0;
-  const someChecked = checkedCount > 0 && checkedCount < perms.length;
+  const isGranted = (id: number) => draft.has(id) || bundleSet.has(id);
+  const editablePerms = perms.filter(p => !bundleSet.has(p.id));
+  const grantedCount = perms.filter(p => isGranted(p.id)).length;
+  const allChecked = grantedCount === perms.length && perms.length > 0;
+  const someChecked = grantedCount > 0 && grantedCount < perms.length;
+  // Tüm yetkiler paketten geliyorsa resource-level toggle kilitli.
+  const resourceLocked = editablePerms.length === 0;
   const { advanced } = splitResourcePermissions(perms);
 
   return (
@@ -457,20 +568,28 @@ function ResourceGroup({
         <input
           type="checkbox"
           checked={allChecked}
+          disabled={resourceLocked}
           ref={el => { if (el) el.indeterminate = someChecked; }}
           onChange={() => onToggleResourceAll(perms)}
-          className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+          className="h-4 w-4 rounded border-border accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         />
         <span className="text-sm font-medium">{resourceLabel(resource)}</span>
         <span className="text-[10px] text-muted-foreground">
-          ({checkedCount}/{perms.length})
+          ({grantedCount}/{perms.length})
         </span>
+        {resourceLocked && (
+          <Lock className="h-3 w-3 text-muted-foreground" aria-label="Paketten geliyor (kilitli)" />
+        )}
       </div>
       <div className="ml-6 grid grid-cols-3 gap-1">
         {(['view', 'edit', 'advanced'] as PermissionBucket[]).map(bucket => {
           const bucketPerms = perms.filter(permission => permissionBucket(permission) === bucket);
-          const checked = bucketPerms.length > 0 && bucketPerms.every(permission => draft.has(permission.id));
-          const someCheckedInBucket = bucketPerms.some(permission => draft.has(permission.id)) && !checked;
+          const editableInBucket = bucketPerms.filter(permission => !bundleSet.has(permission.id));
+          const checked = bucketPerms.length > 0 && bucketPerms.every(permission => isGranted(permission.id));
+          const someCheckedInBucket = bucketPerms.some(permission => isGranted(permission.id)) && !checked;
+          // Bucket'taki tüm yetkiler paketten geliyorsa (veya yoksa) checkbox kilitli.
+          const bucketLocked = editableInBucket.length === 0;
+          const lockedFromBundle = bucketPerms.length > 0 && bucketLocked;
           const title = bucketPerms.length > 0
             ? bucketPerms.map(permission => permission.description ?? permission.key).join('\n')
             : `Bu başlık için ${bucketLabel(bucket).toLocaleLowerCase('tr-TR')} yetkisi yok.`;
@@ -478,18 +597,21 @@ function ResourceGroup({
             <div key={bucket} className="flex min-w-0 items-center gap-1.5">
               <label
                 className="flex min-w-0 items-center gap-1.5 text-xs cursor-pointer hover:text-foreground text-muted-foreground"
-                title={title}
+                title={lockedFromBundle ? `${title}\n\n(Paketten geliyor — kilitli)` : title}
               >
                 <input
                   type="checkbox"
                   checked={checked}
-                  disabled={bucketPerms.length === 0}
+                  disabled={bucketLocked}
                   ref={el => { if (el) el.indeterminate = someCheckedInBucket; }}
                   onChange={event => onSetResourceBucket(perms, bucket, event.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <span className="truncate">{bucketLabel(bucket)}</span>
               </label>
+              {lockedFromBundle && (
+                <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Paketten geliyor (kilitli)" />
+              )}
               {bucket === 'advanced' && bucketPerms.length > 0 && (
                 <button
                   type="button"

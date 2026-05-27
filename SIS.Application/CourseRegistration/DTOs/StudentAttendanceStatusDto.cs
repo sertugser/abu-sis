@@ -25,6 +25,10 @@ public class StudentAttendancePolicyDto
     public int TermWeekCount { get; set; }
     public decimal TheoryAbsenceLimitPercent { get; set; }
     public decimal LabAbsenceLimitPercent { get; set; }
+    /// <summary>
+    /// Global attendance method from SystemConfig ("Separate", "TotalHours", "Passive", "MarkOnly").
+    /// </summary>
+    public string AttendanceMethod { get; set; } = "Separate";
 }
 
 public class StudentAttendanceCourseDto

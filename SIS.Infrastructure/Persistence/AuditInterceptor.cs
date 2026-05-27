@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using SIS.Domain.Entities;
+using SIS.Domain.Identity;
 
 namespace SIS.Infrastructure.Persistence;
 
@@ -19,10 +20,19 @@ public class AuditInterceptor : SaveChangesInterceptor
     private static readonly HashSet<string> AuditedEntityTypes = new(StringComparer.Ordinal)
     {
         nameof(ApplicationUser),
+        nameof(Faculty),
+        nameof(Department),
+        nameof(AcademicProgram),
+        nameof(StudentProgram),     // Mufredat/program atama degisiklikleri
         nameof(AcademicTerm),
         nameof(CourseSection),
         nameof(CourseRegistration),
         nameof(Student),
+        nameof(StudentPersonalInfo),  // iletisim/demografik/askerlik bilgisi degisiklikleri
+        nameof(StudentDocument),      // ogrenci belge yukleme/silme degisiklikleri
+        nameof(IssuedDocument),       // ogrenci belge uretim kayitlari
+        nameof(StudentScholarshipDetail), // ogrenci burs kayitlari
+        nameof(StudentPlacement),     // ogrenci yerlestirme (ÖSYM/DGS) bilgisi
         nameof(SystemConfig),
         nameof(WebModuleSetting),
         nameof(FacultyScheduleApproval),
@@ -35,6 +45,7 @@ public class AuditInterceptor : SaveChangesInterceptor
         nameof(StudentGrade),       // Not degisiklikleri
         nameof(GradeComponent),     // Not bilesenleri
         nameof(GradingCriteria),    // Degerlendirme kriterleri
+        nameof(PermissionDelegation), // Vekalet olusturma/iptal (yetki devri — guvenlik kritik)
     };
 
     // Properties that must never appear in audit logs (security)
@@ -46,12 +57,22 @@ public class AuditInterceptor : SaveChangesInterceptor
         "NormalizedEmail",
         "NormalizedUserName",
         "RowVersion",
+        // Devlet kimlik tanımlayıcıları: denetim kaydında hesap verebilirlik için "neyin değiştiği"
+        // tutulur, ama bu alanların ham değeri logda/CSV export'unda görünmemeli (kimlik hırsızlığı riski).
+        "PassportNo",
+        "NationalId",
+        "IdentityNumber",
+        "Tckn",
+        "TcKimlikNo",
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        // OldValues/NewValues birer Dictionary<string,...>; sözlük ANAHTARLARI için PropertyNamingPolicy
+        // değil DictionaryKeyPolicy geçerlidir. Bu olmadan anahtarlar ham property adı (PascalCase) kalır.
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
     };
 
     public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
@@ -115,6 +136,14 @@ public class AuditInterceptor : SaveChangesInterceptor
         var ipAddress = GetCurrentIpAddress();
         var timestamp = DateTime.UtcNow;
 
+        // Aynı save içinde elle eklenmiş AuditLog'ların (örn. ScheduleAssigned) (EntityType, EntityId)
+        // anahtarları. Bu varlıklar için ayrıca otomatik "Modified/Created/Deleted" kaydı üretmeyiz —
+        // aksi halde tek aksiyon için listede iki satır oluşur (manuel zengin kayıt + otomatik churn).
+        var manuallyLoggedKeys = context.ChangeTracker.Entries<AuditLog>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => (e.Entity.EntityType, e.Entity.EntityId))
+            .ToHashSet();
+
         foreach (var entry in context.ChangeTracker.Entries())
         {
             if (entry.State is EntityState.Detached or EntityState.Unchanged)
@@ -128,10 +157,16 @@ public class AuditInterceptor : SaveChangesInterceptor
             if (entry.Entity is AuditLog)
                 continue;
 
+            var entityId = GetPrimaryKeyValue(entry);
+
+            // Bu varlık aynı save'de elle loglandıysa otomatik kaydı atla (çift-loglamayı önle).
+            if (manuallyLoggedKeys.Contains((entityTypeName, entityId)))
+                continue;
+
             var auditEntry = new AuditEntry
             {
                 EntityType = entityTypeName,
-                EntityId = GetPrimaryKeyValue(entry),
+                EntityId = entityId,
                 Action = entry.State switch
                 {
                     EntityState.Added => "Created",

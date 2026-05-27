@@ -59,10 +59,14 @@ export async function getCourseHistory(): Promise<CourseHistoryTermDto[]> {
  * Browser yeni sekmede açar veya download tetikler.
  */
 export async function downloadCourseHistoryPdf(): Promise<Blob> {
-  const response = await apiClient.get<Blob>('/registrations/history/pdf', {
-    responseType: 'blob',
-  });
-  return response.data;
+  try {
+    const response = await apiClient.get<Blob>('/registrations/history/pdf', {
+      responseType: 'blob',
+    });
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Alinan dersler PDF raporu olusturulamadi.');
+  }
 }
 
 export async function dropCourse(registrationId: number): Promise<RegistrationResponseDto> {

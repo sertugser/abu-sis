@@ -85,6 +85,7 @@ public class WebModuleControlServiceTests
             ShortEnglishName = "2025 Spring",
             Year = 2026,
             TermType = TermType.Spring,
+            IsActivated = true,
             TermStart = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
             TermEnd = new DateTime(2026, 6, 30, 23, 59, 59, DateTimeKind.Utc),
             CalendarEvents =
@@ -148,6 +149,7 @@ public class WebModuleControlServiceTests
                     EndDate = new DateTime(2026, 5, 25, 23, 59, 59, DateTimeKind.Utc),
                 },
             },
+            IsActivated = true,
         });
         context.WebModuleSettings.Add(new WebModuleSetting
         {
@@ -188,6 +190,7 @@ public class WebModuleControlServiceTests
                     EndDate = new DateTime(2026, 5, 25, 23, 59, 59, DateTimeKind.Utc),
                 },
             },
+            IsActivated = true,
         });
         context.WebModuleSettings.Add(new WebModuleSetting
         {

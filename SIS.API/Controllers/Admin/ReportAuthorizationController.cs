@@ -83,43 +83,79 @@ public class ReportAuthorizationController : ControllerBase
         return NoContent();
     }
 
-    // ── Category × Role matrix ──────────────────────────────
+    // ── Kullanıcı grupları ──────────────────────────────────
 
-    [HttpGet("api/admin/report-permissions/matrix")]
+    [HttpGet("api/admin/report-user-groups")]
     [RequirePermission("menu.kullanici-rapor-gruplari.view")]
-    public async Task<IActionResult> GetMatrix(CancellationToken ct)
-        => Ok(await _service.GetCategoryRoleMatrixAsync(ct));
+    public async Task<IActionResult> ListGroups(CancellationToken ct) => Ok(await _service.ListGroupsAsync(ct));
 
-    [HttpPut("api/admin/report-permissions/matrix")]
+    [HttpPost("api/admin/report-user-groups")]
     [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
-    public async Task<IActionResult> SetCategoryRoles([FromBody] SetCategoryRolesDto dto, CancellationToken ct)
+    public async Task<IActionResult> CreateGroup([FromBody] CreateReportUserGroupDto dto, CancellationToken ct)
     {
-        if (!TryGetCurrentUserId(out var uid)) return Unauthorized();
-        try { await _service.SetCategoryRolesAsync(dto, uid, ct); return NoContent(); }
+        try { return Ok(await _service.CreateGroupAsync(dto, ct)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPut("api/admin/report-user-groups/{id:int}")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
+    public async Task<IActionResult> UpdateGroup(int id, [FromBody] UpdateReportUserGroupDto dto, CancellationToken ct)
+    {
+        try { return Ok(await _service.UpdateGroupAsync(id, dto, ct)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpDelete("api/admin/report-user-groups/{id:int}")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
+    public async Task<IActionResult> DeleteGroup(int id, CancellationToken ct)
+    {
+        await _service.DeleteGroupAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpGet("api/admin/report-user-groups/{id:int}/members")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.view")]
+    public async Task<IActionResult> ListGroupMembers(int id, CancellationToken ct)
+        => Ok(await _service.ListGroupMembersAsync(id, ct));
+
+    [HttpPost("api/admin/report-user-groups/{id:int}/members")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
+    public async Task<IActionResult> AddGroupMember(int id, [FromBody] AddGroupMemberDto dto, CancellationToken ct)
+    {
+        try { await _service.AddGroupMemberAsync(id, dto.UserId, ct); return NoContent(); }
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
 
-    // ── Per-report override ─────────────────────────────────
-
-    [HttpGet("api/admin/report-permissions/overrides")]
-    [RequirePermission("menu.kullanici-rapor-gruplari.view")]
-    public async Task<IActionResult> ListOverrides([FromQuery] int? reportId, CancellationToken ct)
-        => Ok(await _service.ListOverridesAsync(reportId, ct));
-
-    [HttpPost("api/admin/report-permissions/overrides")]
+    [HttpDelete("api/admin/report-user-groups/{id:int}/members/{userId:int}")]
     [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
-    public async Task<IActionResult> UpsertOverride([FromBody] CreateReportOverrideDto dto, CancellationToken ct)
+    public async Task<IActionResult> RemoveGroupMember(int id, int userId, CancellationToken ct)
     {
-        if (!TryGetCurrentUserId(out var uid)) return Unauthorized();
-        try { return Ok(await _service.UpsertOverrideAsync(dto, uid, ct)); }
-        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        await _service.RemoveGroupMemberAsync(id, userId, ct);
+        return NoContent();
     }
 
-    [HttpDelete("api/admin/report-permissions/overrides/{id:int}")]
+    // ── Birleşik yetki (grant) ──────────────────────────────
+
+    [HttpGet("api/admin/report-grants")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.view")]
+    public async Task<IActionResult> ListGrants(CancellationToken ct) => Ok(await _service.ListGrantsAsync(ct));
+
+    [HttpPost("api/admin/report-grants")]
     [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
-    public async Task<IActionResult> DeleteOverride(int id, CancellationToken ct)
+    public async Task<IActionResult> SetGrant([FromBody] SetReportAccessGrantDto dto, CancellationToken ct)
     {
-        await _service.DeleteOverrideAsync(id, ct);
+        if (!TryGetCurrentUserId(out var uid)) return Unauthorized();
+        try { return Ok(await _service.SetGrantAsync(dto, uid, ct)); }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpDelete("api/admin/report-grants/{id:int}")]
+    [RequirePermission("menu.kullanici-rapor-gruplari.manage")]
+    public async Task<IActionResult> DeleteGrant(int id, CancellationToken ct)
+    {
+        await _service.DeleteGrantAsync(id, ct);
         return NoContent();
     }
 

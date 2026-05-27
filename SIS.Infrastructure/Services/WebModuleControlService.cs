@@ -37,10 +37,15 @@ public class WebModuleControlService : IWebModuleControlService
         var definitions = Definitions.Values.ToList();
         var moduleKeys = definitions.Select(definition => definition.SettingModuleKey).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+        var settingKeys = definitions
+            .SelectMany(definition => new[] { definition.ModeKey, definition.AnnouncementKey })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var settings = await _context.WebModuleSettings
             .AsNoTracking()
             .Where(setting => moduleKeys.Contains(setting.ModuleKey)
-                && (setting.Key == "Mode" || setting.Key == "Announcement"))
+                && settingKeys.Contains(setting.Key))
             .ToListAsync(ct);
 
         var settingsByCompositeKey = settings.ToDictionary(
@@ -243,7 +248,6 @@ public class WebModuleControlService : IWebModuleControlService
             "makeup-grade-publication" => EvaluatePublicationEvent(term, CalendarEventType.MakeupGradePublication, selectedOption, announcement, "Bütünleme notları henüz öğrenciye yayınlanamaz.", now),
             "letter-grade-publication" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Harf notları henüz öğrenciye yayınlanamaz.", now),
             "makeup-letter-grade-publication" => EvaluatePublicationEvent(term, CalendarEventType.MakeupGradePublication, selectedOption, announcement, "Bütünleme harf notları henüz öğrenciye yayınlanamaz.", now),
-            "social-transcript-student-application" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Sosyal transkript başvurusu şu anda açık değil.", now),
             "social-transcript-application-evaluation" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Sosyal transkript değerlendirme akışı şu anda açık değil.", now),
             "social-transcript-student-objection" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Sosyal transkript itiraz akışı şu anda açık değil.", now),
             "registration-freeze-application" => EvaluateDeadlineWindow(term, CalendarEventType.RegistrationFreezeDeadline, selectedOption, announcement, "Kayıt dondurma başvuru penceresi şu anda açık değil.", now),
@@ -638,7 +642,7 @@ public class WebModuleControlService : IWebModuleControlService
 
             new WebModuleControlDefinition(
                 "student-withdrawal",
-                "Danışman Dersten Çekilme İşlemleri",
+                "Dersten Çekilme",
                 "Öğrenci İşlemleri",
                 "Öğrencinin dersten çekilme talebi oluşturma akışını yönetir.",
                 90,
@@ -786,17 +790,6 @@ public class WebModuleControlService : IWebModuleControlService
                 "Bütünleme sonrası harf notlarının öğrenci ekranında görünmesini yönetir.",
                 190,
                 "MakeupLetterGradePublication",
-                "Mode",
-                "Announcement",
-                eventDrivenOptions),
-
-            new WebModuleControlDefinition(
-                "social-transcript-student-application",
-                "Sosyal Transkript Öğrenci Başvuru",
-                "Öğrenci İşlemleri",
-                "Öğrencinin transkriptini üretme ve başvuru çıktısı alma akışını yönetir.",
-                230,
-                "SocialTranscriptStudentApplication",
                 "Mode",
                 "Announcement",
                 eventDrivenOptions),

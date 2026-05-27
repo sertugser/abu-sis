@@ -67,6 +67,7 @@ public class RegistrationValidationServiceTests : IDisposable
             Name = "2025-2026 Spring",
             Year = 2025,
             TermType = TermType.Spring,
+            IsActivated = true,
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
@@ -347,9 +348,10 @@ public class RegistrationValidationServiceTests : IDisposable
     [Fact]
     public async Task Validate_NoActiveTerm_ReturnsPeriodError()
     {
-        // Set term end to past so it's no longer active
+        // Aktif dönem yok: yeni modelde aktiflik tarihe değil "Kullanıma Aç" bayrağına bağlı,
+        // bu yüzden dönemi kapalı (IsActivated=false) yaparak aktif dönemi kaldırıyoruz.
         var term = _context.AcademicTerms.Find(TermId)!;
-        term.TermEnd = DateTime.UtcNow.AddDays(-1);
+        term.IsActivated = false;
         _context.SaveChanges();
 
         var course = AddCourse(301, "CS301", "Networks", 5);

@@ -1,10 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 
+export interface LookupFaculty {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export interface LookupDepartment {
   id: number;
   name: string;
   code: string;
+  facultyId: number;
 }
 
 export interface LookupProgram {
@@ -20,11 +27,37 @@ export interface LookupAdvisor {
   departmentName: string;
 }
 
-export function useAdminDepartments() {
+export interface LookupCurriculum {
+  id: number;
+  programId: number;
+  name: string;
+  version: string;
+  status: 'Draft' | 'Published' | 'Archived';
+}
+
+/**
+ * Fakülte lookup'ı — dropdown/filtre için hafif {id,name,code} listesi.
+ * Backend `lookup.faculty` (her authenticated user'a açık, scope-filtreli) ucunu çağırır.
+ * Fakülte YÖNETİM sayfaları (count alanları gerektiren) için `useAdminFaculties` kullanılmalı.
+ */
+export function useFacultyLookup() {
   return useQuery({
-    queryKey: ['admin', 'lookup', 'departments'],
+    queryKey: ['admin', 'lookup', 'faculties'],
     queryFn: async () => {
-      const { data } = await apiClient.get<LookupDepartment[]>('/admin/departments');
+      const { data } = await apiClient.get<LookupFaculty[]>('/admin/faculties');
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAdminDepartments(facultyId?: number) {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'departments', facultyId ?? null],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupDepartment[]>('/admin/departments', {
+        params: facultyId ? { facultyId } : undefined,
+      });
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -44,6 +77,24 @@ export function useAdminPrograms(departmentId?: number) {
   });
 }
 
+export interface LookupSection {
+  id: number;
+  label: string;
+}
+
+/** Döneme bağlı şube lookup'ı ("DERSKODU - Şube N"). termId yoksa fetch etmez. */
+export function useSectionLookup(termId?: number) {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'sections', termId ?? null],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupSection[]>('/admin/sections', { params: { termId } });
+      return data;
+    },
+    enabled: termId != null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useAdminAdvisors() {
   return useQuery({
     queryKey: ['admin', 'lookup', 'advisors'],
@@ -51,6 +102,20 @@ export function useAdminAdvisors() {
       const { data } = await apiClient.get<LookupAdvisor[]>('/admin/advisors');
       return data;
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAdminCurricula(programId?: number) {
+  return useQuery({
+    queryKey: ['admin', 'lookup', 'curricula', programId ?? null],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LookupCurriculum[]>('/admin/curricula', {
+        params: programId != null ? { programId } : undefined,
+      });
+      return data;
+    },
+    enabled: programId != null,
     staleTime: 5 * 60 * 1000,
   });
 }

@@ -374,10 +374,12 @@ public class CourseOpeningQueryService(
             .ToDictionaryAsync(u => u.Id, u => new { u.FirstName, u.LastName }, ct);
 
         var instructorDepartmentIds = instructors.Select(i => i.DepartmentId).Distinct().ToList();
-        var departmentInfoMap = await _context.Departments
+        var departmentInfoMap = (await _context.Departments
             .AsNoTracking()
             .Where(d => instructorDepartmentIds.Contains(d.Id))
-            .ToDictionaryAsync(d => d.Id, d => new { d.Code, d.Name }, ct);
+            .Select(d => new { d.Id, d.Code, d.Name, FacultyCode = d.Faculty.Code, FacultyName = d.Faculty.Name })
+            .ToListAsync(ct))
+            .ToDictionary(d => d.Id, d => new { d.Code, d.Name, d.FacultyCode, d.FacultyName });
 
         var workloadMap = new Dictionary<int, int>();
         if (termId.HasValue)
@@ -402,7 +404,9 @@ public class CourseOpeningQueryService(
 
         return instructors.Select(i =>
         {
-            var name = userMap.TryGetValue(i.UserId, out var u) ? $"{i.Title} {u.FirstName} {u.LastName}" : $"{i.Title} (#{i.Id})";
+            userMap.TryGetValue(i.UserId, out var u);
+            var personName = u != null ? $"{u.FirstName} {u.LastName}".Trim() : $"#{i.Id}";
+            var name = u != null ? $"{i.Title} {personName}".Trim() : $"{i.Title} (#{i.Id})".Trim();
             departmentInfoMap.TryGetValue(i.DepartmentId, out var departmentInfo);
             workloadMap.TryGetValue(i.Id, out var assignedHours);
             var effectiveMaxWeeklyHours = weeklyHoursPolicy.Resolve(i.Title, i.MaxWeeklyHours);
@@ -414,6 +418,10 @@ public class CourseOpeningQueryService(
                 DepartmentId = i.DepartmentId,
                 DepartmentName = departmentInfo?.Name ?? "",
                 DepartmentCode = departmentInfo?.Code ?? "",
+                Title = i.Title,
+                PersonName = personName,
+                FacultyName = departmentInfo?.FacultyName ?? "",
+                FacultyCode = departmentInfo?.FacultyCode ?? "",
                 MaxWeeklyHours = effectiveMaxWeeklyHours,
                 AssignedWeeklyHours = assignedHours,
                 AdvisorAssignmentCapacity = i.AdvisorAssignmentCapacity,

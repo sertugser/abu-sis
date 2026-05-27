@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { getGradeBadgeClass } from '@/lib/gradeUtils';
 import { getStudentGradeStatistics } from '../api/student.api';
 import { useCourseHistory } from '../hooks/useCourseHistory';
 import { useStudentGradeStatistics } from '../hooks/useStudentGradeStatistics';
@@ -41,21 +42,6 @@ type GradeListRowWithStatistics = GradeListRow & {
   statisticsLoading: boolean;
 };
 
-const GRADE_BADGE_CLASS: Record<string, string> = {
-  AA: 'bg-emerald-600 text-white',
-  BA: 'bg-emerald-600 text-white',
-  BB: 'bg-emerald-500 text-white',
-  CB: 'bg-teal-600 text-white',
-  CC: 'bg-teal-600 text-white',
-  DC: 'bg-amber-500 text-white',
-  DD: 'bg-amber-500 text-white',
-  FF: 'bg-red-600 text-white',
-  NA: 'bg-red-600 text-white',
-  W: 'bg-slate-200 text-slate-700',
-  I: 'bg-slate-200 text-slate-700',
-  S: 'bg-emerald-600 text-white',
-  U: 'bg-red-600 text-white',
-};
 
 export default function GradeListPage() {
   const { data: history, isLoading, error } = useCourseHistory();
@@ -239,7 +225,7 @@ export default function GradeListPage() {
                     </TableCell>
                     <TableCell className="px-2 py-3 text-center">
                       {shouldShowLetterGrade(row.statistics) ? (
-                        <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', GRADE_BADGE_CLASS[row.statistics!.studentLetterGrade!] ?? 'bg-slate-200 text-slate-700')}>
+                        <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', getGradeBadgeClass(row.statistics!.studentLetterGrade))}>
                           {row.statistics!.studentLetterGrade}
                         </span>
                       ) : (
@@ -356,7 +342,7 @@ function GradeListCourseCard({
         </GradeListInfoItem>
         <GradeListInfoItem label="Not">
           {shouldShowLetterGrade(row.statistics) ? (
-            <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', GRADE_BADGE_CLASS[row.statistics!.studentLetterGrade!] ?? 'bg-slate-200 text-slate-700')}>
+            <span className={cn('inline-flex min-w-10 justify-center rounded-md px-2 py-0.5 text-xs font-bold', getGradeBadgeClass(row.statistics!.studentLetterGrade))}>
               {row.statistics!.studentLetterGrade}
             </span>
           ) : (

@@ -92,13 +92,15 @@ export function useAuditLogFilters() {
   const hasActiveFilter = FILTER_KEYS.some(k => !!filters[k]);
   const activeFilterCount = FILTER_KEYS.filter(k => !!filters[k]).length;
 
-  // API filters use debounced text values
+  // API filters use debounced text values.
+  // İçerik araması indekssiz ILIKE %x% tam-tablo taraması olduğu için en az 2 karakter iste —
+  // tek karakterlik aramalar gereksiz ağır sorgu üretir.
   const apiFilters = useMemo(() => ({
     entityType: filters.entityType || undefined,
     entityId: debouncedEntityId || undefined,
     userId: debouncedUserId || undefined,
     action: filters.action || undefined,
-    search: debouncedSearch || undefined,
+    search: debouncedSearch.trim().length >= 2 ? debouncedSearch.trim() : undefined,
     from: filters.from || undefined,
     to: filters.to || undefined,
     sortBy: filters.sortBy,

@@ -27,7 +27,6 @@ const REGISTRATION_FLAGS: FlagRow[] = [
 const CALCULATION_FLAGS: FlagRow[] = [
   { key: 'excludedFromCreditTotal', label: 'Kredi Toplamı Dışı (Krd Top. Dışı)' },
   { key: 'excludedFromTranscriptTotal', label: 'Transkript Krd/AKTS Toplamına Dahil Değil' },
-  { key: 'hasCustomExamCurriculum', label: 'Derse Özel Sınav Müfredat Ata' },
 ];
 
 function FlagsGroup({

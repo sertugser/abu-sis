@@ -301,28 +301,45 @@ public partial class FacultyPlanningService
 
         if (sectionIds.Count == 0) return 0;
 
-        // Remove all SectionSchedule records
-        var schedules = await _context.SectionSchedules
-            .Where(ss => sectionIds.Contains(ss.CourseSectionId))
-            .ToListAsync(ct);
-        _context.SectionSchedules.RemoveRange(schedules);
-
-        // Clear ClassroomId on sections
-        var sections = await _context.CourseSections
-            .Where(cs => sectionIds.Contains(cs.Id))
-            .ToListAsync(ct);
-        foreach (var s in sections)
-            s.ClassroomId = null;
-
-        _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
+        // Atomiklik: schedule silme + classroom temizleme + audit tek transaction'da.
+        // (Eskiden transaction yoktu → kısmi başarısızlıkta yarı-sıfırlanmış durum kalabiliyordu.)
+        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+        try
         {
-            SectionId = sectionIds[0],
-            Action = "ResetAll",
-            UserId = userId
-        });
+            // Remove all SectionSchedule records
+            var schedules = await _context.SectionSchedules
+                .Where(ss => sectionIds.Contains(ss.CourseSectionId))
+                .ToListAsync(ct);
+            _context.SectionSchedules.RemoveRange(schedules);
 
-        await _context.SaveChangesAsync(ct);
-        return sections.Count;
+            // Clear ClassroomId on sections
+            var sections = await _context.CourseSections
+                .Where(cs => sectionIds.Contains(cs.Id))
+                .ToListAsync(ct);
+            foreach (var s in sections)
+                s.ClassroomId = null;
+
+            // Audit: her section için ayrı kayıt — eski tek-satır (yalnız sectionIds[0]) bulk
+            // sıfırlamayı yanıltıcı şekilde tek section'a bağlıyordu.
+            foreach (var sid in sectionIds)
+            {
+                _context.SchedulingAuditLogs.Add(new SchedulingAuditLog
+                {
+                    SectionId = sid,
+                    Action = "ResetAll",
+                    UserId = userId,
+                });
+            }
+
+            await _context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return sections.Count;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<ApplyScheduleResultDto> ApplyScheduleAsync(ApplyScheduleRequest request, string userId, CancellationToken ct = default)

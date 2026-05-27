@@ -7,6 +7,8 @@ import {
   useUpdateCurriculum,
   useDeleteCurriculum,
   useActivateCurriculum,
+  usePublishCurriculum,
+  useArchiveCurriculum,
   useAddCurriculumCourse,
   useRemoveCurriculumCourse,
   useCopyCurriculum,
@@ -19,6 +21,7 @@ import CurriculumCourseEditDialog from './curriculum-management/CurriculumCourse
 import CourseLinksDialog from '../components/curriculum-management/CourseLinksDialog';
 import { CurriculumTermRulesDialog } from '../components/curriculum-management/CurriculumTermRulesDialog';
 import ActivateCurriculumDialog from './curriculum-management/ActivateCurriculumDialog';
+import PublishArchiveCurriculumDialog from './curriculum-management/PublishArchiveCurriculumDialog';
 import DeleteCurriculumDialog from './curriculum-management/DeleteCurriculumDialog';
 import CopyCurriculumDialog from './curriculum-management/CopyCurriculumDialog';
 import CurriculumFormDialog, { type CurriculumFormSubmitPayload } from './curriculum-management/CurriculumFormDialog';
@@ -84,6 +87,8 @@ export default function CurriculumManagementPage() {
 
   // Confirm Dialogları
   const [activateTarget, setActivateTarget] = useState<{ id: number; label: string } | null>(null);
+  const [publishTarget, setPublishTarget] = useState<{ id: number; label: string } | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<{ id: number; label: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; label: string } | null>(null);
 
   // Copy Dialog — müfredatı kopyala (kaynak + yeni yıl)
@@ -115,7 +120,7 @@ export default function CurriculumManagementPage() {
   const [searchName, setSearchName] = useState('');
   const [classFilter, setClassFilter] = useState<number | null>(null); // 1,2,3,4
   const [termTypeFilter, setTermTypeFilter] = useState<'all' | 'fall' | 'spring'>('all');
-  // Gruplu Dersleri Göster — şimdilik UI-only, seçmeli havuzlar entegrasyonu için yer tutucu
+  // Gruplu Dersleri Göster — açıkken sadece grup (havuz) satırları listelenir, normal dersler gizlenir
   const [showGroupedCourses, setShowGroupedCourses] = useState(false);
 
   // ── Satır-içi dişli menü → Ön Koşul / İntibak dialog target ──
@@ -135,6 +140,8 @@ export default function CurriculumManagementPage() {
   const updateMut = useUpdateCurriculum();
   const deleteMut = useDeleteCurriculum();
   const activateMut = useActivateCurriculum();
+  const publishMut = usePublishCurriculum();
+  const archiveMut = useArchiveCurriculum();
   const addCourseMut = useAddCurriculumCourse();
   const removeCourseMut = useRemoveCurriculumCourse();
   const copyMut = useCopyCurriculum();
@@ -211,10 +218,13 @@ export default function CurriculumManagementPage() {
 
   // Faz B B5: course + pool karma satır listesi (yarıyıl asc, eşitlikte course'lar önce)
   const flatRows = useMemo<CurriculumRow[]>(() => {
-    const rows: CurriculumRow[] = [
-      ...flatCourses.map(c => ({ kind: 'course' as const, course: c })),
-      ...filteredPools.map(p => ({ kind: 'pool' as const, pool: p })),
-    ];
+    // "Gruplu Dersleri Göster" açıkken yalnızca havuz (grup) satırları; kapalıyken ders + havuz birlikte
+    const rows: CurriculumRow[] = showGroupedCourses
+      ? filteredPools.map(p => ({ kind: 'pool' as const, pool: p }))
+      : [
+          ...flatCourses.map(c => ({ kind: 'course' as const, course: c })),
+          ...filteredPools.map(p => ({ kind: 'pool' as const, pool: p })),
+        ];
     return rows.sort((a, b) => {
       const aSem = a.kind === 'course' ? a.course.suggestedSemester : a.pool.suggestedSemesterStart;
       const bSem = b.kind === 'course' ? b.course.suggestedSemester : b.pool.suggestedSemesterStart;
@@ -226,7 +236,7 @@ export default function CurriculumManagementPage() {
       const bKey = b.kind === 'course' ? b.course.courseCode : `${b.pool.groupCode}-${b.pool.slotName}`;
       return aKey.localeCompare(bKey);
     });
-  }, [flatCourses, filteredPools]);
+  }, [flatCourses, filteredPools, showGroupedCourses]);
 
   const existingCourseIds = useMemo(
     () => new Set(detail?.courses?.map(c => c.courseId) ?? []),
@@ -250,7 +260,7 @@ export default function CurriculumManagementPage() {
   );
   // Filtre değişince ders sayfası 1'e dön — adjust-state-during-render
   // (React 19+: useEffect içinde setState yasaklandı, prev-tracking ile render'da update)
-  const courseFilterKey = `${searchCode}|${searchName}|${classFilter}|${termTypeFilter}|${selectedCurriculumId}`;
+  const courseFilterKey = `${searchCode}|${searchName}|${classFilter}|${termTypeFilter}|${showGroupedCourses}|${selectedCurriculumId}`;
   const [prevCourseFilterKey, setPrevCourseFilterKey] = useState(courseFilterKey);
   if (prevCourseFilterKey !== courseFilterKey) {
     setPrevCourseFilterKey(courseFilterKey);
@@ -276,8 +286,8 @@ export default function CurriculumManagementPage() {
     if (!curricula) return [];
     let out = curricula;
     if (statusFilter === 'active') out = out.filter(c => c.isActive);
-    else if (statusFilter === 'inactive') out = out.filter(c => !c.isActive && c.status !== 2);
-    else if (statusFilter === 'archived') out = out.filter(c => c.status === 2);
+    else if (statusFilter === 'inactive') out = out.filter(c => !c.isActive && c.status !== 'Archived');
+    else if (statusFilter === 'archived') out = out.filter(c => c.status === 'Archived');
     if (yearFilter !== 'all') out = out.filter(c => c.version === yearFilter);
     const kw = searchKeyword.trim().toLowerCase();
     if (kw) {
@@ -376,6 +386,20 @@ export default function CurriculumManagementPage() {
     if (!activateTarget) return;
     activateMut.mutate(activateTarget.id, {
       onSuccess: () => setActivateTarget(null),
+    });
+  }
+
+  function handleConfirmPublish() {
+    if (!publishTarget) return;
+    publishMut.mutate(publishTarget.id, {
+      onSuccess: () => setPublishTarget(null),
+    });
+  }
+
+  function handleConfirmArchive() {
+    if (!archiveTarget) return;
+    archiveMut.mutate(archiveTarget.id, {
+      onSuccess: () => setArchiveTarget(null),
     });
   }
 
@@ -512,6 +536,8 @@ export default function CurriculumManagementPage() {
           }}
           onCopy={setCopyTarget}
           onActivate={setActivateTarget}
+          onPublish={setPublishTarget}
+          onArchive={setArchiveTarget}
           onDelete={setDeleteTarget}
           onOpenPromotionRules={setPromotionRulesTarget}
         />
@@ -638,6 +664,22 @@ export default function CurriculumManagementPage() {
         onCancel={() => setActivateTarget(null)}
         onConfirm={handleConfirmActivate}
         isPending={activateMut.isPending}
+      />
+
+      <PublishArchiveCurriculumDialog
+        mode="publish"
+        target={publishTarget}
+        onCancel={() => setPublishTarget(null)}
+        onConfirm={handleConfirmPublish}
+        isPending={publishMut.isPending}
+      />
+
+      <PublishArchiveCurriculumDialog
+        mode="archive"
+        target={archiveTarget}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={handleConfirmArchive}
+        isPending={archiveMut.isPending}
       />
 
       <DeleteCurriculumDialog

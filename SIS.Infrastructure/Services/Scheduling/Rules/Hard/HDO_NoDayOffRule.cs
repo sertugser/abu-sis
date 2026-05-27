@@ -8,10 +8,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// V1 hardcoded "≥ 5" sadece 5-günlük workday için aynı. Workday set'i RuntimeSnapshot içindeki
 /// section block'larından çıkarılır (TimeSlot listesi snapshot'a yansımıyorsa fallback "Mon-Fri").
 /// </summary>
-public sealed class HDO_NoDayOffRule : IRulePredicate
+public sealed class HDO_NoDayOffRule : ISoftRulePredicate
 {
     public string Code => "H-DO";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.HDOWeight default'u (7).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 7;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {

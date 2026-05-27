@@ -32,10 +32,10 @@ public static partial class SeedData
     {
         var configs = new List<SystemConfig>
         {
+            new() { Key = "Attendance.Method", Value = "Separate", Category = "Attendance", DataType = "string", Description = "Devamsızlık hesap yöntemi: Separate (teori/uygulama ayrı), TotalHours (toplam saat), Passive (kapalı), MarkOnly (sadece işaretle)" },
             new() { Key = "Attendance.TermWeekCount", Value = "14", Category = "Attendance", DataType = "int", Description = "Devamsizlik hesabinda kullanilan aktif donem hafta sayisi" },
             new() { Key = "Attendance.TheoryAbsenceLimitPercent", Value = "30", Category = "Attendance", DataType = "decimal", Description = "Teorik derslerde devamsizliktan kalma esigi (%)" },
             new() { Key = "Attendance.LabAbsenceLimitPercent", Value = "20", Category = "Attendance", DataType = "decimal", Description = "Uygulama/lab derslerinde devamsizliktan kalma esigi (%)" },
-
             // ── Kayıt ECTS Limitleri ─────────────────────────────
             new() { Key = "Registration.EctsLimit.CgpaBelow200", Value = "30", Category = "Registration", DataType = "int", Description = "CGPA < 2.00 olan öğrencilerin alabileceği max AKTS" },
             new() { Key = "Registration.EctsLimit.Cgpa200To249", Value = "42", Category = "Registration", DataType = "int", Description = "CGPA 2.00-2.49 arası öğrencilerin alabileceği max AKTS" },
@@ -84,6 +84,9 @@ public static partial class SeedData
             new() { Key = "Application.FineArtsDisableUserCreationVerification", Value = "false", Category = "Application", DataType = "bool", Description = "Güzel sanatlar başvuru sisteminde kullanıcı oluşturma doğrulamayı kapat" },
             new() { Key = "Application.DeregistrationCareerPortalEnabled", Value = "false", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusu kariyer portalından başvuruya açık" },
             new() { Key = "Application.DeregistrationRequireEDevletLogin", Value = "true", Category = "Application", DataType = "bool", Description = "İlişik kesme başvurusuna sadece e-Devlet ile giriş yapan öğrenciler başvuru yapabilir" },
+
+            // ── Sınav Yönergesi Kontrolleri ───────────────────────
+            new() { Key = "ExamRegulation.GlobalEditLock", Value = "false", Category = "ExamRegulation", DataType = "bool", Description = "Açıkken sınav yönergelerinde ekleme/düzenleme/silme tüm rollere kapalı (SysAdmin hariç)." },
 
             // ── Ders Çekilme Limitleri ────────────────────────────
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },

@@ -344,7 +344,7 @@ public class AcademicCalendarService : IAcademicCalendarService
             .AsNoTracking()
             .Include(t => t.AcademicCalendar)
             .Include(t => t.CalendarEvents.Where(e => includeAllEvents || e.IsPublic))
-            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
+            .ActiveTerm()
             .FirstOrDefaultAsync(ct);
 
         if (term is null)
@@ -761,17 +761,6 @@ public class AcademicCalendarService : IAcademicCalendarService
             trimmedEnd = trimmedEnd.AddDays(-1);
 
         return EnsureUtcDate(trimmedEnd);
-    }
-
-    private static bool ContainsWeekend(DateTime startDate, DateTime endDate)
-    {
-        for (var day = startDate.Date; day <= endDate.Date; day = day.AddDays(1))
-        {
-            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                return true;
-        }
-
-        return false;
     }
 
     private static void EnsureNoBlockingOverlap(IEnumerable<TermCalendarEvent> events, TermCalendarEvent movingEvent, DateTime startDate, DateTime endDate)

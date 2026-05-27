@@ -1,10 +1,69 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPendingApprovals, approveStudent, rejectStudent } from '../api/advisor.api';
+import {
+  getPendingApprovals,
+  approveStudent,
+  rejectStudent,
+  getAdvisorDashboardStats,
+  getAdvisorStudents,
+  getAdvisorStudentRegistrations,
+  getAdvisorStudentCatalog,
+  advisorAddCourse,
+  advisorDropCourse,
+} from '../api/advisor.api';
 
 export function usePendingApprovals() {
   return useQuery({
     queryKey: ['advisor', 'pending-approvals'],
     queryFn: getPendingApprovals,
+  });
+}
+
+export function useAdvisorDashboardStats() {
+  return useQuery({
+    queryKey: ['advisor', 'dashboard-stats'],
+    queryFn: getAdvisorDashboardStats,
+    staleTime: 60_000,
+  });
+}
+
+export function useAdvisorStudents() {
+  return useQuery({
+    queryKey: ['advisor', 'students'],
+    queryFn: getAdvisorStudents,
+  });
+}
+
+export function useAdvisorStudentRegistrations(studentId: number | null) {
+  return useQuery({
+    queryKey: ['advisor', 'student-registrations', studentId],
+    queryFn: () => getAdvisorStudentRegistrations(studentId!),
+    enabled: studentId != null,
+  });
+}
+
+export function useAdvisorStudentCatalog(studentId: number | null) {
+  return useQuery({
+    queryKey: ['advisor', 'student-catalog', studentId],
+    queryFn: () => getAdvisorStudentCatalog(studentId!),
+    enabled: studentId != null,
+  });
+}
+
+export function useAdvisorAddCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, courseSectionId }: { studentId: number; courseSectionId: number }) =>
+      advisorAddCourse(studentId, courseSectionId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['advisor'] }),
+  });
+}
+
+export function useAdvisorDropCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, registrationId }: { studentId: number; registrationId: number }) =>
+      advisorDropCourse(studentId, registrationId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['advisor'] }),
   });
 }
 

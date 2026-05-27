@@ -65,7 +65,6 @@ function defaultFlags(): CourseFlagsState {
     autoAddOnNewRegistration: false,
     showAtTakenCurriculum: false,
     showInstructorAtRegistration: true,
-    hasCustomExamCurriculum: false,
   };
 }
 
@@ -124,7 +123,6 @@ export default function AddCourseDialog({ open, onClose, onAdd, isPending, exist
       autoAddOnNewRegistration: flags.autoAddOnNewRegistration,
       showAtTakenCurriculum: flags.showAtTakenCurriculum,
       showInstructorAtRegistration: flags.showInstructorAtRegistration,
-      hasCustomExamCurriculum: flags.hasCustomExamCurriculum,
       // Phase 2 — decision
       decisionDate: decision.decisionDate || undefined,
       decisionNo: decision.decisionNo || undefined,

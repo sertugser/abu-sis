@@ -38,6 +38,7 @@ public class EvaluationPeriodOpenerJobTests
     private static AcademicTerm TermReady(DateTime now) => new()
     {
         Id = 1, Name = "T",
+        IsActivated = true,
         TermStart = now.AddDays(-60), TermEnd = now.AddDays(30),
         AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
         {

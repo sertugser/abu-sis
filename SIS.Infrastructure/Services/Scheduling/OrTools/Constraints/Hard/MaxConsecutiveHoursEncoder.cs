@@ -1,5 +1,6 @@
 using Google.OrTools.Sat;
 using SIS.Application.Scheduling.Solver;
+using SIS.Infrastructure.Services.Scheduling.OrTools.Model;
 
 namespace SIS.Infrastructure.Services.Scheduling.OrTools.Constraints.Hard;
 
@@ -92,29 +93,54 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
                 }
                 if (section.LabHours > 0)
                 {
-                    var iv = ctx.Variables.GetLabInterval(section.Id);
-                    if (iv != null)
+                    // Multi-block lab: her blok kendi gününde ayrı interval. Tek-blok'ta hızlı yol
+                    // (mevcut PopulateCoverage); çok-blok'ta blokların OR'u ile slot başına coverage —
+                    // aksi halde yalnız blok 0 sayılır, blok 2+'nin gününde ardışık-saat eksik hesaplanırdı.
+                    var labIntervals = ctx.Variables.GetLabIntervals(section.Id);
+                    if (labIntervals.Count == 1)
+                    {
                         PopulateCoverage(ctx.Model, section.Id, ComponentType.Lab,
-                            iv, section.LabHours, present,
+                            labIntervals[0], section.LabHours, present,
                             ctx.Request.TimeSlots.Count, coverageVars);
+                    }
+                    else
+                    {
+                        var blockSizes = LabBlockSplitter.SplitLabIntoBlocks(
+                            section.LabHours, ctx.Request.MaxLabBlockHours);
+                        PopulateLabCoverageMultiBlock(ctx.Model, section.Id, labIntervals, blockSizes,
+                            present, ctx.Request.TimeSlots.Count, coverageVars);
+                    }
                 }
             }
 
-            // Sliding window constraints per consecutive block.
-            int windowSize = _maxHoursPerDay + 1;
+            // Clock-saat sliding window (evaluator H15 ile parite — eskiden SLOT sayardı, 50dk'lık
+            // slotta sınırda ayrışıyordu). Her başlangıç slotundan itibaren kümülatif CLOCK-süre
+            // limitMinutes'i ilk aşan minimal pencere [start..end] bulunur; o pencerenin tamamen
+            // kapatılması (tüm slotların hocaca işgali) yasaklanır → en az bir slot boş → ardışık
+            // teaching süresi limiti aşamaz. (Slot süreleri ctx.Request.TimeSlots'tan; gap'ler
+            // teaching süresine eklenmez — evaluator da blok sürelerini toplar, gap'i değil.)
+            // H2 değişmezi (slot başına ≤1 section) altında sum(covers) = kapalı slot sayısı.
+            int limitMinutes = _maxHoursPerDay * 60;
             foreach (var block in consecutiveBlocks)
             {
-                for (int start = 0; start + windowSize <= block.Count; start++)
+                for (int start = 0; start < block.Count; start++)
                 {
-                    var windowSlots = new List<int>(windowSize);
-                    for (int k = 0; k < windowSize; k++)
-                        windowSlots.Add(block[start + k]);
+                    double cumMinutes = 0;
+                    int end = -1;
+                    for (int k = start; k < block.Count; k++)
+                    {
+                        var slot = ctx.Request.TimeSlots[block[k]];
+                        cumMinutes += (slot.EndTime - slot.StartTime).TotalMinutes;
+                        if (cumMinutes > limitMinutes) { end = k; break; }
+                    }
+                    if (end < 0) continue; // bu start'tan blok sonuna dek limit aşılmıyor
 
                     var windowTerms = new List<LinearExpr>();
                     foreach (var section in sectionList)
                     {
-                        foreach (var slotIdx in windowSlots)
+                        for (int k = start; k <= end; k++)
                         {
+                            var slotIdx = block[k];
                             if (coverageVars.TryGetValue(
                                     (section.Id, ComponentType.Lecture, slotIdx), out var lecCov))
                                 windowTerms.Add(lecCov);
@@ -126,10 +152,11 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
 
                     if (windowTerms.Count == 0) continue;
 
+                    // windowLen = end - start + 1; "tamamı kapalı olamaz" = sum ≤ windowLen - 1.
                     var literal = ctx.Assumptions.Register(Code,
                         primarySectionId: instructorId,
-                        secondarySectionId: windowSlots[0]);
-                    ctx.Model.Add(LinearExpr.Sum(windowTerms) <= _maxHoursPerDay)
+                        secondarySectionId: block[start]);
+                    ctx.Model.Add(LinearExpr.Sum(windowTerms) <= (end - start))
                         .OnlyEnforceIf(literal);
                 }
             }
@@ -205,6 +232,46 @@ public sealed class MaxConsecutiveHoursEncoder : IConstraintEncoder
                 .OnlyEnforceIf(covers.Not());
 
             coverageVars[(sectionId, ct, i)] = covers;
+        }
+    }
+
+    /// <summary>
+    /// Multi-block lab coverage: slot başına <c>covers[i] ⇔ herhangi bir lab bloğu i'yi kapsıyor ∧ present</c>.
+    /// Bloklar farklı günlerde (AddAllDifferent) olduğundan bir slot en çok bir blokça kapsanır; OR
+    /// birleştirmesi her bloğun kendi gününe katkısını korur (tekil GetLabInterval yalnız blok 0'ı sayardı).
+    /// Tek (sectionId, Lab, i) anahtarı korunur → sliding-window toplamı değişmeden çalışır.
+    /// </summary>
+    private static void PopulateLabCoverageMultiBlock(CpModel model, int sectionId,
+        IReadOnlyList<IntervalVar> labIntervals, IReadOnlyList<int> blockSizes, BoolVar present,
+        int totalSlots, Dictionary<(int, ComponentType, int), BoolVar> coverageVars)
+    {
+        for (int i = 0; i < totalSlots; i++)
+        {
+            var blockCovers = new List<ILiteral>(labIntervals.Count);
+            for (int b = 0; b < labIntervals.Count; b++)
+            {
+                var startExpr = labIntervals[b].StartExpr();
+                var dur = b < blockSizes.Count ? blockSizes[b] : 1;
+
+                var startLe = model.NewBoolVar($"h15_lstartLe_s{sectionId}_b{b}_i{i}");
+                model.Add(startExpr <= i).OnlyEnforceIf(startLe);
+                model.Add(startExpr >= i + 1).OnlyEnforceIf(startLe.Not());
+
+                var iLt = model.NewBoolVar($"h15_liLt_s{sectionId}_b{b}_i{i}");
+                model.Add(startExpr + dur >= i + 1).OnlyEnforceIf(iLt);
+                model.Add(startExpr + dur <= i).OnlyEnforceIf(iLt.Not());
+
+                var bc = model.NewBoolVar($"h15_lblk_s{sectionId}_b{b}_i{i}");
+                model.AddBoolAnd(new ILiteral[] { startLe, iLt, present }).OnlyEnforceIf(bc);
+                model.AddBoolOr(new ILiteral[] { startLe.Not(), iLt.Not(), present.Not() }).OnlyEnforceIf(bc.Not());
+                blockCovers.Add(bc);
+            }
+
+            // covers ⇔ OR(blockCovers)
+            var covers = model.NewBoolVar($"h15_lcovers_s{sectionId}_i{i}");
+            model.AddBoolOr(blockCovers).OnlyEnforceIf(covers);
+            model.AddBoolAnd(blockCovers.Select(bc => bc.Not())).OnlyEnforceIf(covers.Not());
+            coverageVars[(sectionId, ComponentType.Lab, i)] = covers;
         }
     }
 }

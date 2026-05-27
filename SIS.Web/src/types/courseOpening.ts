@@ -113,6 +113,12 @@ export interface InstructorOptionDto {
   departmentId: number;
   departmentName: string;
   departmentCode: string;
+  /** Akademik unvan (Prof., Doç. Dr. vb.). */
+  title: string;
+  /** Unvan içermeyen ad soyad. */
+  personName: string;
+  facultyName: string;
+  facultyCode: string;
   maxWeeklyHours: number;
   assignedWeeklyHours: number;
   /** Toplu danışman atamasında bu hocaya verilebilecek max öğrenci sayısı. null = sınırsız. */
@@ -164,12 +170,29 @@ export interface UpdateOpenedSectionRequest {
   capacity?: number;
   internalQuota?: number | null;
   externalQuota?: number | null;
+  /** true ise şubenin hoca ataması kaldırılır (instructorId göz ardı edilir). */
+  clearInstructor?: boolean;
 }
 
 // ── Bulk Assign ──
 
 export interface BulkAssignInstructorRequest {
   assignments: { sectionId: number; instructorId: number }[];
+}
+
+// ── Geçmiş Dönemden Hoca Kopyalama ──
+
+export interface CopyInstructorAssignmentsRequest {
+  departmentId: number;
+  sourceTermId: number;
+  targetTermId: number;
+}
+
+export interface CopyInstructorAssignmentsResultDto {
+  assignedCount: number;
+  skippedNoSourceCount: number;
+  failedCount: number;
+  errors: string[];
 }
 
 export interface BulkAssignInstructorResultDto {

@@ -17,6 +17,14 @@ public sealed class SchedulingConstraintConfig
     public TimeOnly LunchBreakEnd { get; set; }
     public int MaxConsecutiveHours { get; set; }
     public int BreakDurationMinutes { get; set; }
+
+    /// <summary>
+    /// H-WL — instructor.MaxWeeklyHours=0 (girilmemiş) olduğunda uygulanacak kurumsal varsayılan
+    /// haftalık ders saati limiti. V2 WeeklyLoadEncoder ile parite (encoder de override yoksa bunu
+    /// uygular); evaluator eskiden 0'ı "limitsiz" sayıp hiç raporlamıyordu (drift).
+    /// SystemConfig: <c>Schedule.DefaultInstructorMaxWeeklyHours</c> (default 30).
+    /// </summary>
+    public int DefaultInstructorMaxWeeklyHours { get; set; } = 30;
     public int AmphiThreshold { get; set; }
     public int TheoryLabSplitThreshold { get; set; }
 
@@ -79,6 +87,14 @@ public sealed class SchedulingConstraintConfig
     public int EnrollmentConflictHardThreshold { get; set; } = 1;
 
     /// <summary>
+    /// DIST — dağıtım kuralı ihlal ceza ağırlıkları. V2 DistributionConstraintEncoder ile TEK kaynak
+    /// (aynı SystemConfig key'leri: Schedule.DistDiscouragedWeight / DistStronglyDiscouragedWeight).
+    /// Evaluator eskiden 30/10/5 hardcoded kullanıyordu → solver başka, ekran başka skor gösteriyordu.
+    /// </summary>
+    public int DistDiscouragedWeight { get; set; } = 50;
+    public int DistStronglyDiscouragedWeight { get; set; } = 200;
+
+    /// <summary>
     /// SystemConfig key/value haritasından scheduling constraint config'i kurar.
     /// Hem manuel atama (SchedulingService) hem otomatik programlama (AutoScheduleEngine)
     /// hem simulasyon (SimulationService) tek yerden okusun diye burada toplu.
@@ -104,6 +120,7 @@ public sealed class SchedulingConstraintConfig
 
             // Plan 11 Faz 1.2 — V2 encoder ile parite kaynaklar
             MaxDailyHours = GetInt(config, "Schedule.MaxDailyHoursPerInstructor", 9),
+            DefaultInstructorMaxWeeklyHours = GetInt(config, "Schedule.DefaultInstructorMaxWeeklyHours", 30),
             // 2026-05-19: AmphiThresholdEnabled + ClassroomTypeRequirementEnabled artık
             // H4.Parameters JSON'undan geliyor; ApplyConstraintStateOverrides(state) ile setlensin.
 
@@ -130,6 +147,9 @@ public sealed class SchedulingConstraintConfig
             // H5.Parameters JSON'undan ApplyConstraintStateOverrides ile setlenir.
             CurriculumConflictMode = "curriculum",
             EnrollmentConflictHardThreshold = 1,
+            // DIST ceza ağırlıkları — encoder ile AYNI SystemConfig key'leri (tek kaynak).
+            DistDiscouragedWeight = GetInt(config, "Schedule.DistDiscouragedWeight", 50),
+            DistStronglyDiscouragedWeight = GetInt(config, "Schedule.DistStronglyDiscouragedWeight", 200),
         };
     }
 

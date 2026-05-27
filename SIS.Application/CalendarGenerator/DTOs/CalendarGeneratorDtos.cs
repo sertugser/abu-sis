@@ -210,7 +210,9 @@ public record WhatIfResultDto(
     int QualityScore
 );
 
-public record ApplyCalendarDraftRequestDto(bool ForceOverwrite = false);
+// Semesters: null/boş → taslaktaki tüm yarıyıllar uygulanır (geriye uyumlu).
+// Dolu ise → yalnızca seçili yarıyıllar uygulanır; seçilmeyenler için ne dönem oluşturulur ne event yazılır.
+public record ApplyCalendarDraftRequestDto(bool ForceOverwrite = false, IReadOnlyList<SemesterType>? Semesters = null);
 
 public record ApplyCalendarDraftResultDto(
     bool Success,

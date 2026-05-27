@@ -58,9 +58,10 @@ import {
   CLASSROOM_TYPE_OPTIONS,
 } from '../hooks/useAdminCourseCatalog';
 import {
-  useAdminFaculties,
   useAdminDepartmentsByStructure,
 } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   COURSE_LANGUAGE_LABELS,
   TEACHING_METHOD_LABELS,
@@ -627,6 +628,14 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
   const removeCrossList = useRemoveCrossList();
   const { data: sections = [], isLoading: sectionsLoading } = useCourseSections(courseId);
 
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission('menu.ders-katalogu.create');
+  const canEdit = hasPermission('menu.ders-katalogu.edit');
+  const canDelete = hasPermission('menu.ders-katalogu.delete');
+  const canPrerequisite = hasPermission('menu.ders-katalogu.prerequisite');
+  const canEquivalency = hasPermission('menu.ders-katalogu.equivalency');
+  const canCrossList = hasPermission('menu.ders-katalogu.cross-list');
+
   const [editMode, setEditMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formError, setFormError] = useState('');
@@ -893,26 +902,30 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                         <div key={p.courseId} className="flex items-center gap-1 bg-muted rounded-full pl-2.5 pr-1 py-0.5 text-xs">
                           <span className="font-mono font-medium text-foreground">{p.code}</span>
                           <span className="text-muted-foreground">{p.name}</span>
-                          <button
-                            className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors"
-                            onClick={() => removePrereq.mutate({ courseId, requiredCourseId: p.courseId })}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
+                          {canPrerequisite && (
+                            <button
+                              className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                              onClick={() => removePrereq.mutate({ courseId, requiredCourseId: p.courseId })}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      className="pl-8 h-8 text-xs"
-                      placeholder="Önkoşul ekle..."
-                      value={prereqSearch}
-                      onChange={e => setPrereqSearch(e.target.value)}
-                    />
-                  </div>
-                  {prereqSearch && prereqCandidates.length > 0 && (
+                  {canPrerequisite && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        className="pl-8 h-8 text-xs"
+                        placeholder="Önkoşul ekle..."
+                        value={prereqSearch}
+                        onChange={e => setPrereqSearch(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {canPrerequisite && prereqSearch && prereqCandidates.length > 0 && (
                     <div className="border border-border rounded-md mt-1 divide-y divide-border max-h-40 overflow-y-auto bg-background">
                       {prereqCandidates.map(c => (
                         <button
@@ -959,26 +972,30 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                         <div key={e.courseId} className="flex items-center gap-1 bg-primary/10 rounded-full pl-2.5 pr-1 py-0.5 text-xs">
                           <span className="font-mono font-medium text-primary">{e.code}</span>
                           <span className="text-primary/70">{e.name}</span>
-                          <button
-                            className="ml-0.5 text-primary/40 hover:text-destructive transition-colors"
-                            onClick={() => removeEquiv.mutate({ courseId, equivalentCourseId: e.courseId })}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
+                          {canEquivalency && (
+                            <button
+                              className="ml-0.5 text-primary/40 hover:text-destructive transition-colors"
+                              onClick={() => removeEquiv.mutate({ courseId, equivalentCourseId: e.courseId })}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      className="pl-8 h-8 text-xs"
-                      placeholder="Eşdeğer ders ekle..."
-                      value={equivSearch}
-                      onChange={e => setEquivSearch(e.target.value)}
-                    />
-                  </div>
-                  {equivSearch && equivCandidates.length > 0 && (
+                  {canEquivalency && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        className="pl-8 h-8 text-xs"
+                        placeholder="Eşdeğer ders ekle..."
+                        value={equivSearch}
+                        onChange={e => setEquivSearch(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {canEquivalency && equivSearch && equivCandidates.length > 0 && (
                     <div className="border border-border rounded-md mt-1 divide-y divide-border max-h-40 overflow-y-auto bg-background">
                       {equivCandidates.map(c => (
                         <button
@@ -1008,26 +1025,30 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
                         <div key={x.courseId} className="flex items-center gap-1 bg-violet-500/10 rounded-full pl-2.5 pr-1 py-0.5 text-xs">
                           <span className="font-mono font-medium text-violet-700">{x.code}</span>
                           <span className="text-violet-700/70">{x.name}</span>
-                          <button
-                            className="ml-0.5 text-violet-700/40 hover:text-destructive transition-colors"
-                            onClick={() => removeCrossList.mutate({ courseId, linkedCourseId: x.courseId })}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
+                          {canCrossList && (
+                            <button
+                              className="ml-0.5 text-violet-700/40 hover:text-destructive transition-colors"
+                              onClick={() => removeCrossList.mutate({ courseId, linkedCourseId: x.courseId })}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      className="pl-8 h-8 text-xs"
-                      placeholder="Cross-list ders ekle..."
-                      value={crossListSearch}
-                      onChange={e => setCrossListSearch(e.target.value)}
-                    />
-                  </div>
-                  {crossListSearch && crossListCandidates.length > 0 && (
+                  {canCrossList && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        className="pl-8 h-8 text-xs"
+                        placeholder="Cross-list ders ekle..."
+                        value={crossListSearch}
+                        onChange={e => setCrossListSearch(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {canCrossList && crossListSearch && crossListCandidates.length > 0 && (
                     <div className="border border-border rounded-md mt-1 divide-y divide-border max-h-40 overflow-y-auto bg-background">
                       {crossListCandidates.map(c => (
                         <button
@@ -1358,24 +1379,26 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
             <Separator className="mt-3 mb-3" />
             <DialogFooter className="flex-row justify-between sm:justify-between gap-2 w-full">
               <div className="flex items-center gap-2">
-                {!editMode && (
+                {!editMode && canEdit && (
                   <Button size="sm" variant="outline" className="min-w-[100px]" onClick={() => setEditMode(true)}>
                     <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Düzenle
                   </Button>
                 )}
-                {!editMode && (
+                {!editMode && canCreate && (
                   <Button size="sm" variant="outline" className="min-w-[100px]" onClick={() => onDuplicate(initialForm)}>
                     <Copy className="h-3.5 w-3.5 mr-1.5" /> Çoğalt
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="min-w-[100px] text-destructive hover:text-destructive hover:bg-destructive/5"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Sil
-                </Button>
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-w-[100px] text-destructive hover:text-destructive hover:bg-destructive/5"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Sil
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {editMode ? (
@@ -1545,6 +1568,10 @@ function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
 }
 
 export default function CourseCatalogAdminPage() {
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission('menu.ders-katalogu.create');
+  const canDelete = hasPermission('menu.ders-katalogu.delete');
+
   // Filter state
   const [search, setSearch] = useState('');
   const [facultyId, setFacultyId] = useState<number | undefined>(undefined);
@@ -1599,7 +1626,7 @@ export default function CourseCatalogAdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Data
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: deptsByFaculty = [] } = useAdminDepartmentsByStructure(facultyId);
 
   const { data: allCourses = [], isLoading } = useAdminCourses({
@@ -1993,9 +2020,11 @@ export default function CourseCatalogAdminPage() {
                 {dense ? 'Konfor' : 'Yoğun'}
               </Button>
 
-              <Button size="sm" className="h-8 text-xs" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> Yeni Ders Aç
-              </Button>
+              {canCreate && (
+                <Button size="sm" className="h-8 text-xs" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Yeni Ders Aç
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -2016,15 +2045,17 @@ export default function CourseCatalogAdminPage() {
             >
               Seçimi Temizle
             </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="h-7 text-xs ml-auto"
-              onClick={() => setBulkDeleteConfirmOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Seçilenleri Sil ({selectedIds.size})
-            </Button>
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs ml-auto"
+                onClick={() => setBulkDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Seçilenleri Sil ({selectedIds.size})
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -2092,9 +2123,11 @@ export default function CourseCatalogAdminPage() {
                 >
                   <X className="h-3.5 w-3.5 mr-1.5" /> Filtreleri Temizle
                 </Button>
-                <Button size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Yeni Ders Aç
-                </Button>
+                {canCreate && (
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Yeni Ders Aç
+                  </Button>
+                )}
               </div>
             </div>
           ) : (

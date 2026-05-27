@@ -30,7 +30,7 @@ public static class RolePermissionSeed
         new Dictionary<string, IReadOnlyList<string>>
         {
             // ═══════════════════════════════════════════════════════════════════════════
-            // Student — 31 permission (17 view + 14 action)
+            // Student — 29 permission (17 view + 12 action)
             // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Student"] = new[]
@@ -68,8 +68,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
-                "menu.ogrenci-rehberi.eligibility",
-                "menu.ogrenci-rehberi.view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -121,23 +119,23 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AcademicAdvisor — 32 permission (10 view + 22 action)
+            // AcademicAdvisor — sadece danışmanlık sayfaları.
             // C2 sign-off: not-girisi.* YOK — sidebar'dan kaldırıldı.
+            // Hoca/ders-verme sayfaları (derslerim, ders-programim, yoklama-girisi,
+            // degerlendirme-sonuclari) bilinçli olarak çıkarıldı: bunlar Instructor
+            // rolüne aittir, saf danışman ders vermez. Aynı kişi hem hoca hem danışman
+            // ise bu sayfaları Öğretim Üyesi rolüyle görür.
             // ═══════════════════════════════════════════════════════════════════════════
             ["AcademicAdvisor"] = new[]
             {
-                // ── View permissions (10) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
                 "menu.raporlarim.view",
                 "menu.duyurular.view",
                 "menu.danisman-ders-kisitlari.view",
-                "menu.derslerim.view",
-                "menu.yoklama-girisi.view",
-                "menu.ders-programim.view",
                 "menu.ders-kayit-duzenleme.view",
                 "menu.ogrenci-rehberi.view",
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.sifre-degistir.view",
 
                 // ── Action permissions (22) ──
@@ -146,7 +144,6 @@ public static class RolePermissionSeed
                 "menu.danisman-ders-kisitlari.create",
                 "menu.danisman-ders-kisitlari.edit",
                 "menu.danisman-ders-kisitlari.delete",
-                "menu.degerlendirme-sonuclari.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
@@ -160,7 +157,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AdministrativeStaff — 105 permission (18 view + 87 action)
+            // AdministrativeStaff — 109 permission (18 view + 91 action)
             // ═══════════════════════════════════════════════════════════════════════════
             ["AdministrativeStaff"] = new[]
             {
@@ -177,6 +174,12 @@ public static class RolePermissionSeed
                 "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
+                "menu.sinav-mufredati.view",
+                "menu.sinav-mufredati.edit",
+                "menu.sinav-mufredati.create",
+                "menu.sinav-mufredati.delete",
+                "menu.mufredat-ders-intibak.view",
+                "menu.mufredat-ders-intibak.edit",
                 "menu.ders-programi-olusturma.view",
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
@@ -197,6 +200,14 @@ public static class RolePermissionSeed
                 // ── Action permissions: Akademik Takvim Oluşturucu (broad) ──
                 "menu.akademik-takvim-olusturma.generate",
                 "menu.akademik-takvim-olusturma.simulate",
+
+                // ── Ders Kataloğu (CRUD — Öğr. İşleri kataloğu yönetir) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
 
                 // ── Müfredat (publish/archive HARİÇ — DepMgr+) ──
                 "menu.mufredat-islemleri.create",
@@ -244,12 +255,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.import",
 
                 // ── Kısıtlamalar (toggle/weight HARİÇ — SysAdmin only; exception HARİÇ — DepMgr+) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
 
                 // ── Dönem Programı Aktarım ──
                 "menu.donem-programi-aktarim.transfer",
@@ -259,6 +268,19 @@ public static class RolePermissionSeed
 
                 // ── Öğrenci & Personel CRUD ──
                 "menu.ogrenci-rehberi.create",
+                "menu.ogrenci-rehberi.edit-academic", // edit-academic: şimdilik yalnızca AdministrativeStaff — akademik-düzenleme planında Dean/DepartmentManager kapsamı tekrar değerlendirilecek
+                "menu.ogrenci-rehberi.edit-personal",
+                "menu.ogrenci-rehberi.edit-documents",
+                "menu.ogrenci-rehberi.generate-documents",
+                "menu.ogrenci-rehberi.edit-scholarship",
+                "menu.ogrenci-rehberi.edit-placement",
+                "menu.ogrenci-rehberi.integration",
+                "menu.ogrenci-no-degistirme.change",
+
+                // ── Sınıf Atlatma (öğrenci kartı paneli) ──
+                "menu.sinif-atlatma-islemleri.view",
+                "menu.sinif-atlatma-islemleri.promote",
+                "menu.sinif-atlatma-islemleri.rollback",
                 "menu.toplu-danisman-atama.assign",
                 "menu.toplu-mufredat-atama.assign",
                 "menu.personel-listesi.create",
@@ -277,13 +299,12 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // DepartmentManager — 126 permission (24 view + 102 action)
+            // DepartmentManager — 125 permission (24 view + 101 action)
             // AdministrativeStaff'ın yetkileri + onay ekleri (publish/archive, swap/lock/unlock,
             // exception approve, dönem kapatma, sınıf atlatma)
             // ═══════════════════════════════════════════════════════════════════════════
@@ -300,6 +321,12 @@ public static class RolePermissionSeed
                 "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
+                "menu.sinav-mufredati.view",
+                "menu.sinav-mufredati.edit",
+                "menu.sinav-mufredati.create",
+                "menu.sinav-mufredati.delete",
+                "menu.mufredat-ders-intibak.view",
+                "menu.mufredat-ders-intibak.edit",
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ogretim-elemani-atama.view",
                 "menu.donem-programi-aktarim.view",
@@ -322,6 +349,21 @@ public static class RolePermissionSeed
                 "menu.sinif-atlatma-islemleri.view",
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
+                "menu.mufredat-sinif-donem.view",
+
+                // ── Ders Kataloğu (CRUD) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
+
+                // ── Sınıf Atlatma Kuralları (promotion rules — görüntüle + düzenle) ──
+                "menu.sinif-atlatma-kurallari.view",
+                "menu.sinif-atlatma-kurallari.create",
+                "menu.sinif-atlatma-kurallari.edit",
+                "menu.sinif-atlatma-kurallari.delete",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
@@ -373,12 +415,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.unlock",
 
                 // ── Kısıtlamalar (exception DAHIL) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
                 "menu.ders-programi-kisitlamalari.exception",
                 "menu.ders-programi-kisitlamalari.exception-pending",
                 "menu.ders-programi-kisitlamalari.exception-approve",
@@ -418,15 +458,13 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // Dean — 144 permission (27 view + 117 action)
-            // DepartmentManager + faculty-level program onayı + program kontenjan + AdminStaff CRUD
+            // Dean — DepartmentManager + faculty-level program onayı + AdminStaff CRUD
             // ═══════════════════════════════════════════════════════════════════════════
             ["Dean"] = new[]
             {
@@ -436,12 +474,17 @@ public static class RolePermissionSeed
                 // Patch: duyurular admin'lerden kaldırıldı.
                 "menu.akademik-takvim.view",
                 "menu.duyurular-admin.view",
-                "menu.program-kontenjan.view",
                 "menu.ders-katalogu.view",
                 "menu.mufredat-islemleri.view",
                 "menu.secmeli-yapilandirma.view",
                 "menu.secmeli-ders-gruplari.view",
                 "menu.ders-acma-islemleri.view",
+                "menu.sinav-mufredati.view",
+                "menu.sinav-mufredati.edit",
+                "menu.sinav-mufredati.create",
+                "menu.sinav-mufredati.delete",
+                "menu.mufredat-ders-intibak.view",
+                "menu.mufredat-ders-intibak.edit",
                 "menu.ders-programi-kisitlamalari.view",
                 "menu.ders-programi-olusturma.view",
                 "menu.ogretim-elemani-atama.view",
@@ -464,12 +507,24 @@ public static class RolePermissionSeed
                 "menu.sifre-degistir.view",
                 "menu.sinif-atlatma-islemleri.view",
 
-                // ── Program Kontenjan ──
+                // ── Toplu Atama ──
                 "menu.toplu-danisman-atama.view",
                 "menu.toplu-mufredat-atama.view",
-                "menu.program-kontenjan.create",
-                "menu.program-kontenjan.edit",
-                "menu.program-kontenjan.delete",
+                "menu.mufredat-sinif-donem.view",
+
+                // ── Ders Kataloğu (CRUD) ──
+                "menu.ders-katalogu.create",
+                "menu.ders-katalogu.edit",
+                "menu.ders-katalogu.delete",
+                "menu.ders-katalogu.prerequisite",
+                "menu.ders-katalogu.equivalency",
+                "menu.ders-katalogu.cross-list",
+
+                // ── Sınıf Atlatma Kuralları (promotion rules — görüntüle + düzenle) ──
+                "menu.sinif-atlatma-kurallari.view",
+                "menu.sinif-atlatma-kurallari.create",
+                "menu.sinif-atlatma-kurallari.edit",
+                "menu.sinif-atlatma-kurallari.delete",
 
                 // ── Müfredat (publish/archive DAHIL) ──
                 "menu.mufredat-islemleri.create",
@@ -521,12 +576,10 @@ public static class RolePermissionSeed
                 "menu.ders-programi-olusturma.unlock",
 
                 // ── Kısıtlamalar (exception DAHIL) ──
-                "menu.ders-programi-kisitlamalari.snapshot",
                 "menu.ders-programi-kisitlamalari.create",
                 "menu.ders-programi-kisitlamalari.edit",
                 "menu.ders-programi-kisitlamalari.delete",
                 "menu.ders-programi-kisitlamalari.simulate",
-                "menu.ders-programi-kisitlamalari.apply",
                 "menu.ders-programi-kisitlamalari.exception",
                 "menu.ders-programi-kisitlamalari.exception-pending",
                 "menu.ders-programi-kisitlamalari.exception-approve",
@@ -570,7 +623,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
-                "menu.ogrenci-rehberi.eligibility",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
                 "menu.akilli-planlama.difficulty",

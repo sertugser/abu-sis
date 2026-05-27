@@ -1,12 +1,13 @@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import type { AccessibleDepartment } from '../../types/academicOperations';
-import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { LookupFaculty } from '../../hooks/useAdminLookup';
 import type { TermSummaryDto } from '../../types/term';
 import { AcademicHierarchyFilter } from './AcademicHierarchyFilter';
 
 export interface OpenedCoursesPanelFiltersProps {
-  faculties: FacultyDto[];
+  faculties: LookupFaculty[];
   structureDepartments: DepartmentDto[];
   accessibleDepartments: AccessibleDepartment[];
   programs: ProgramDto[];

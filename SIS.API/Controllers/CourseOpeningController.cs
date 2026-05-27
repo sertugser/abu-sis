@@ -382,6 +382,25 @@ public class CourseOpeningController(
         return Ok(result);
     }
 
+    [HttpPost("copy-instructor-assignments")]
+    [RequirePermission("menu.ogretim-elemani-atama.bulk-assign")]
+    public async Task<IActionResult> CopyInstructorAssignments(
+        [FromBody] CopyInstructorAssignmentsRequest request, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!await HasDepartmentAccessAsync(userId, request.DepartmentId, ct)) return Forbid();
+
+        try
+        {
+            var result = await _instructorAssignmentService.CopyInstructorAssignmentsFromTermAsync(request, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpGet("instructors/{instructorId}/workload")]
     [RequireAnyPermission("menu.ogretim-elemani-atama.view", "menu.ders-veren-ogretim-uyeleri.view")]
     public async Task<IActionResult> GetInstructorWorkload(

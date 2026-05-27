@@ -146,10 +146,30 @@ function ConstraintEditDialog({
     toast.showError('Kaydedilemedi', err instanceof Error ? err.message : fallback);
 
   const [paramDraft, setParamDraft] = useState<Record<string, string>>({});
+  // Ağırlık slider'ı lokal draft ile sürüklenir; istek yalnız bırakınca (commit) gider.
+  // Aksi halde her ara değer ayrı PATCH + tüm liste invalidate → 3→9 çekince 6+ istek.
+  const [weightDraft, setWeightDraft] = useState(constraint.weight);
   // PARAMETER_SCHEMAS[code] entry yoksa `?? []` her render'da yeni [] referansı yaratır →
   // useEffect dep değişti sanır → setState → re-render → loop ("Maximum update depth exceeded").
   // useMemo ile constraint.code'a göre stable referans tutuyoruz.
   const schema = useMemo(() => PARAMETER_SCHEMAS[constraint.code] ?? [], [constraint.code]);
+
+  // Sunucu state'i (kayıt sonrası refetch / dialog açılışı) draft'a senkronlanır.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resync weight from server state
+    setWeightDraft(constraint.weight);
+  }, [constraint.weight, open]);
+
+  function commitWeight(w: number) {
+    if (w === constraint.weight) return; // değişmediyse istek atma
+    weightMutation.mutate(
+      { id: constraint.id, weight: w },
+      {
+        onSuccess: () => notifySuccess(`${constraint.name} ağırlığı ${w} olarak kaydedildi.`),
+        onError: (e) => notifyError(e, 'Ağırlık kaydedilemedi.'),
+      },
+    );
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -184,7 +204,17 @@ function ConstraintEditDialog({
     paramsMutation.mutate(
       { id: constraint.id, parameters: JSON.stringify(payload) },
       {
-        onSuccess: () => notifySuccess(`${constraint.name} parametreleri kaydedildi.`),
+        onSuccess: (data) => {
+          const unmapped = data?.unmappedKeys ?? [];
+          if (unmapped.length > 0) {
+            toast.showWarning(
+              'Bazı parametreler kaydedilmedi',
+              `Tanınmayan anahtar(lar): ${unmapped.join(', ')}. Diğer parametreler güncellendi.`,
+            );
+          } else {
+            notifySuccess(`${constraint.name} parametreleri kaydedildi.`);
+          }
+        },
         onError: (e) => notifyError(e, 'Parametreler kaydedilemedi.'),
       },
     );
@@ -327,16 +357,21 @@ function ConstraintEditDialog({
           {constraint.category === 'Soft' && (
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Ağırlık <span className="font-mono text-foreground ml-1">{constraint.weight}</span>
+                Ağırlık <span className="font-mono text-foreground ml-1">{weightDraft}</span>
+                {weightMutation.isPending && (
+                  <span className="ml-2 text-[10px] font-normal text-muted-foreground">kaydediliyor…</span>
+                )}
               </label>
               <input
                 type="range"
                 min={1}
                 max={10}
-                value={constraint.weight}
-                onChange={(e) => weightMutation.mutate({ id: constraint.id, weight: Number(e.target.value) })}
+                value={weightDraft}
+                onChange={(e) => setWeightDraft(Number(e.target.value))}
+                onPointerUp={(e) => commitWeight(Number((e.target as HTMLInputElement).value))}
+                onKeyUp={(e) => commitWeight(Number((e.target as HTMLInputElement).value))}
                 className="w-full accent-amber-500"
-                disabled={!canEdit}
+                disabled={!canEdit || weightMutation.isPending}
               />
               <p className="text-[11px] text-muted-foreground">
                 1 = az önemli, 10 = çok önemli. Yüksek ağırlık ihlal cezasını artırır.
@@ -506,18 +541,24 @@ export default function ConstraintManagementPage() {
             <>
               <div className="w-px h-6 bg-gray-200 mx-1" />
 
-              <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
-              <select
-                className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[160px]"
-                value={effectiveTermId ?? ''}
-                onChange={(e) => setSelectedTermId(Number(e.target.value))}
-              >
-                {terms.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} {t.isActive ? '(Aktif)' : ''}
-                  </option>
-                ))}
-              </select>
+              {/* Dönem seçici yalnız "Ders Eşleştirme" sekmesinde anlamlı:
+                  ilişkisel kısıtlamalar döneme bağlı. Kısıtlar sekmesi global. */}
+              {activeTab === 'pairing' && (
+                <>
+                  <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">Dönem</span>
+                  <select
+                    className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs focus:ring-1 focus:ring-gray-300 focus:outline-none min-w-[160px]"
+                    value={effectiveTermId ?? ''}
+                    onChange={(e) => setSelectedTermId(Number(e.target.value))}
+                  >
+                    {terms.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.isActive ? '(Aktif)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
 
               {activeTab === 'constraints' && (
                 <>

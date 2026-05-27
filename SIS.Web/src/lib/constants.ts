@@ -41,29 +41,18 @@ export const ROUTES = {
   STUDENT_NUMBER_CHANGE: '/ogrenci-no-degistirme',
   STUDENT_PROMOTION: '/sinif-atlatma-islemleri',
   BULK_ADVISOR_ASSIGNMENT: '/toplu-danisman-atama',
-  BULK_INTERNSHIP_ADVISOR_ASSIGNMENT: '/toplu-staj-danisman-atama',
   BULK_CURRICULUM_ASSIGNMENT: '/toplu-mufredat-atama',
-  BULK_COURSE_REGISTRATION: '/toplu-ders-kaydi',
   COURSE_REGISTRATION_EDIT: '/ders-kayit-duzenleme',
-  COURSE_TRANSFER: '/dersler-arasi-ogrenci-transfer',
   LETTER_GRADE_EDIT: '/harf-notu-duzenleme',
   // ── Yönetim → Kullanıcı İşlemleri ──
   USER_PERMISSION_GROUPS: '/kullanici-yetki-gruplari',
   USER_REPORT_GROUPS: '/kullanici-rapor-gruplari',
-  USER_GROUP_RESTRICTIONS: '/kullanici-grup-sinirlandirmalar',
-  USER_REPORT_DESIGN_GROUPS: '/kullanici-rapor-tasarim-gruplari',
   USER_DELEGATION: '/kullanici-vekalet-islemleri',
   PASSWORD_CHANGE: '/sifre-degistir',
   // ── Yönetim → Genel Ayarlar ──
-  UNIVERSITY_INFO: '/universite-bilgileri',
-  INSTITUTIONAL_INTEGRATION: '/kurumsal-entegrasyon-tanimlari',
   DOCUMENT_RESTRICTIONS: '/belge-sinirlandirmalar',
   WEB_MODULE_SETTINGS: '/web-modul-ayarlari',
-  EBYS_SIGNATURE_AUTHORITIES: '/ebys-imza-yetkilileri',
-  FACULTY_SIGNATURE_UPLOAD: '/fakulte-imza-yukleme-islemleri',
-  OSYM_REGISTRATION_CALENDAR: '/osym-kayit-takvimi',
   TIME_SLOT_MANAGEMENT: '/ders-saatleri-yonetimi',
-  PROGRAM_QUOTA: '/program-kontenjan',
   SCHEDULE_APPROVAL: '/program-onayi',
   CLASSROOM_ADMIN: '/derslik-yonetimi',
   CONSTRAINT_MANAGEMENT: '/ders-programi-kisitlamalari',
@@ -83,6 +72,8 @@ export const ROUTES = {
   // Internal Announcements
   ANNOUNCEMENTS: '/duyurular',
   ANNOUNCEMENT_MANAGEMENT: '/duyuru-yonetimi',
+  // Kişisel bildirimler
+  NOTIFICATIONS: '/bildirimler',
 } as const;
 
 export const QUERY_KEYS = {
@@ -120,8 +111,6 @@ export const QUERY_KEYS = {
   // Admin query keys
   adminUsers: (search?: string, role?: string, isActive?: boolean, page?: number) =>
     ['admin', 'users', search, role, isActive, page] as const,
-  adminStudents: (search?: string, programId?: number, departmentId?: number, status?: string, page?: number) =>
-    ['admin', 'students', search, programId, departmentId, status, page] as const,
   adminInstructors: (search?: string, departmentId?: number) =>
     ['admin', 'instructors', search, departmentId] as const,
   adminTerms: ['admin', 'terms'] as const,
@@ -191,6 +180,7 @@ export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructi
 export const IMPLEMENTED_ROUTES = new Set([
   '/',
   '/akademik-takvim',
+  '/bildirimler',
   '/ders-kayit',
   '/akilli-planlama',
   '/plan',
@@ -229,27 +219,17 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/ogrenci-no-degistirme',
   '/sinif-atlatma-islemleri',
   '/toplu-danisman-atama',
-  '/toplu-staj-danisman-atama',
   '/toplu-mufredat-atama',
-  '/toplu-ders-kaydi',
   '/ders-kayit-duzenleme',
-  '/dersler-arasi-ogrenci-transfer',
   '/harf-notu-duzenleme',
   '/kullanici-yetki-gruplari',
   '/kullanici-rapor-gruplari',
-  '/kullanici-grup-sinirlandirmalar',
-  '/kullanici-rapor-tasarim-gruplari',
   '/kullanici-vekalet-islemleri',
   '/sifre-degistir',
-  '/universite-bilgileri',
-  '/kurumsal-entegrasyon-tanimlari',
   '/belge-sinirlandirmalar',
   '/web-modul-ayarlari',
-  '/ebys-imza-yetkilileri',
-  '/fakulte-imza-yukleme-islemleri',
   '/menu-yonetimi',
   '/raporlarim',
-  '/__dev/permission-matrix',
   '/program-onayi',
   '/derslik-yonetimi',
   '/ders-programi-kisitlamalari',
@@ -258,14 +238,13 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/secmeli-yapilandirma/gruplar',
   '/secmeli-yapilandirma/tipler',
   '/ders-veren-ogretim-uyeleri',
+  '/mufredat-ders-intibak',
   '/donem-programi-aktarim',
   '/ders-degerlendirme',
   '/degerlendirme-sonuclari',
   '/degerlendirme-donemi-yonetimi',
   '/duyurular',
   '/duyuru-yonetimi',
-  '/osym-kayit-takvimi',
-  '/program-kontenjan',
   '/ders-saatleri-yonetimi',
   '/sinav-mufredati',
   '/subelendirme-islemleri',
@@ -279,6 +258,15 @@ export const STUDENT_STATUS_LABELS: Record<string, string> = {
   Suspended: 'Uzaklaştırılmış',
   Dismissed: 'İlişik Kesilmiş',
   Graduated: 'Mezun',
+};
+
+export const STUDENT_STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'> = {
+  Active: 'success',
+  Passive: 'secondary',
+  Frozen: 'warning',
+  Suspended: 'destructive',
+  Dismissed: 'destructive',
+  Graduated: 'default',
 };
 
 export const COURSE_LANGUAGE_LABELS: Record<string, string> = {

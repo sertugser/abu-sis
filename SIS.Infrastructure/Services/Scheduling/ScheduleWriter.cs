@@ -50,7 +50,7 @@ public sealed class ScheduleWriter : IScheduleWriter
         // Resolve which academic time slots are covered by the requested ranges,
         // preserving day/time-ordered emission so the BlockType heuristic
         // (theory-first, lab-second) remains correct.
-        var allMatchedSlots = new List<(TimeSlot timeSlot, int? classroomId)>();
+        var allMatchedSlots = new List<(TimeSlot timeSlot, int? classroomId, ScheduleBlockType? blockType)>();
         foreach (var slot in scheduleSlots)
         {
             var slotDay = (DayOfWeek)slot.Day;
@@ -70,7 +70,7 @@ public sealed class ScheduleWriter : IScheduleWriter
             // Per-slot classroom override (Online sections may have null at both levels).
             var effectiveClassroomId = slot.ClassroomId ?? defaultClassroomId;
             foreach (var ts in matchingTimeSlots)
-                allMatchedSlots.Add((ts, effectiveClassroomId));
+                allMatchedSlots.Add((ts, effectiveClassroomId, slot.BlockType));
         }
 
         // Slot sayısı (theory+lab) kontrolü kaldırıldı — V2 RuleEngine H12_CreditHourRule aynı
@@ -90,13 +90,13 @@ public sealed class ScheduleWriter : IScheduleWriter
             .FirstOrDefaultAsync(ct);
 
         var slotIndex = 0;
-        foreach (var (timeSlot, effectiveClassroomId) in allMatchedSlots)
+        foreach (var (timeSlot, effectiveClassroomId, explicitBlockType) in allMatchedSlots)
         {
-            // BlockType heuristic: first TheoryHours slots → Theory, rest → Lab.
-            // Solver/scheduler emits theory blocks before lab blocks, so slot order matches.
-            var blockType = slotIndex < theoryHours
-                ? ScheduleBlockType.Theory
-                : ScheduleBlockType.Lab;
+            // Açık blockType sağlanmışsa (düzenleyici teori/lab'ı ayrı sürükler) onu yaz; aksi halde
+            // pozisyonel heuristik (ilk TheoryHours slot → Theory). Açık değer, lab bloğu teori'den
+            // önce atandığında yanlış etiketlenmesini önler (sıra-bağımlı tahmin sorunu).
+            var blockType = explicitBlockType
+                ?? (slotIndex < theoryHours ? ScheduleBlockType.Theory : ScheduleBlockType.Lab);
 
             _context.SectionSchedules.Add(new SectionSchedule
             {
@@ -107,21 +107,6 @@ public sealed class ScheduleWriter : IScheduleWriter
             });
             slotIndex++;
         }
-    }
-
-    private async Task<bool> IsConstraintHardAsync(string code, bool defaultIsHard, CancellationToken ct)
-    {
-        var definition = await _context.ConstraintDefinitions
-            .AsNoTracking()
-            .Where(d => d.Code == code)
-            .Select(d => new { d.IsEnabled, d.Category })
-            .FirstOrDefaultAsync(ct);
-
-        if (definition == null)
-            return defaultIsHard;
-        if (!definition.IsEnabled)
-            return false;
-        return string.Equals(definition.Category, "Hard", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DayLabel(DayOfWeek day) => day switch

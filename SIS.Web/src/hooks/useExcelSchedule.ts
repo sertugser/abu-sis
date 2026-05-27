@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { exportScheduleExcel, exportSchedulePdf, importScheduleApply, importSchedulePreview } from '../api/scheduleExcel.api';
+import { useToast } from '@/components/ui/global-toast';
 
 export function useExportExcel() {
+  const { showError } = useToast();
   return useMutation({
     mutationFn: ({ facultyId, termId }: { facultyId: number; termId: number }) =>
       exportScheduleExcel(facultyId, termId),
@@ -13,10 +15,12 @@ export function useExportExcel() {
       a.click();
       URL.revokeObjectURL(url);
     },
+    onError: () => showError('Excel indirilemedi', 'Program dışa aktarılamadı, lütfen tekrar deneyin.'),
   });
 }
 
 export function useExportPdf() {
+  const { showError } = useToast();
   return useMutation({
     mutationFn: ({ termId, facultyId, departmentId }: { termId: number; facultyId: number; departmentId?: number }) =>
       exportSchedulePdf(termId, facultyId, departmentId),
@@ -28,6 +32,7 @@ export function useExportPdf() {
       a.click();
       URL.revokeObjectURL(url);
     },
+    onError: () => showError('PDF indirilemedi', 'Program dışa aktarılamadı, lütfen tekrar deneyin.'),
   });
 }
 
@@ -61,7 +66,6 @@ export function useImportApply() {
     }) => importScheduleApply(facultyId, termId, importSessionId, rowNumbers),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
-      qc.invalidateQueries({ queryKey: ['facultyPlanningConflicts'] });
     },
   });
 }

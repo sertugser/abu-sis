@@ -31,6 +31,12 @@ export interface CreatePermissionBundlePayload {
 
 export type UpdatePermissionBundlePayload = CreatePermissionBundlePayload;
 
+export interface AppliedBundleDto {
+  bundleId: number;
+  /** true → paketin güncel içeriği, role uygulanmış snapshot'tan farklı (Yeniden Uygula gerekir). */
+  isStale: boolean;
+}
+
 export async function listBundles(): Promise<PermissionBundleDto[]> {
   const res = await apiClient.get<PermissionBundleDto[]>('/admin/permission-bundles');
   return res.data;
@@ -63,7 +69,7 @@ export async function removeBundleFromRole(bundleId: number, roleId: number): Pr
   await apiClient.delete(`/admin/permission-bundles/${bundleId}/apply/${roleId}`);
 }
 
-export async function getAppliedBundleIds(roleId: number): Promise<number[]> {
-  const res = await apiClient.get<number[]>(`/admin/roles/${roleId}/applied-bundles`);
+export async function getAppliedBundles(roleId: number): Promise<AppliedBundleDto[]> {
+  const res = await apiClient.get<AppliedBundleDto[]>(`/admin/roles/${roleId}/applied-bundles`);
   return res.data;
 }

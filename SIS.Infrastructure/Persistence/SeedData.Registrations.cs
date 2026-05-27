@@ -49,9 +49,10 @@ public static partial class SeedData
             var deptInstructors = instructorsByDept.GetValueOrDefault(deptId, instructors.Take(1).ToList());
             int instrIdx = 0;
 
-            var targetCgpa = student.Cgpa;
-            var gradePattern = GetGradePattern(targetCgpa);
-            int gradeIndex = 0;
+            // Latent ability recovered from the student's provisional CGPA (set in
+            // SeedUsersAsync). Each course grade is drawn stochastically from this
+            // ability — see SeedData.GradeDistribution.
+            var ability = CgpaToAbility(student.Cgpa);
 
             decimal totalQualityPoints = 0;
             int totalGpaEcts = 0;
@@ -69,7 +70,7 @@ public static partial class SeedData
             var failedCourses = new List<int>();
 
             // Withdrawal scenario: ~5% of borderline students
-            bool isBorderline = targetCgpa >= 2.00m && targetCgpa < 2.50m;
+            bool isBorderline = student.Cgpa >= 2.00m && student.Cgpa < 2.50m;
             bool hasWithdrawn = isBorderline && rng.Next(20) == 0;
             int withdrawSemester = hasWithdrawn ? rng.Next(1, student.CompletedSemesters + 1) : -1;
             bool withdrawUsed = false;
@@ -101,8 +102,7 @@ public static partial class SeedData
                     }
                     else
                     {
-                        grade = gradePattern[gradeIndex % gradePattern.Length];
-                        gradeIndex++;
+                        grade = DrawGrade(ability, rng);
                         var pt = GradePointMap.GetPoint(grade) ?? 0;
                         totalQualityPoints += pt * course.Ects;
                         totalGpaEcts += course.Ects;
@@ -172,8 +172,7 @@ public static partial class SeedData
                     }
                     else
                     {
-                        grade = gradePattern[gradeIndex % gradePattern.Length];
-                        gradeIndex++;
+                        grade = DrawGrade(ability, rng);
                         var pt = GradePointMap.GetPoint(grade) ?? 0;
                         totalQualityPoints += pt * cc.Course.Ects;
                         totalGpaEcts += cc.Course.Ects;
@@ -213,34 +212,6 @@ public static partial class SeedData
             await context.SaveChangesAsync();
         }
     }
-
-    /// <summary>
-    /// Three-band grade patterns (12 grades each, cycling):
-    /// Successful  (≥2.50): ~3.29 avg
-    /// Borderline (2.00–2.49): ~2.13 avg
-    /// Low        (&lt;2.00): ~0.96 avg (includes FF/NA for repeat scenarios)
-    /// </summary>
-    private static GradeCode[] GetGradePattern(decimal targetCgpa) => targetCgpa switch
-    {
-        >= 2.50m =>
-        [
-            GradeCode.AA, GradeCode.BA, GradeCode.BB, GradeCode.CB,
-            GradeCode.BB, GradeCode.AA, GradeCode.BA, GradeCode.BB,
-            GradeCode.CB, GradeCode.BA, GradeCode.BB, GradeCode.AA
-        ],
-        >= 2.00m =>
-        [
-            GradeCode.CC, GradeCode.CB, GradeCode.CC, GradeCode.CC,
-            GradeCode.DC, GradeCode.CB, GradeCode.CC, GradeCode.CB,
-            GradeCode.DC, GradeCode.CC, GradeCode.CB, GradeCode.CC
-        ],
-        _ =>
-        [
-            GradeCode.DC, GradeCode.FF, GradeCode.DD, GradeCode.CC,
-            GradeCode.NA, GradeCode.DD, GradeCode.DC, GradeCode.FF,
-            GradeCode.CC, GradeCode.DD, GradeCode.DC, GradeCode.NA
-        ],
-    };
 
     /// <summary>
     /// Find an existing section with available capacity, or create a new one.

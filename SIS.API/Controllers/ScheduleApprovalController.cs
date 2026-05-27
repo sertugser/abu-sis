@@ -111,7 +111,8 @@ public class ScheduleApprovalController : ControllerBase
             var nowStatus = DateTime.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowStatus && t.TermEnd >= nowStatus, cancellationToken);
+                .ActiveTerm()
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });
@@ -211,7 +212,8 @@ public class ScheduleApprovalController : ControllerBase
             var nowRevoke = DateTime.UtcNow;
             var activeTerm = await _context.AcademicTerms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowRevoke && t.TermEnd >= nowRevoke, cancellationToken);
+                .ActiveTerm()
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (activeTerm == null)
                 return NotFound(new { error = "Aktif akademik donem bulunamadi." });

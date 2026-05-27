@@ -6,43 +6,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LayoutGrid, List, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ClassroomWeeklyGrid from './ClassroomWeeklyGrid';
-import type { ClassroomInfo } from '@/types/scheduling';
-
-const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal Sınıf',
-  Lab: 'Laboratuvar',
-  Computer: 'Bilgisayar Lab',
-  Seminar: 'Seminer',
-  Amphitheater: 'Amfi',
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  Lecture: 'bg-blue-100 text-blue-700 border-blue-200',
-  Lab: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  Computer: 'bg-violet-100 text-violet-700 border-violet-200',
-  Seminar: 'bg-amber-100 text-amber-700 border-amber-200',
-  Amphitheater: 'bg-rose-100 text-rose-700 border-rose-200',
-};
+import { classroomTypeLabel, CLASSROOM_TYPE_COLORS } from '@/lib/classroomLabels';
+import type { ClassroomInfo, TimeSlotSummary } from '@/types/scheduling';
 
 type SortField = 'name' | 'occupancy' | 'courseCount' | 'capacity';
 type ViewMode = 'card' | 'table';
 
 interface ClassroomListTabProps {
   classrooms: ClassroomInfo[];
+  slots: TimeSlotSummary[];
   isLoading: boolean;
-}
-
-function getOccupancyRate(c: ClassroomInfo): number {
-  const totalSlots = 5 * 10;
-  const usedSlots = c.schedules.reduce((acc, s) => acc + (s.endHour - s.startHour + 1), 0);
-  return totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
 }
 
 function getUniqueCoursesCount(c: ClassroomInfo): number {
   return new Set(c.schedules.map(s => s.courseCode)).size;
 }
 
-export default function ClassroomListTab({ classrooms, isLoading }: ClassroomListTabProps) {
+export default function ClassroomListTab({ classrooms, slots, isLoading }: ClassroomListTabProps) {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
@@ -61,7 +41,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
     result = [...result].sort((a, b) => {
       switch (sortField) {
         case 'name': return a.name.localeCompare(b.name, 'tr');
-        case 'occupancy': return getOccupancyRate(b) - getOccupancyRate(a);
+        case 'occupancy': return b.weeklyOccupancyRate - a.weeklyOccupancyRate;
         case 'courseCount': return getUniqueCoursesCount(b) - getUniqueCoursesCount(a);
         case 'capacity': return b.capacity - a.capacity;
         default: return 0;
@@ -128,7 +108,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
         /* Card View */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {filtered.map(c => {
-            const occ = getOccupancyRate(c);
+            const occ = c.weeklyOccupancyRate;
             const courseCount = getUniqueCoursesCount(c);
             const totalHours = c.schedules.length;
             const isExpanded = expandedId === c.id;
@@ -143,8 +123,8 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                     <div>
                       <p className="font-semibold text-sm">{c.name}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border', TYPE_COLORS[c.type] ?? 'bg-gray-100')}>
-                          {TYPE_LABELS[c.type] ?? c.type}
+                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border', CLASSROOM_TYPE_COLORS[c.type] ?? 'bg-gray-100')}>
+                          {classroomTypeLabel(c.type)}
                         </span>
                         <span className="text-[11px] text-muted-foreground">{c.capacity} kişi</span>
                       </div>
@@ -170,7 +150,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
 
                 {isExpanded && (
                   <div className="border-t p-4 space-y-3">
-                    <ClassroomWeeklyGrid schedules={c.schedules} />
+                    <ClassroomWeeklyGrid schedules={c.schedules} slots={slots} />
                     {c.schedules.length > 0 && (
                       <div className="space-y-1">
                         <p className="text-xs font-semibold text-muted-foreground">Ders Listesi</p>
@@ -207,7 +187,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
             </TableHeader>
             <TableBody>
               {filtered.map(c => {
-                const occ = getOccupancyRate(c);
+                const occ = c.weeklyOccupancyRate;
                 const isExpanded = expandedId === c.id;
                 return (
                   <Fragment key={c.id}>
@@ -217,8 +197,8 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                     >
                       <TableCell className="text-xs font-medium">{c.name}</TableCell>
                       <TableCell>
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border', TYPE_COLORS[c.type])}>
-                          {TYPE_LABELS[c.type] ?? c.type}
+                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full border', CLASSROOM_TYPE_COLORS[c.type])}>
+                          {classroomTypeLabel(c.type)}
                         </span>
                       </TableCell>
                       <TableCell className="text-xs text-right">{c.capacity}</TableCell>
@@ -236,7 +216,7 @@ export default function ClassroomListTab({ classrooms, isLoading }: ClassroomLis
                     {isExpanded && (
                       <TableRow>
                         <TableCell colSpan={6} className="p-4 bg-gray-50/50">
-                          <ClassroomWeeklyGrid schedules={c.schedules} />
+                          <ClassroomWeeklyGrid schedules={c.schedules} slots={slots} />
                         </TableCell>
                       </TableRow>
                     )}

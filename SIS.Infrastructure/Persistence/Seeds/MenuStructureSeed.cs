@@ -83,8 +83,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Program Tanımları",              "/program-tanimlari",             "program-tanimlari",           4, "menu.program-tanimlari.view"),
             BuildItem(permissions, "Akademik Takvim",                "/akademik-takvim",               "akademik-takvim-goruntuleme", 5, "menu.akademik-takvim.view"),
             BuildItem(permissions, "Takvim Oluşturucu",              "/akademik-takvim-olusturma",     "akademik-takvim-olusturma",   6, "menu.akademik-takvim-olusturma.view"),
-            BuildItem(permissions, "ÖSYM Kayıt Takvimi",             "/osym-kayit-takvimi",            "osym-kayit-takvimi",          7, "menu.osym-kayit-takvimi.view"),
-            BuildItem(permissions, "Program Kontenjan Bilgileri",    "/program-kontenjan",             "program-kontenjan",           8, "menu.program-kontenjan.view"),
         };
 
         // ─── Modül 4: Danışmanlık İşlemleri (Phase 1'de boş — Karar #6) ──────────
@@ -141,7 +139,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Müfredat Sınıf Dönem Tanımları", "/mufredat-sinif-donem-tanimlari",      "mufredat-sinif-donem",           3,  "menu.mufredat-sinif-donem.view"),
             BuildItem(permissions, "Seçmeli Ders Yapılandırması",       "/secmeli-yapilandirma",                "secmeli-yapilandirma",           4,  "menu.secmeli-yapilandirma.view"),
             BuildItem(permissions, "Ders Aç (Müfredat)",             "/ders-acma-islemleri",                 "ders-acma-islemleri",            5,  "menu.ders-acma-islemleri.view"),
-            BuildItem(permissions, "Sınav Müfredatı",                  "/sinav-mufredati",                    "sinav-mufredati",                 6,  "menu.ders-acma-islemleri.view"),
             BuildItem(permissions, "Ders Aç (Hareket)",              "/donem-programi-aktarim",              "donem-programi-aktarim",         6,  "menu.donem-programi-aktarim.view"),
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",              "subelendirme-islemleri",         7,  "menu.subelendirme-islemleri.view"),
             BuildItem(permissions, "Ders Kontenjan İşlemleri",       "/ders-kontenjan-islemleri",            "ders-kontenjan-islemleri",       8,  "menu.ders-kontenjan-islemleri.view"),
@@ -149,9 +146,10 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Program Kısıtlamaları",          "/ders-programi-kisitlamalari",         "ders-programi-kisitlamalari",    10, "menu.ders-programi-kisitlamalari.view"),
             BuildItem(permissions, "Ders Programı Oluşturma",        "/ders-programi-olusturma",             "ders-programi-olusturma",        11, "menu.ders-programi-olusturma.view"),
             BuildItem(permissions, "Öğretim Elemanı Atama",          "/ogretim-elemani-atama",               "ogretim-elemani-atama",          12, "menu.ogretim-elemani-atama.view"),
-            BuildItem(permissions, "Derslik Doluluk Tablosu",        "/derslik-doluluk-tablosu",             "derslik-doluluk",                13, "menu.derslik-doluluk.view"),
-            BuildItem(permissions, "Ders Veren Öğretim Üyeleri",     "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
-            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  15, "menu.program-onayi.view"),
+            BuildItem(permissions, "Müfredat Ders İntibak İşlemleri","/mufredat-ders-intibak",               "mufredat-ders-intibak",          13, "menu.mufredat-ders-intibak.view"),
+            BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
+            BuildItem(permissions, "Sınav Müfredatı",                "/sinav-mufredati",                     "sinav-mufredati",                15, "menu.sinav-mufredati.view"),
+            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  16, "menu.program-onayi.view"),
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────
@@ -171,7 +169,6 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Şubelendirme İşlemleri",         "/subelendirme-islemleri",         "subelendirme-islemleri-bolum",      1, "menu.subelendirme-islemleri.view"),
             BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",     "ders-veren-ogretim-uyeleri-bolum",  2, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Toplu Danışman Atama",           "/toplu-danisman-atama",           "toplu-danisman-atama-bolum",        3, "menu.toplu-danisman-atama.view"),
-            BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",           "toplu-mufredat-atama-bolum",        4, "menu.toplu-mufredat-atama.view"),
         };
 
         // ─── Modül 8: Öğrenci İşlemleri (kayma: 7 → 8) ───────────────────────────
@@ -191,11 +188,8 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Öğrenci No Değiştirme",          "/ogrenci-no-degistirme",               "ogrenci-no-degistirme",          2,  "menu.ogrenci-no-degistirme.view"),
             BuildItem(permissions, "Sınıf Atlatma İşlemleri",        "/sinif-atlatma-islemleri",             "sinif-atlatma-islemleri",        3,  "menu.sinif-atlatma-islemleri.view"),
             BuildItem(permissions, "Toplu Danışman Atama",           "/toplu-danisman-atama",                "toplu-danisman-atama",           4,  "menu.toplu-danisman-atama.view"),
-            BuildItem(permissions, "Toplu Staj Danışman Atama",      "/toplu-staj-danisman-atama",           "toplu-staj-danisman-atama",      5,  "menu.toplu-staj-danisman-atama.view"),
             BuildItem(permissions, "Toplu Müfredat Atama",           "/toplu-mufredat-atama",                "toplu-mufredat-atama",           6,  "menu.toplu-mufredat-atama.view"),
-            BuildItem(permissions, "Toplu Ders Kaydı",               "/toplu-ders-kaydi",                    "toplu-ders-kaydi",               7,  "menu.toplu-ders-kaydi.view"),
             BuildItem(permissions, "Ders Kayıt Düzenleme",           "/ders-kayit-duzenleme",                "ders-kayit-duzenleme",           8,  "menu.ders-kayit-duzenleme.view"),
-            BuildItem(permissions, "Dersler Arası Öğrenci Transfer", "/dersler-arasi-ogrenci-transfer",      "dersler-arasi-transfer",         10, "menu.dersler-arasi-ogrenci-transfer.view"),
             BuildItem(permissions, "Harf Notu Düzenleme",            "/harf-notu-duzenleme",                 "harf-notu-duzenleme",            11, "menu.harf-notu-duzenleme.view"),
         };
 
@@ -232,6 +226,7 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Derslik Yönetimi",               "/derslik-yonetimi",                    "derslik-yonetimi",               1, "menu.derslik-yonetimi.view"),
             BuildItem(permissions, "Derslik-Fakülte Ataması",        "/derslik-fakulte-atamasi",             "derslik-fakulte-atamasi",        2, "menu.derslik-fakulte-atamasi.view"),
+            BuildItem(permissions, "Derslik Doluluk Tablosu",        "/derslik-doluluk-tablosu",             "derslik-doluluk",                3, "menu.derslik-doluluk.view"),
         };
 
         // ─── Modül 10.5: Raporlar (tüm roller — son kullanıcı raporları) ─────────
@@ -312,10 +307,8 @@ public static class MenuStructureSeed
         {
             BuildItem(permissions, "Kullanıcı Tanımlama",                  "/kullanici-yonetimi",                   "kullanici-tanimlama",                 1, "menu.kullanici-tanimlama.view"),
             // "Personel Listesi" buradan kaldırıldı — yeni "Personel İşlemleri" top-level modülüne taşındı (SortOrder 14).
-            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            2, "menu.kullanici-yetki-gruplari.view"),
+            BuildItem(permissions, "Kullanıcı Yetki Grupları",             "/kullanici-yetki-gruplari",             "kullanici-yetki-gruplari",            2, "system.permission-bundle.view"),
             BuildItem(permissions, "Kullanıcı Rapor Grupları",             "/kullanici-rapor-gruplari",             "kullanici-rapor-gruplari",            3, "menu.kullanici-rapor-gruplari.view"),
-            BuildItem(permissions, "Kullanıcı Grupları Sınırlandırmalar",  "/kullanici-grup-sinirlandirmalar",      "kullanici-grup-sinirlandirmalar",     4, "menu.kullanici-grup-sinirlandirmalar.view"),
-            BuildItem(permissions, "Kullanıcı Rapor Tasarım Grupları",     "/kullanici-rapor-tasarim-gruplari",     "kullanici-rapor-tasarim-gruplari",    5, "menu.kullanici-rapor-tasarim-gruplari.view"),
             BuildItem(permissions, "Kullanıcı Vekalet İşlemleri",          "/kullanici-vekalet-islemleri",          "kullanici-vekalet-islemleri",         6, "menu.kullanici-vekalet-islemleri.view"),
             BuildItem(permissions, "LOG",                                  "/denetim-kayitlari",                    "audit-log",                           7, "menu.audit-log.view"),
         };
@@ -334,13 +327,9 @@ public static class MenuStructureSeed
 
         yonetimGenel.Items = new List<MenuItem>
         {
-            BuildItem(permissions, "Üniversite Bilgileri",                 "/universite-bilgileri",                 "universite-bilgileri",                1, "menu.universite-bilgileri.view"),
-            BuildItem(permissions, "Kurumsal Entegrasyon Tanımları",       "/kurumsal-entegrasyon-tanimlari",       "kurumsal-entegrasyon-tanimlari",      2, "menu.kurumsal-entegrasyon-tanimlari.view"),
             BuildItem(permissions, "Belge Sınırlandırmalar",               "/belge-sinirlandirmalar",               "belge-sinirlandirmalar",              3, "menu.belge-sinirlandirmalar.view"),
             BuildItem(permissions, "Web Modül Ayarları",                   "/web-modul-ayarlari",                   "web-modul-ayarlari",                  4, "menu.web-modul-ayarlari.view"),
             BuildItem(permissions, "Sistem Konfigürasyonu",                "/sistem-ayarlari",                      "system-config",                       5, "menu.system-config.view"),
-            BuildItem(permissions, "EBYS İmza Yetkilileri",                "/ebys-imza-yetkilileri",                "ebys-imza-yetkilileri",               6, "menu.ebys-imza-yetkilileri.view"),
-            BuildItem(permissions, "Fakülte İmza Yükleme İşlemleri",       "/fakulte-imza-yukleme-islemleri",       "fakulte-imza-yukleme",                7, "menu.fakulte-imza-yukleme.view"),
             BuildItem(permissions, "Menü Yönetimi",                        "/menu-yonetimi",                        "menu-yonetimi",                       8, "menu.menu-yonetimi.view"),
         };
 

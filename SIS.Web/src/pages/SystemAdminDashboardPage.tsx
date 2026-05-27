@@ -29,6 +29,7 @@ import { useAdminStudents } from '../hooks/useAdminStudents';
 import { useAdminInstructors } from '../hooks/useAdminInstructors';
 import { useAdminTerms } from '../hooks/useAdminTerms';
 import { useAcademicCalendarTerms, useActiveStudentCalendar } from '../hooks/useAcademicCalendar';
+import { useActiveTerm } from '../hooks/useActiveTerm';
 import { ROUTES } from '../lib/constants';
 import DashboardAnnouncementWidget from '../components/announcements/DashboardAnnouncementWidget';
 
@@ -143,15 +144,21 @@ function TermStatusCard({
 
 function RegistrationStatusCard({
   activeTerm,
+  effectiveOpen,
   isLoading,
 }: {
   activeTerm: { registrationStart?: string | null; registrationEnd?: string | null } | undefined;
+  effectiveOpen?: boolean;
   isLoading: boolean;
 }) {
-  const open = activeTerm?.registrationStart && activeTerm?.registrationEnd
+  const calendarOpen = activeTerm?.registrationStart && activeTerm?.registrationEnd
     ? isWithinRange(activeTerm.registrationStart, activeTerm.registrationEnd)
     : false;
-  const upcoming = activeTerm?.registrationStart && !open && isUpcoming(activeTerm.registrationStart);
+  // Etkin durum: modül "Açık"/"Kapalı" override'ı takvim penceresini ezer (üst bardaki rozetle aynı kaynak).
+  const open = effectiveOpen ?? calendarOpen;
+  const manualOpen = open && !calendarOpen;
+  const manualClosed = effectiveOpen === false && calendarOpen;
+  const upcoming = !open && activeTerm?.registrationStart && isUpcoming(activeTerm.registrationStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
@@ -170,21 +177,42 @@ function RegistrationStatusCard({
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : !activeTerm || (!activeTerm.registrationStart && !activeTerm.registrationEnd) ? (
-          <p className="text-sm text-muted-foreground">Kayıt tarihi tanımlı değil.</p>
         ) : open ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-success" />
               <p className="text-sm font-semibold text-success">Açık</p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Bitiş: {activeTerm.registrationEnd ? fmtDate(activeTerm.registrationEnd) : '—'}
-            </p>
-            <p className="text-xs font-medium text-success">
-              {activeTerm.registrationEnd ? daysUntil(activeTerm.registrationEnd) : '—'} gün kaldı
-            </p>
+            {manualOpen ? (
+              <>
+                <p className="text-xs text-muted-foreground">Modül ayarından manuel açıldı.</p>
+                {activeTerm?.registrationStart && (
+                  <p className="text-xs text-muted-foreground">
+                    Takvim başlangıcı: {fmtDate(activeTerm.registrationStart)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Bitiş: {activeTerm?.registrationEnd ? fmtDate(activeTerm.registrationEnd) : '—'}
+                </p>
+                <p className="text-xs font-medium text-success">
+                  {activeTerm?.registrationEnd ? daysUntil(activeTerm.registrationEnd) : '—'} gün kaldı
+                </p>
+              </>
+            )}
           </div>
+        ) : manualClosed ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-muted-foreground" />
+              <p className="text-sm font-semibold text-muted-foreground">Kapalı</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Modül ayarından kapatıldı.</p>
+          </div>
+        ) : !activeTerm || (!activeTerm.registrationStart && !activeTerm.registrationEnd) ? (
+          <p className="text-sm text-muted-foreground">Kayıt tarihi tanımlı değil.</p>
         ) : upcoming ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -224,15 +252,20 @@ function RegistrationStatusCard({
 
 function AddDropStatusCard({
   activeTerm,
+  effectiveOpen,
   isLoading,
 }: {
   activeTerm: { addDropStart?: string | null; addDropEnd?: string | null } | undefined;
+  effectiveOpen?: boolean;
   isLoading: boolean;
 }) {
-  const open = activeTerm?.addDropStart && activeTerm?.addDropEnd
+  const calendarOpen = activeTerm?.addDropStart && activeTerm?.addDropEnd
     ? isWithinRange(activeTerm.addDropStart, activeTerm.addDropEnd)
     : false;
-  const upcoming = activeTerm?.addDropStart && !open && isUpcoming(activeTerm.addDropStart);
+  const open = effectiveOpen ?? calendarOpen;
+  const manualOpen = open && !calendarOpen;
+  const manualClosed = effectiveOpen === false && calendarOpen;
+  const upcoming = !open && activeTerm?.addDropStart && isUpcoming(activeTerm.addDropStart);
 
   const borderColor = open
     ? 'border-l-[var(--color-success)]'
@@ -251,21 +284,42 @@ function AddDropStatusCard({
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : !activeTerm || (!activeTerm.addDropStart && !activeTerm.addDropEnd) ? (
-          <p className="text-sm text-muted-foreground">Ekle/bırak tarihi tanımlı değil.</p>
         ) : open ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-success" />
               <p className="text-sm font-semibold text-success">Açık</p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Bitiş: {activeTerm.addDropEnd ? fmtDate(activeTerm.addDropEnd) : '—'}
-            </p>
-            <p className="text-xs font-medium text-success">
-              {activeTerm.addDropEnd ? daysUntil(activeTerm.addDropEnd) : '—'} gün kaldı
-            </p>
+            {manualOpen ? (
+              <>
+                <p className="text-xs text-muted-foreground">Modül ayarından manuel açıldı.</p>
+                {activeTerm?.addDropStart && (
+                  <p className="text-xs text-muted-foreground">
+                    Takvim başlangıcı: {fmtDate(activeTerm.addDropStart)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Bitiş: {activeTerm?.addDropEnd ? fmtDate(activeTerm.addDropEnd) : '—'}
+                </p>
+                <p className="text-xs font-medium text-success">
+                  {activeTerm?.addDropEnd ? daysUntil(activeTerm.addDropEnd) : '—'} gün kaldı
+                </p>
+              </>
+            )}
           </div>
+        ) : manualClosed ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-muted-foreground" />
+              <p className="text-sm font-semibold text-muted-foreground">Kapalı</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Modül ayarından kapatıldı.</p>
+          </div>
+        ) : !activeTerm || (!activeTerm.addDropStart && !activeTerm.addDropEnd) ? (
+          <p className="text-sm text-muted-foreground">Ekle/bırak tarihi tanımlı değil.</p>
         ) : upcoming ? (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -463,6 +517,7 @@ export default function SystemAdminDashboardPage() {
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
   const { data: activeCalendar, isLoading: calendarLoading } = useActiveStudentCalendar();
   const { data: calendarTerms } = useAcademicCalendarTerms();
+  const { data: liveTerm } = useActiveTerm();
 
   const activeTerm = terms.find(t => t.isActive);
   const activeTermNoCalendar = calendarTerms?.find(t => t.isActive && !t.isCancelled && !t.hasCalendar);
@@ -509,8 +564,8 @@ export default function SystemAdminDashboardPage() {
       {/* ── Status Cards ────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <TermStatusCard activeTerm={activeTerm} isLoading={termLoading} />
-        <RegistrationStatusCard activeTerm={activeCalendar} isLoading={calendarLoading} />
-        <AddDropStatusCard activeTerm={activeCalendar} isLoading={calendarLoading} />
+        <RegistrationStatusCard activeTerm={activeCalendar} effectiveOpen={liveTerm?.isRegistrationOpen} isLoading={calendarLoading} />
+        <AddDropStatusCard activeTerm={activeCalendar} effectiveOpen={liveTerm?.isAddDropOpen} isLoading={calendarLoading} />
       </div>
 
       {/* ── Stats ────────────────────────────────────────────── */}

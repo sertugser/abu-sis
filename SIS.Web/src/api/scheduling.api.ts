@@ -37,8 +37,8 @@ export async function searchAvailableClassrooms(params: AvailableClassroomSearch
     params: {
       termId: params.termId,
       days: params.days.join(','),
-      startHour: params.startHour,
-      endHour: params.endHour,
+      startTime: params.startTime,
+      endTime: params.endTime,
       minCapacity: params.minCapacity,
       classroomType: params.classroomType,
       facultyId: params.facultyId,
@@ -48,9 +48,9 @@ export async function searchAvailableClassrooms(params: AvailableClassroomSearch
   return data;
 }
 
-export async function exportClassroomCsv(termId?: number): Promise<DownloadableFile> {
+export async function exportClassroomCsv(params: ClassroomDashboardParams): Promise<DownloadableFile> {
   const response = await apiClient.get<Blob>('/admin/classroom-export/csv', {
-    params: { termId },
+    params,
     responseType: 'blob',
   });
 

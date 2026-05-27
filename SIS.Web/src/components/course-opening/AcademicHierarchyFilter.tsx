@@ -1,10 +1,11 @@
 import { Fragment, useMemo } from 'react';
 import { useCurriculumList } from '../../hooks/useCurriculumManagement';
 import type { AccessibleDepartment } from '../../types/academicOperations';
-import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { LookupFaculty } from '../../hooks/useAdminLookup';
 
 export interface AcademicHierarchyFilterProps {
-  faculties: FacultyDto[];
+  faculties: LookupFaculty[];
   structureDepartments: DepartmentDto[];
   accessibleDepartments: AccessibleDepartment[];
   programs: ProgramDto[];

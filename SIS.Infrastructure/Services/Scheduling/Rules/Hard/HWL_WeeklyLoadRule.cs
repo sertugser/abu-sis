@@ -12,20 +12,35 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// üzerinden direkt RuleEngine factory'sine inject edilmesi gerek (Faz 4'te eklenecek).
 /// Bu predicate şu an sadece override > 0 ise enforce eder; default fallback Faz 4'te aktive.
 /// </summary>
-public sealed class HWL_WeeklyLoadRule : IRulePredicate
+public sealed class HWL_WeeklyLoadRule : ISoftRulePredicate
 {
     public string Code => "H-WL";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.HWLWeight default'u (8).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 8;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {
         var c = ctx.Candidate;
         if (!c.InstructorId.HasValue) return Array.Empty<RuleViolation>();
 
-        // TODO Faz 4: DefaultInstructorMaxWeeklyHours SystemConfig'ten okunup config'e eklenecek.
-        // Şu an V1 paritesi: override > 0 ise enforce, değilse skip (V1 disabled-when-zero).
-        if (c.InstructorMaxWeeklyHours <= 0) return Array.Empty<RuleViolation>();
-        var maxWeekly = c.InstructorMaxWeeklyHours;
+        // V2 WeeklyLoadEncoder ile parite: override > 0 ise onu, değilse kurumsal default'u uygula.
+        // (Eskiden 0 → "limitsiz" sayılıp hiç raporlanmıyordu; solver ise default 30s uyguluyordu → drift.)
+        var maxWeekly = c.InstructorMaxWeeklyHours > 0
+            ? c.InstructorMaxWeeklyHours
+            : ctx.Config.DefaultInstructorMaxWeeklyHours;
+        if (maxWeekly <= 0) return Array.Empty<RuleViolation>(); // hem override hem default 0 → kapalı
 
         var totalHours = ctx.Snapshot.Sections
             .Where(s => s.InstructorId == c.InstructorId && s.SectionId != c.SectionId)

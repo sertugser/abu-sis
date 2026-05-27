@@ -1,11 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileBarChart, Loader2, Search } from 'lucide-react';
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowRight, FileBarChart2, FileSearch, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { myReportsApi, type AccessibleReportDto } from '@/api/myReports.api';
+import { ReportRunPanel } from '@/components/reports/ReportRunPanel';
 
 export default function MyReportsPage() {
   const { data, isLoading, error } = useQuery({
@@ -15,6 +14,7 @@ export default function MyReportsPage() {
   });
 
   const [filter, setFilter] = useState('');
+  const [activeReport, setActiveReport] = useState<AccessibleReportDto | null>(null);
 
   const grouped = useMemo(() => {
     if (!data) return [];
@@ -22,7 +22,7 @@ export default function MyReportsPage() {
     const filtered = q
       ? data.filter((r) =>
           r.name.toLowerCase().includes(q) ||
-          r.code.toLowerCase().includes(q) ||
+          (r.description?.toLowerCase().includes(q) ?? false) ||
           r.categoryName.toLowerCase().includes(q),
         )
       : data;
@@ -36,90 +36,102 @@ export default function MyReportsPage() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, 'tr'));
   }, [data, filter]);
 
-  const totalCount = data?.length ?? 0;
-  const filteredCount = grouped.reduce((sum, [, items]) => sum + items.length, 0);
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="font-heading text-3xl font-bold tracking-tight flex items-center gap-2">
-          <FileBarChart className="h-7 w-7" />
-          Raporlarım
-        </h1>
-      </div>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <div>
-            <CardTitle>Erişilebilir Raporlar</CardTitle>
-            <CardDescription>
-              Toplam <strong>{totalCount}</strong> rapor
-              {filter && totalCount !== filteredCount ? <> · filtrelenmiş: <strong>{filteredCount}</strong></> : null}
-            </CardDescription>
-          </div>
-          <div className="relative w-72">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+        {/* Başlık şeridi: bağlam + arama */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <span className="text-sm font-semibold text-foreground">Erişilebilir Raporlar</span>
+          <div className="relative w-full sm:w-80">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-8"
-              placeholder="Rapor / kategori ara..."
+              className="h-9 rounded-lg pl-9"
+              placeholder="Rapor veya kategori ara..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="text-center text-destructive py-8 text-sm">Raporlar yüklenemedi.</div>
-          )}
-          {isLoading ? (
-            <div className="flex items-center gap-2 py-12 justify-center text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Yükleniyor...
-            </div>
-          ) : !data || data.length === 0 ? (
-            <div className="py-16 text-center">
-              <FileBarChart className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Henüz hiçbir rapora erişiminiz yok.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Yetkilendirme için sistem yöneticinize başvurun.
-              </p>
-            </div>
-          ) : grouped.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">Eşleşen rapor yok.</div>
-          ) : (
-            <div className="space-y-6">
-              {grouped.map(([category, items]) => (
-                <div key={category}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-sm text-foreground">{category}</h3>
-                    <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {items.map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        className="text-left rounded-md border bg-card hover:bg-muted/40 transition-colors px-3 py-3"
-                        onClick={() => {
-                          // Rapor altyapısı geldiğinde açma logic'i buraya bağlanacak
-                          alert(
-                            `Rapor: ${r.name}\nKod: ${r.code}\n\nRapor altyapısı henüz aktif değil — yetkilendirme tarafı çalışıyor, rapor üretimi sonra eklenecek.`,
-                          );
-                        }}
-                      >
-                        <div className="font-medium text-sm">{r.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono mt-1">{r.code}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Gövde */}
+        <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-5">
+          {/* Durumlar */}
+      {error ? (
+        <StateBox tone="error" icon={FileBarChart2} title="Raporlar yüklenemedi" subtitle="Lütfen sayfayı yenileyin." />
+      ) : isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Yükleniyor...
+        </div>
+      ) : !data || data.length === 0 ? (
+        <StateBox
+          icon={FileBarChart2}
+          title="Henüz hiçbir rapora erişiminiz yok"
+          subtitle="Yetkilendirme için sistem yöneticinize başvurun."
+        />
+      ) : grouped.length === 0 ? (
+        <StateBox icon={FileSearch} title="Eşleşen rapor yok" subtitle={`"${filter}" için sonuç bulunamadı.`} />
+      ) : (
+        <div className="space-y-8">
+          {grouped.map(([category, items]) => (
+            <section key={category}>
+              <div className="mb-3 flex items-center gap-2.5">
+                <span className="h-4 w-1 rounded-full bg-primary" />
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">{category}</h2>
+                <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {items.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setActiveReport(r)}
+                    className="group flex flex-col rounded-xl border bg-card p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                      <FileBarChart2 className="h-4 w-4" />
+                    </div>
+                    <div className="font-medium leading-snug">{r.name}</div>
+                    {r.description && (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
+                    )}
+                    <div className="mt-3 flex items-center text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
+                      Aç
+                      <ArrowRight className="ml-1 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+        </div>
+      </div>
+
+      <ReportRunPanel report={activeReport} onClose={() => setActiveReport(null)} />
+    </div>
+  );
+}
+
+function StateBox({
+  icon: Icon,
+  title,
+  subtitle,
+  tone = 'default',
+}: {
+  icon: typeof FileBarChart2;
+  title: string;
+  subtitle?: string;
+  tone?: 'default' | 'error';
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-center">
+      <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-xl ${tone === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'}`}>
+        <Icon className="h-6 w-6" />
+      </div>
+      <p className={`text-sm font-medium ${tone === 'error' ? 'text-destructive' : 'text-foreground'}`}>{title}</p>
+      {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
     </div>
   );
 }

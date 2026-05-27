@@ -31,15 +31,20 @@ All thresholds below are configurable via SystemConfig (admin panel), values sho
 - Instructor cannot be assigned to overlapping sections
 - Registration plan: soft hold on capacity, cleared at midnight if unconfirmed
 
-## Term Lifecycle (Faz 1 revize — otomatik model)
+## Term Lifecycle (Faz 5 — flag-bazlı tek-aktif model, Proliz/Banner)
 Inactive → Active → Cancelled
 
-- 3 durum, **gösterim** için enum (stored değil). Durum `term.GetStatus(now)` ile hesaplanır.
-- Stored alan: sadece `IsCancelled: bool` — admin'in tek manuel aksiyonu.
-- Active: `!IsCancelled && TermStart ≤ now ≤ TermEnd` (otomatik, tarih bazlı)
-- Inactive: tarih aralığı dışı (otomatik)
+- **Aktiflik manuel bayrağa bağlıdır, tarihe DEĞİL** (Proliz/Banner "güncel dönem" modeli). 2026-05-23'te tarih-bazlı hibrit model kaldırıldı.
+- `TermStatus` enum **gösterim** için (stored değil). Durum `term.GetStatus(now)` ile hesaplanır.
+- Stored manuel alanlar: `IsActivated: bool` (**default false** — yeni dönem kapalı başlar), `IsCancelled: bool`, `OverrideStart?`, `OverrideEnd?` (override'lar artık aktifliği etkilemez; sadece EffectiveStart/End computed alanlarını besler, dormant).
+- `GetStatus(now)`: `IsCancelled` → Cancelled; `IsActivated` → Active; aksi halde Inactive. **TermStart/TermEnd aktifliği belirlemez.**
+- `IsActive(now) = !IsCancelled && IsActivated`.
+- **Tek-aktif değişmezi**: `ActivateTermAsync(id)` bu dönemi açar **+ diğer tüm açık dönemleri kapatır** → her an en çok bir dönem açık. CreateTermAsync/generator dönemi kapalı oluşturur.
+- **"Aktif dönem" sorgusu TEK kaynak**: `AcademicTerms.ActiveTerm()` extension (`SIS.Domain/Entities/AcademicTermQueryExtensions.cs`) = `Where(!IsCancelled && IsActivated).OrderByDescending(TermStart)`. Önceki ~33 inline kopya (`...&& TermStart<=now && TermEnd>=now`) bununla değiştirildi.
+- IsActivated: admin "Kullanıma Aç/Kapat" ile değiştirir (activate/deactivate endpoint'leri).
 - Cancelled: admin iptal etmiş (manuel). Cascade: tüm section'lar Cancelled olur.
 - Unique constraint: `(Year, TermType)` — aynı yıl/tip kombinasyonu tek kayıt.
+- Migration: `SingleActiveTermFlagModel` (kolon default false + tek seferlik tek-aktif veri normalizasyonu).
 
 ## TermType (9 değer — Ankara Bilim pattern)
 Fall, Spring, Summer, FallResit, SpringResit, SummerResit, SpringOther, SummerOther, Exemption
@@ -76,9 +81,12 @@ Draft ↔ Active ↔ Cancelled
 - `GET /api/admin/terms/{id}` — tek dönem
 - `POST /api/admin/terms` — yeni dönem (TimeSlot grid'i otomatik oluşturulur, AcademicCalendar null kalır)
 - `PUT /api/admin/terms/{id}` — düzenleme (Cancelled dönem düzenlenemez)
+- `POST /api/admin/terms/{id}/activate` — kullanıma aç (IsActivated = true)
+- `POST /api/admin/terms/{id}/deactivate` — kullanıma kapat (IsActivated = false)
 - `POST /api/admin/terms/{id}/cancel` — iptal + section cascade
 - `POST /api/admin/terms/{id}/uncancel` — iptali geri al
-- Silinmiş endpoint'ler: `/activate`, `/deactivate`, `/transition`, `/override` (override Akademik Takvim API'ye taşındı)
+- Silinmiş endpoint'ler: `/transition`, `/override` (faz override Akademik Takvim API'ye taşındı)
+- Not: OverrideStart/OverrideEnd (erken aktivasyon/uzatma) backend Create/Update DTO'larında var ama TermManagementPage formu bu alanları yönetmez (UI'dan girilmez).
 
 ## Academic Calendar API (Faz 2 — yeni)
 Admin endpoints:
@@ -94,23 +102,13 @@ Public endpoints (any authenticated):
 
 Cancelled dönem: upsert ve override `InvalidOperationException` fırlatır (400).
 
-## ÖSYM + Kontenjan API (Faz 4 — stub CRUD)
+## ÖSYM + Kontenjan placeholder sayfaları (SİLİNDİ — 2026-05-23)
 
-`/api/admin/osym-registration-calendars` — systemAdmin only
-- `GET` (query: year?)
-- `POST` (CreateOsymRegistrationCalendarDto)
-- `PUT /{id}` (UpdateOsymRegistrationCalendarDto)
-- `DELETE /{id}`
-
-`/api/admin/program-quotas` — systemAdmin + dean
-- `GET` (query: programId?, year?)
-- `POST` (CreateProgramQuotaDto — ProgramId dahil)
-- `PUT /{id}` (UpdateProgramQuotaDto — ProgramId değiştirilemez)
-- `DELETE /{id}`
-
-Unique constraint: `ProgramQuota (ProgramId, Year, Type)` — aynı program×yıl×tip kombinasyonu tek kayıt.
-
-**Operasyonel entegrasyon YOK.** Bu iki özellik sadece veri tabanı — öğrenci kayıt akışı, `CourseSection.Capacity`, veya başka bir kısıt mantığı ile bağlı değil. İleride entegrasyon eklenebilir.
+"ÖSYM Kayıt Takvimi" ve "Program Kontenjan Bilgileri" stub sayfaları backend + frontend
+tamamen kaldırıldı (entity, DTO, service, controller, page, hook, route, menu, permission).
+Tablolar `OsymRegistrationCalendars` + `ProgramQuotas` migration ile düşürüldü
+(`DropOsymRegistrationAndProgramQuota`); mevcut DB satırları
+`scripts/2026-05-23-remove-osym-program-kontenjan.sql` ile temizlendi.
 
 ## AcademicTerm Yeni Alanlar (Faz 1)
 - `ShortEnglishName: string` — kısa İngilizce ad (zorunlu, default empty)
@@ -125,11 +123,7 @@ Unique constraint: `ProgramQuota (ProgramId, Year, Type)` — aynı program×yı
 - Akademik Takvim Yönetimi (`/akademik-takvim-yonetimi` — AcademicCalendarAdminPage) **Faz 2**
 - Akademik Takvim (Görünüm) (`/akademik-takvim` — AcademicCalendarPage, tabs: Liste + Takvim) **Faz 2**
 - Takvim Oluşturucu (`/akademik-takvim-olusturma` — AcademicCalendarGeneratorPage)
-- ÖSYM Kayıt Takvimi (`/osym-kayit-takvimi` — OsymRegistrationCalendarPage) **Faz 4 YENİ**
-- Program Kontenjan Bilgileri (`/program-kontenjan` — ProgramQuotaPage) **Faz 4 YENİ**
 - Sınıf Atlatma Kuralları (`/sinif-atlatma-kurallari` — PromotionRulesPage)
-
-Dean grubunda akademik-islemler: sadece Program Kontenjan Bilgileri (dean endpoint'e erişiyor).
 
 Eski gruplar ("Dönem Yönetimi", "Akademik Yapı", "Fakülte / Bölüm / Program" tek sayfa) silindi.
 
@@ -224,6 +218,18 @@ Yetki sistemi artık ortogonal bir "scope" boyutuna da sahip. Scope-bound rol ü
 
 Yeni bir entity faculty'e doğrudan veya dolaylı bağlıysa, scope gerekip gerekmediği kontrol edilip
 gerekliyse `OnModelCreating` query filter zincirine eklenmeli.
+
+## Rapor Motoru (Faz 1 — handler registry + tek çatı)
+
+Raporlar tek ortak motorda çalışır; ikibaşlılık (her rapora ayrı sayfa/export) yok.
+
+- **Yeni rapor = tek `IReportHandler` sınıfı** (`SIS.Application/Reports/IReportHandler.cs`). `Code` (ReportDefinition.Code ile birebir) + `GetParameterSchema()` + `RunAsync(request, ctx, ct)` → `ReportResult` (kolon+satır). DI'da otomatik taranır (Program.cs handler scan).
+- **Çalıştırma:** `IReportExecutionService` (`ReportExecutionService`) → kod→handler, `CanAccessReportAsync` yetki, parametre, scope (`ICurrentUserScope` → `ReportExecutionContext.ScopeFacultyIds`), sayfalama.
+- **Export:** tek `IReportExportService` (`ReportExportService`) → ClosedXML (.xlsx) / QuestPDF (.pdf).
+- **Endpoint'ler:** `GET /api/me/reports/{code}/schema`, `POST .../{code}/run`, `POST .../{code}/export?format=xlsx|pdf` (`ReportRunController`). Rapor listesi: `GET /api/me/reports` (ReportAuthorizationController).
+- **Frontend:** tek çatı — `MyReportsPage` katalog → `ReportRunPanel` (Sheet) → `ReportFilterForm` (şemadan otomatik) → `ReportResultTable` (+ Excel/PDF). `reportRun.api.ts` + `useReportRun.ts`.
+- **Seed:** handler'ı olan raporlar `ReportSeed` ile idempotent eklenir (kategori `genel-raporlar`). İlk rapor: `ogrenci-listesi` (`StudentListReportHandler`).
+- **Yetkilendirme (Faz 2):** birleşik `ReportAccessGrant` — *(ScopeKind: Category|Report) × (SubjectKind: Role|User|Group) × (Effect: Allow|Deny)*. Tek `IReportAccessResolver` (öncelik: rapor-Deny > rapor-Allow > kategori-Deny > kategori-Allow > yok); `CanAccessReportAsync` + `ListAccessibleReportsAsync` buna delege. `ReportUserGroup`(+Member) = adlandırılmış kullanıcı kümeleri. Eski `ReportCategoryRolePermission` + `ReportPermissionOverride` migration (`AddReportAccessGrantUnifiedModel`) ile grant'lara taşınıp düşürüldü. Admin uçları: `/api/admin/report-grants`, `/api/admin/report-user-groups`. SystemAdmin bypass. Tasarım: `docs/superpowers/specs/2026-05-26-rapor-sistemi-obs-overhaul-design.md`.
 
 ## Code Conventions
 - Domain entities: plain C# classes, no EF Core imports

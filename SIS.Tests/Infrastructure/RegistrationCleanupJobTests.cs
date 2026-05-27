@@ -64,6 +64,7 @@ public class RegistrationCleanupJobTests
         var term = new AcademicTerm
         {
             Id = 1, Name = "2026 Güz",
+            IsActivated = true,
             TermStart = now.AddDays(-1), TermEnd = now.AddDays(100),
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
             {
@@ -131,6 +132,7 @@ public class RegistrationCleanupJobTests
         var term = new AcademicTerm
         {
             Id = 1, Name = "T",
+            IsActivated = true,
             TermStart = now.AddDays(-1), TermEnd = now.AddDays(100),
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar
             {

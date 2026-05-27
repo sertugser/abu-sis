@@ -267,13 +267,13 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsCancelled")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsActivated")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -538,11 +538,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("QrSubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("PresentSlotNumbersCsv")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("QrSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Source")
                         .HasColumnType("integer");
@@ -666,6 +666,8 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.HasIndex("EntityType", "EntityId");
+
+                    b.HasIndex("Timestamp", "Action");
 
                     b.ToTable("AuditLogs");
                 });
@@ -1000,149 +1002,6 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("ConstraintExceptionRequests");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ConstraintProfiles");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("ConstraintDefinitionId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Parameters")
-                        .HasColumnType("text");
-
-                    b.Property<int>("ProfileId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Weight")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConstraintDefinitionId");
-
-                    b.HasIndex("ProfileId", "ConstraintDefinitionId")
-                        .IsUnique();
-
-                    b.ToTable("ConstraintProfileItems");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsFeasible")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("SnapshotAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SnapshotType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TermId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalHardViolations")
-                        .HasColumnType("integer");
-
-                    b.Property<double>("TotalSoftPenalty")
-                        .HasColumnType("double precision");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TermId", "SnapshotAt");
-
-                    b.ToTable("ConstraintViolationSnapshots");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AffectedSectionCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ConstraintCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<double>("Penalty")
-                        .HasColumnType("double precision");
-
-                    b.Property<int>("SnapshotId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ViolationCount")
-                        .HasColumnType("integer");
-
-                    b.Property<double>("WeightedPenalty")
-                        .HasColumnType("double precision");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SnapshotId");
-
-                    b.ToTable("ConstraintViolationSnapshotDetails");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -1742,9 +1601,6 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("ExcludedFromTranscriptTotal")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasCustomExamCurriculum")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IncludeInGpa")
                         .HasColumnType("boolean");
 
@@ -2048,6 +1904,38 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("DistributionConstraintCourses");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.DocumentType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("DocumentTypes");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.ElectiveGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -2310,6 +2198,167 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("EvaluationResponses");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ExamRegulation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("AutoTransferExcusedToMakeup")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AutoTransferFailedToMakeup")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("BAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BelowFloorGrade")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("BlockFinalIfNoMidterm")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("BlockMakeupIfNoFinal")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DDMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DegreeLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EvaluationType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("FailIfNoFinal")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("FinalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("FinalExamFloor")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("LetterRangesEditable")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("MakeupReplacesFinal")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MaxFinalWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("MaxMidtermWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("MidtermCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("MinFinalWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("MinMidtermWeightPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("PassingGrade")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RawScoreFloor1")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("RawScoreFloor2")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("RelativeAbsoluteFloor")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RelativeInclusionLimit")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("RelativeMinStudentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TAAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TBAMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TBBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TCBMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TCCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TDCMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TDDMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ZeroIfMissedMakeup")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId", "DegreeLevel", "TermType", "Year")
+                        .IsUnique();
+
+                    b.ToTable("ExamRegulations");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.Faculty", b =>
                 {
                     b.Property<int>("Id")
@@ -2539,6 +2588,9 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Weight")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
@@ -2687,10 +2739,11 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("AdvisorOptOutRequested")
-                        .HasColumnType("boolean");
                     b.Property<int?>("AdvisorAssignmentCapacity")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("AdvisorOptOutRequested")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2823,7 +2876,7 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("InternalAnnouncements");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.OsymRegistrationCalendar", b =>
+            modelBuilder.Entity("SIS.Domain.Entities.IssuedDocument", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -2831,79 +2884,85 @@ namespace SIS.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("IssuedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId", "IssuedAt");
+
+                    b.ToTable("IssuedDocuments");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.Notification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Description")
+                    b.Property<string>("EntityRef")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GroupKey")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Link")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<DateTime>("EndDate")
+                    b.Property<DateTime?>("ReadAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Year")
+                    b.Property<int>("UserId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Year", "Type");
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
 
-                    b.ToTable("OsymRegistrationCalendars");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("ProgramId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProgramId", "Year", "Type")
-                        .IsUnique();
-
-                    b.ToTable("ProgramQuotas");
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
@@ -3143,9 +3202,12 @@ namespace SIS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClassroomId");
-
                     b.HasIndex("TimeSlotId");
+
+                    b.HasIndex("ClassroomId", "TimeSlotId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SectionSchedules_Classroom_TimeSlot_Unique")
+                        .HasFilter("\"ClassroomId\" IS NOT NULL");
 
                     b.HasIndex("CourseSectionId", "TimeSlotId", "ClassroomId")
                         .IsUnique();
@@ -3174,6 +3236,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DepartureDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("FrozenSemesterCount")
                         .HasColumnType("integer");
 
@@ -3186,6 +3251,10 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<string>("NationalId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("PreviousStudentNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<decimal>("Sgpa")
                         .HasPrecision(4, 2)
@@ -3223,6 +3292,45 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("Students");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DocumentTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileExtension")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UploadedByUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentTypeId");
+
+                    b.HasIndex("StudentId", "DocumentTypeId")
+                        .IsUnique();
+
+                    b.ToTable("StudentDocuments");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
                 {
                     b.Property<int>("Id")
@@ -3234,8 +3342,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int>("CourseRegistrationId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ExamAttendance")
+                        .HasColumnType("integer");
+
                     b.Property<int>("GradeComponentId")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("MakeupScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal?>("Score")
                         .HasPrecision(5, 2)
@@ -3249,6 +3364,167 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("StudentGrades");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPersonalInfo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AddressDistrict")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AddressLine")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<string>("AddressProvince")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("BirthDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BirthPlace")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("BloodType")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmergencyContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("EmergencyContactRelation")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("Gender")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaritalStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("MilitaryDeferralUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MilitaryOffice")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("MilitaryStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MobilePhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Nationality")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("PassportNo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PhotoExtension")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("SecondaryEmail")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId")
+                        .IsUnique();
+
+                    b.ToTable("StudentPersonalInfos");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPlacement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EntranceType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PlacedProgramName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("PlacementYear")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PreferenceOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QuotaType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("RankOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("Score")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<string>("ScoreType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId")
+                        .IsUnique();
+
+                    b.ToTable("StudentPlacements");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
@@ -3278,6 +3554,57 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("ProgramId");
 
                     b.ToTable("StudentPrograms");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentScholarshipDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("RatePercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId", "IsActive");
+
+                    b.ToTable("StudentScholarshipDetails", t =>
+                        {
+                            t.HasCheckConstraint("CK_StudentScholarshipDetail_RatePercent", "\"RatePercent\" IS NULL OR (\"RatePercent\" >= 0 AND \"RatePercent\" <= 100)");
+                        });
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SystemConfig", b =>
@@ -3809,6 +4136,49 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("PermissionDelegations");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Identity.ReportAccessGrant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Effect")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("GrantedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ScopeKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectKind", "SubjectId");
+
+                    b.HasIndex("ScopeKind", "TargetId", "SubjectKind", "SubjectId")
+                        .IsUnique();
+
+                    b.ToTable("ReportAccessGrants");
+                });
+
             modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -3839,27 +4209,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ReportCategories");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
-                {
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RoleId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("GrantedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("GrantedByUserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("CategoryId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("ReportCategoryRolePermissions");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
@@ -3903,7 +4252,7 @@ namespace SIS.Infrastructure.Migrations
                     b.ToTable("ReportDefinitions");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroup", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -3914,30 +4263,42 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsAllowed")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Reason")
+                    b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
-                    b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RoleId");
-
-                    b.HasIndex("ReportId", "RoleId")
+                    b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ReportPermissionOverrides");
+                    b.ToTable("ReportUserGroups");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroupMember", b =>
+                {
+                    b.Property<int>("GroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GroupId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ReportUserGroupMembers");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
@@ -4371,47 +4732,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ConstraintDefinition");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfileItem", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.ConstraintDefinition", "ConstraintDefinition")
-                        .WithMany()
-                        .HasForeignKey("ConstraintDefinitionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SIS.Domain.Entities.ConstraintProfile", "Profile")
-                        .WithMany("Items")
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ConstraintDefinition");
-
-                    b.Navigation("Profile");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
-                        .WithMany()
-                        .HasForeignKey("TermId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Term");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshotDetail", b =>
-                {
-                    b.HasOne("SIS.Domain.Entities.ConstraintViolationSnapshot", "Snapshot")
-                        .WithMany("Details")
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Snapshot");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -4900,6 +5220,17 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.ExamRegulation", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.FacultyScheduleApproval", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Faculty", "Faculty")
@@ -5039,15 +5370,13 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("TargetSection");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Entities.ProgramQuota", b =>
+            modelBuilder.Entity("SIS.Domain.Entities.IssuedDocument", b =>
                 {
-                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
-                        .WithMany()
-                        .HasForeignKey("ProgramId")
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("IssuedDocuments")
+                        .HasForeignKey("StudentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.PromotionRule", b =>
@@ -5178,6 +5507,21 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Advisor");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.StudentDocument", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.DocumentType", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("Documents")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.StudentGrade", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.CourseRegistration", "CourseRegistration")
@@ -5195,6 +5539,24 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("CourseRegistration");
 
                     b.Navigation("GradeComponent");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPersonalInfo", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithOne("PersonalInfo")
+                        .HasForeignKey("SIS.Domain.Entities.StudentPersonalInfo", "StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentPlacement", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithOne("Placement")
+                        .HasForeignKey("SIS.Domain.Entities.StudentPlacement", "StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.StudentProgram", b =>
@@ -5222,6 +5584,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Program");
 
                     b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.StudentScholarshipDetail", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Student", null)
+                        .WithMany("ScholarshipDetails")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.TermAcademicCalendar", b =>
@@ -5340,23 +5711,6 @@ namespace SIS.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportCategoryRolePermission", b =>
-                {
-                    b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Category");
-                });
-
             modelBuilder.Entity("SIS.Domain.Identity.ReportDefinition", b =>
                 {
                     b.HasOne("SIS.Domain.Identity.ReportCategory", "Category")
@@ -5368,21 +5722,15 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("SIS.Domain.Identity.ReportPermissionOverride", b =>
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroupMember", b =>
                 {
-                    b.HasOne("SIS.Domain.Identity.ReportDefinition", "Report")
-                        .WithMany()
-                        .HasForeignKey("ReportId")
+                    b.HasOne("SIS.Domain.Identity.ReportUserGroup", "Group")
+                        .WithMany("Members")
+                        .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<int>", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Report");
+                    b.Navigation("Group");
                 });
 
             modelBuilder.Entity("SIS.Domain.Identity.RolePermission", b =>
@@ -5448,16 +5796,6 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.ConstraintExceptionRequest", b =>
                 {
                     b.Navigation("ApprovalSteps");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintProfile", b =>
-                {
-                    b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("SIS.Domain.Entities.ConstraintViolationSnapshot", b =>
-                {
-                    b.Navigation("Details");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Course", b =>
@@ -5536,7 +5874,17 @@ namespace SIS.Infrastructure.Migrations
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>
                 {
+                    b.Navigation("Documents");
+
+                    b.Navigation("IssuedDocuments");
+
+                    b.Navigation("PersonalInfo");
+
+                    b.Navigation("Placement");
+
                     b.Navigation("Registrations");
+
+                    b.Navigation("ScholarshipDetails");
 
                     b.Navigation("StudentPrograms");
                 });
@@ -5572,6 +5920,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Identity.ReportCategory", b =>
                 {
                     b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Identity.ReportUserGroup", b =>
+                {
+                    b.Navigation("Members");
                 });
 #pragma warning restore 612, 618
         }

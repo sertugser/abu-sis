@@ -64,6 +64,8 @@ interface Props {
   workloadData: InstructorWorkloadDto | undefined;
   onInstructorSelect: (id: number | null) => void;
   readOnly?: boolean;
+  // Permission gating: when false, section add/edit/duplicate action buttons are hidden.
+  canEdit?: boolean;
 }
 
 /**
@@ -89,6 +91,7 @@ export function CourseManagementDialog({
   workloadData,
   onInstructorSelect,
   readOnly = false,
+  canEdit = true,
 }: Props) {
   void termId;
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
@@ -532,37 +535,43 @@ export function CourseManagementDialog({
           {/* SOL: list mode aksiyon butonları — tümü aynı boyutta (h-8 text-xs gap-1.5 px-3) */}
           {mode === 'list' ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                variant="default"
-                size="sm"
-                className="h-8 text-xs gap-1.5 px-3"
-                onClick={startAdd}
-                disabled={readOnly}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Yeni Şube
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 px-3"
-                onClick={startEdit}
-                disabled={readOnly || !selectedSection || !selectedSection.isActive}
-              >
-                <Edit2 className="h-3.5 w-3.5" />
-                Düzenle
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 px-3"
-                onClick={startDuplicate}
-                disabled={readOnly || !selectedSection}
-                title="Seçili şubenin kapasite/hoca değerleriyle yeni şube formu açar"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Çoğalt
-              </Button>
+              {canEdit && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 px-3"
+                  onClick={startAdd}
+                  disabled={readOnly}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Yeni Şube
+                </Button>
+              )}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 px-3"
+                  onClick={startEdit}
+                  disabled={readOnly || !selectedSection || !selectedSection.isActive}
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  Düzenle
+                </Button>
+              )}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 px-3"
+                  onClick={startDuplicate}
+                  disabled={readOnly || !selectedSection}
+                  title="Seçili şubenin kapasite/hoca değerleriyle yeni şube formu açar"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Çoğalt
+                </Button>
+              )}
               {selectedSection && !selectedSection.isActive ? (
                 <Button
                   variant="outline"

@@ -11,6 +11,8 @@ import type {
   UpdateOpenedSectionRequest,
   BulkAssignInstructorRequest,
   BulkAssignInstructorResultDto,
+  CopyInstructorAssignmentsRequest,
+  CopyInstructorAssignmentsResultDto,
   TransferStudentsToSectionRequest,
   TransferStudentsToSectionResultDto,
   AutoSplitCourseRequest,
@@ -122,6 +124,16 @@ export async function bulkAssignInstructor(
     '/course-opening/bulk-assign-instructor',
     request,
     { params: { departmentId, termId } },
+  );
+  return data;
+}
+
+export async function copyInstructorAssignments(
+  request: CopyInstructorAssignmentsRequest,
+): Promise<CopyInstructorAssignmentsResultDto> {
+  const { data } = await apiClient.post<CopyInstructorAssignmentsResultDto>(
+    '/course-opening/copy-instructor-assignments',
+    request,
   );
   return data;
 }

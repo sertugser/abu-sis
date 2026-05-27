@@ -18,30 +18,34 @@ public record ReportDefinitionDto(
 public record CreateReportDefinitionDto(string Code, string Name, string? Description, int CategoryId);
 public record UpdateReportDefinitionDto(string Name, string? Description, int CategoryId);
 
-// Category × Role matrix
-public record CategoryRolePermissionDto(int CategoryId, int RoleId, string RoleName);
+// ── Kullanıcı grupları ──
+public record ReportUserGroupDto(int Id, string Name, string? Description, int MemberCount);
+public record CreateReportUserGroupDto(string Name, string? Description);
+public record UpdateReportUserGroupDto(string Name, string? Description);
+public record ReportUserGroupMemberDto(int UserId, string FullName, string Email, DateTime AddedAt);
+public record AddGroupMemberDto(int UserId);
 
-public record CategoryRoleMatrixRowDto(
-    int CategoryId,
-    string CategoryCode,
-    string CategoryName,
-    IReadOnlyList<int> AllowedRoleIds);
-
-public record SetCategoryRolesDto(int CategoryId, IReadOnlyList<int> RoleIds);
-
-// Per-report override
-public record ReportPermissionOverrideDto(
+// ── Birleşik yetki (grant) ──
+// ScopeKind: 0=Category 1=Report | SubjectKind: 0=Role 1=User 2=Group | Effect: 0=Allow 1=Deny
+public record ReportAccessGrantDto(
     int Id,
-    int ReportId,
-    string ReportCode,
-    string ReportName,
-    int RoleId,
-    string RoleName,
-    bool IsAllowed,
+    int ScopeKind,
+    int TargetId,
+    string TargetLabel,     // kategori adı veya rapor adı
+    int SubjectKind,
+    int SubjectId,
+    string SubjectLabel,    // rol adı / kullanıcı adı / grup adı
+    int Effect,
     string? Reason,
-    DateTime CreatedAt);
+    DateTime GrantedAt);
 
-public record CreateReportOverrideDto(int ReportId, int RoleId, bool IsAllowed, string? Reason);
+public record SetReportAccessGrantDto(
+    int ScopeKind,
+    int TargetId,
+    int SubjectKind,
+    int SubjectId,
+    int Effect,
+    string? Reason);
 
 // Effective list (frontend için)
-public record AccessibleReportDto(int Id, string Code, string Name, int CategoryId, string CategoryName);
+public record AccessibleReportDto(int Id, string Code, string Name, string? Description, int CategoryId, string CategoryName);

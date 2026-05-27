@@ -142,11 +142,18 @@ public class FacultyPlanningController : ControllerBase
             var result = await _service.AutoSchedulePreviewAsync(request, userId.ToString(), ct);
             return Ok(result);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
+            // Yapılandırma/girdi kaynaklı, kullanıcının düzeltebileceği hatalar (zaman dilimi yok,
+            // derslik atanmamış, eşkoşul çifti tanımlı, desteklenmeyen müfredat modu vb.) — spesifik
+            // mesajı kullanıcıya göster ki neyi düzelteceğini bilsin (input guard).
+            _logger.LogWarning(
+                ex,
+                "Auto-schedule rejected (config) for FacultyId={FacultyId}, TermId={TermId}, DepartmentId={DepartmentId}",
+                request.FacultyId, request.TermId, request.DepartmentId);
             return BadRequest(new { error = ex.Message });
         }
-        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or NotSupportedException)
+        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
         {
             _logger.LogWarning(
                 ex,
@@ -167,11 +174,22 @@ public class FacultyPlanningController : ControllerBase
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
+        // Güvenlik: batch'teki TÜM atamaların fakültesi doğrulanır (yalnız ilki değil) — aksi halde
+        // ilk atama yetkili fakülteden seçilip kalan atamalara başka fakülte section'ı gizlenebilirdi.
         if (request.Assignments.Count > 0)
         {
-            var facultyId = await _service.ResolveFacultyIdForSectionAsync(request.Assignments[0].SectionId, ct);
-            if (facultyId == null) return NotFound("Bölüm bulunamadı.");
-            if (!await HasFacultyAccessAsync(userId, facultyId.Value, ct)) return Forbid();
+            var sectionIds = request.Assignments.Select(a => a.SectionId).Distinct().ToList();
+            var verifiedFaculties = new HashSet<int>();
+            foreach (var sectionId in sectionIds)
+            {
+                var facultyId = await _service.ResolveFacultyIdForSectionAsync(sectionId, ct);
+                if (facultyId == null) return NotFound("Bölüm bulunamadı.");
+                if (verifiedFaculties.Add(facultyId.Value)
+                    && !await HasFacultyAccessAsync(userId, facultyId.Value, ct))
+                {
+                    return Forbid();
+                }
+            }
         }
 
         var result = await _service.ApplyScheduleAsync(request, userId.ToString(), ct);
@@ -183,10 +201,10 @@ public class FacultyPlanningController : ControllerBase
     public async Task<IActionResult> GetAvailableClassrooms(
         [FromQuery] int termId, [FromQuery] DayOfWeek? day,
         [FromQuery] TimeOnly? startTime, [FromQuery] TimeOnly? endTime,
-        [FromQuery] int? minCapacity, [FromQuery] string? type,
+        [FromQuery] int? minCapacity, [FromQuery] string? type, [FromQuery] int? facultyId,
         CancellationToken ct)
     {
-        var result = await _service.GetAvailableClassroomsAsync(termId, day, startTime, endTime, minCapacity, type, ct);
+        var result = await _service.GetAvailableClassroomsAsync(termId, day, startTime, endTime, minCapacity, type, facultyId, ct);
         return Ok(result);
     }
 

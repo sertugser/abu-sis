@@ -24,12 +24,20 @@ BulkAdvisorAssignmentPreviewRequestDto
 BulkAdvisorAssignmentRequestDto
 BulkAdvisorSettingsUpdateRequestDto
 BulkAssignInstructorRequest
+# Bütünleme (resit makeup) score entry: two numeric fields (StudentId int, MakeupScore decimal 0-100) with inline controller validation
+ButunlemeScoresRequest
+# Mazeret (excuse) makeup score entry: three numeric fields (StudentId int, ComponentId int, MakeupScore decimal 0-100) with inline controller validation mirroring ButunlemeScoresRequest pattern
+MazeretScoresRequest
 BulkClassroomTermAssignmentDto
 BulkCurriculumAssignmentRequestDto
 BulkOpenCoursesRequest
 BulkValidateCellsRequestDto
 ComponentDto
+# ExamRegulation: simple admin CRUD with inline controller validation (same pattern as CreateElectiveSubtypeRequest / CreatePromotionRuleDto)
+CloneExamRegulationRequest
 CopyCurriculumRequest
+# Pre-existing debt: introduced by commit 8a629928 (copy instructor assignments) without a validator/baseline entry; backlogged for a validator.
+CopyInstructorAssignmentsRequest
 CreateAccessRuleRequest
 CreateAcademicCvActivityDto
 CreateAnnouncementCategoryDto
@@ -64,6 +72,9 @@ GenerateCalendarRequestDto
 GradeSubmitDto
 GradingCriteriaDto
 ImportApplyRequest
+# Pre-existing debt (not exam-regulation related): un-baselined [FromBody] types surfaced by the guardrail; backlogged for validators.
+IntibakBulkRequest
+UpdateStudentAcademicDto
 OpenCourseRequest
 OpenPeriodRequest
 OpenQrAttendanceRequest
@@ -71,10 +82,11 @@ PreviewTermCalendarEventMoveDto
 RegistrationPlanItemDto
 RegistrationSubmitDto
 SaveAcademicCalendarChangesDto
-SaveExamCurriculumTemplateRequest
+SaveExamRegulationRequest
 SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto
+SetExamAttendanceRequest
 SetUserStatusDto
 SimulateConstraintChangeRequest
 SimulateMoveRequest

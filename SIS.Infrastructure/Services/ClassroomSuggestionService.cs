@@ -72,11 +72,13 @@ public class ClassroomSuggestionService
             .DefaultIfEmpty(30)
             .Average();
 
-        // Önceki dönem (tarihsel analiz için)
+        // Önceki dönem (tarihsel analiz için) — aynı TermType (Güz→Güz, Bahar→Bahar)
+        // ve kronolojik olarak önce gelen (TermStart). Id sırası ≠ takvim sırası olabilir;
+        // ayrıca parite eşleşmezse Güz için bir önceki Bahar baz alınıp tahmin bozulurdu.
         var previousTermId = await _context.AcademicTerms
             .AsNoTracking()
-            .Where(t => t.Id < termId)
-            .OrderByDescending(t => t.Id)
+            .Where(t => t.TermType == term.TermType && t.TermStart < term.TermStart)
+            .OrderByDescending(t => t.TermStart)
             .Select(t => t.Id)
             .FirstOrDefaultAsync(ct);
 

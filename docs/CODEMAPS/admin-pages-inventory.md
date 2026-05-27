@@ -1,6 +1,6 @@
 # Admin / Kullanıcı Sayfa Envanteri
 
-**Üretim tarihi:** 2026-04-23 13:54
+**Üretim tarihi:** 2026-05-23 00:45
 **Üreten:** `SIS.Web/scripts/generate-codemap.mjs`
 
 > ⚠️ **OTOMATIK ÜRETILIR — elle düzenleme.** Script yeniden çalışınca üzerine yazılır.
@@ -8,684 +8,149 @@
 
 ## Özet
 
-- **Toplam sayfa:** 47
-- **Sidebar grubu:** 11
+- **Toplam sayfa:** 76
+- **Sidebar grubu:** 16
 
 ## İçindekiler
 
-- [Ders İşlemleri](#ders-i̇slemleri) (15 sayfa)
+- [Genel İşlemler](#genel-i̇slemler) (5 sayfa)
+- [Kullanıcı İşlemleri](#kullanici-i̇slemleri) (7 sayfa)
+- [Genel Ayarlar](#genel-ayarlar) (8 sayfa)
+- [Sık Kullanılanlar](#sik-kullanilanlar) (1 sayfa)
+- [Akademik İşlemler](#akademik-i̇slemler) (5 sayfa)
+- [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (9 sayfa)
+- [Ders İşlemleri](#ders-i̇slemleri) (16 sayfa)
+- [Bölüm İşlemleri](#bolum-i̇slemleri) (2 sayfa)
+- [Öğrenci İşlemleri](#ogrenci-i̇slemleri) (8 sayfa)
 - [Anketler](#anketler) (3 sayfa)
 - [Kaynak Yönetimi](#kaynak-yonetimi) (2 sayfa)
-- [Kullanıcı Yönetimi](#kullanici-yonetimi) (2 sayfa)
-- [Akademik İşlemler](#akademik-i̇slemler) (10 sayfa)
-- [Danışmanlık İşlemleri](#danismanlik-i̇slemleri) (1 sayfa)
-- [Ders ve Dönem İşlemleri](#ders-ve-donem-i̇slemleri) (7 sayfa)
-- [Duyuru Yönetimi](#duyuru-yonetimi) (1 sayfa)
-- [Genel İşlemler](#genel-i̇slemler) (3 sayfa)
-- [Öğrenci İşlemleri](#ogrenci-i̇slemleri) (1 sayfa)
-- [Sistem](#sistem) (2 sayfa)
+- [Duyuru Yönetimi](#duyuru-yonetimi) (2 sayfa)
+- [Hesabım](#hesabim) (1 sayfa)
+- [Personel İşlemleri](#personel-i̇slemleri) (1 sayfa)
+- [Öğretim İşlemleri](#ogretim-i̇slemleri) (5 sayfa)
+- [Raporlar](#raporlar) (1 sayfa)
 
 ---
 
-## Ders İşlemleri
+## Genel İşlemler
 
-### Ders Açma İşlemleri
+### Açılan Bölüm Dersleri
 
 | | |
 |---|---|
-| **Route** | `/ders-acma-islemleri` |
-| **Dosya** | `SIS.Web/src/pages/CourseOpeningPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (16):**
-- `useAcademicOperationsContext()`
-- `useActiveTerm()`
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-- `useBulkOpenCourses()`
-- `useCloseSection()`
-- `useCloseAllSections()`
-- `useReactivateSection()`
-- `useCurriculumCoursesForOpening()`
-- `useDepartmentInstructors()`
-- `useExternalCourses()`
-- `useInstructorWorkload()`
-- `useOpenCourse()`
-- `useOpenedCourses()`
-- `useUpdateOpenedSection()`
-- `useDepartmentForecast()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Ders Kataloğu
-
-| | |
-|---|---|
-| **Route** | `/ders-katalogu` |
-| **Dosya** | `SIS.Web/src/pages/CourseCatalogAdminPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (4):**
-- `temel`
-- `onkosullar`
-- `mufredat`
-- `istatistik`
-
-**Veri kancaları (14):**
-- `useAdminCourses()`
-- `useAdminCourseDetail()`
-- `useCreateCourse()`
-- `useUpdateCourse()`
-- `useDeleteCourse()`
-- `useAddPrerequisite()`
-- `useRemovePrerequisite()`
-- `useAddEquivalency()`
-- `useRemoveEquivalency()`
-- `useCrossLists()`
-- `useAddCrossList()`
-- `useRemoveCrossList()`
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-
-**API endpoint'leri (22):**
-- `DELETE ${BASE}/${courseId}/cross-lists/${linkedCourseId}`
-- `DELETE ${BASE}/${courseId}/equivalencies/${equivalentCourseId}`
-- `DELETE ${BASE}/${courseId}/prerequisites/${requiredCourseId}`
-- `DELETE ${BASE}/${id}`
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/${courseId}/cross-lists`
-- `GET ${BASE}/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/${courseId}/cross-lists/${linkedCourseId}`
-- `POST ${BASE}/${courseId}/equivalencies`
-- `POST ${BASE}/${courseId}/prerequisites`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/${id}`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Ders Programı Oluşturma
-
-| | |
-|---|---|
-| **Route** | `/ders-programi-olusturma` |
-| **Dosya** | `SIS.Web/src/pages/FacultyPlanningPage.tsx` |
-| **Roller** | dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (5):**
-- `useAcademicOperationsContext()`
-- `useActiveTerm()`
-- `useAdminFaculties()`
-- `useExportExcel()`
-- `useExportPdf()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Ders Programım
-
-| | |
-|---|---|
-| **Route** | `/ders-programim` |
-| **Dosya** | `SIS.Web/src/pages/InstructorSchedulingPage.tsx` |
-| **Roller** | advisor, instructor, departmentManager, dean |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (1):**
-- `useInstructorSections()`
-
-**API endpoint'leri (4):**
-- `GET /scheduling/instructor/${instructorId}/timetable`
-- `POST /instructor/section/${sectionId}/schedule/apply`
-- `POST /instructor/section/${sectionId}/schedule/suggest`
-- `POST /instructor/section/${sectionId}/schedule/validate`
-
----
-
-### Ders Veren Öğretim Üyeleri
-
-| | |
-|---|---|
-| **Route** | `/ders-veren-ogretim-uyeleri` |
-| **Dosya** | `SIS.Web/src/pages/InstructorCoursesReportPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (5):**
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-- `useDepartmentInstructors()`
-- `useInstructorWorkload()`
-- `useActiveTerm()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Derslerim
-
-| | |
-|---|---|
-| **Route** | `/derslerim` |
-| **Dosya** | `SIS.Web/src/pages/InstructorSectionsPage.tsx` |
-| **Roller** | advisor, instructor, departmentManager, dean |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (2):**
-- `useInstructorSections()`
-- `useSectionStudents()`
-
----
-
-### Derslik Doluluk Tablosu
-
-| | |
-|---|---|
-| **Route** | `/derslik-doluluk-tablosu` |
-| **Dosya** | `SIS.Web/src/pages/ClassroomManagementPage.tsx` |
-| **Roller** | dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
----
-
-### Dönem Kapatma İşlemleri
-
-| | |
-|---|---|
-| **Route** | `/donem-kapatma` |
-| **Dosya** | `SIS.Web/src/pages/term-closing/TermClosingPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
----
-
-### Dönem Programı Aktarım
-
-| | |
-|---|---|
-| **Route** | `/donem-programi-aktarim` |
-| **Dosya** | `SIS.Web/src/pages/TermProgramTransferPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
-
-**Veri kancaları (6):**
-- `useAcademicOperationsContext()`
-- `useActiveTerm()`
-- `useAdminTerms()`
-- `usePreviousTermCourses()`
-- `useTransferFromTerm()`
-- `useDepartmentInstructors()`
-
-**API endpoint'leri (3):**
-- `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/uncancel`
-- `PUT ${API}/${id}`
-
----
-
-### Müfredat İşlemleri
-
-| | |
-|---|---|
-| **Route** | `/mufredat-islemleri` |
-| **Dosya** | `SIS.Web/src/pages/CurriculumManagementPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (12):**
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-- `useAdminProgramsByStructure()`
-- `useCurriculumList()`
-- `useCurriculumDetail()`
-- `useCreateCurriculum()`
-- `useDeleteCurriculum()`
-- `useActivateCurriculum()`
-- `useAddCurriculumCourse()`
-- `useUpdateCurriculumCourse()`
-- `useRemoveCurriculumCourse()`
-- `useCopyCurriculum()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Öğretim Elemanı Atama
-
-| | |
-|---|---|
-| **Route** | `/ogretim-elemani-atama` |
-| **Dosya** | `SIS.Web/src/pages/InstructorAssignmentPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (8):**
-- `useAcademicOperationsContext()`
-- `useActiveTerm()`
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-- `useBulkAssignInstructor()`
-- `useDepartmentInstructors()`
-- `useOpenedCourses()`
-- `useUpdateOpenedSection()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Program Kısıtlamaları
-
-| | |
-|---|---|
-| **Route** | `/ders-programi-kisitlamalari` |
-| **Dosya** | `SIS.Web/src/pages/ConstraintManagementPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 0, Sheet: 0, AlertDialog: 2) |
-
-**Veri kancaları (10):**
-- `useConstraints()`
-- `useToggleConstraint()`
-- `useUpdateConstraintCategory()`
-- `useScoreBreakdown()`
-- `useUpdateConstraintWeight()`
-- `useAdminTerms()`
-- `useTrendData()`
-- `useHeatmap()`
-- `useBottlenecks()`
-- `useTakeSnapshot()`
-
-**API endpoint'leri (3):**
-- `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/uncancel`
-- `PUT ${API}/${id}`
-
----
-
-### Program Onayı
-
-| | |
-|---|---|
-| **Route** | `/program-onayi` |
-| **Dosya** | `SIS.Web/src/pages/ScheduleApprovalPage.tsx` |
-| **Roller** | dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (8):**
-- `useActiveTerm()`
-- `useAdminFaculties()`
-- `useScheduleApprovalStatus()`
-- `useApproveSchedule()`
-- `useRevokeScheduleApproval()`
-- `useFacultyPlanningOverview()`
-- `useFacultyPlanningSections()`
-- `useFacultyPlanningTimeSlots()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Seçmeli Ders Grupları
-
-| | |
-|---|---|
-| **Route** | `/secmeli-ders-gruplari` |
-| **Dosya** | `SIS.Web/src/pages/ElectiveGroupManagementPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (4):**
-- `useElectiveGroupList(subtypeId, facultyId, departmentId, isActive)` (B3c-3 — DB-driven filter)
-- `useCreateElectiveGroup()`
-- `useElectiveSubtypeList(false)` (B3c-2/B3c-3 — DB-driven tip dropdown)
-- `useAdminFaculties()` + `useAdminDepartmentsByStructure()`
-
-**Faz 6 değişiklikleri:**
-- B3c-2: Create dialog'da subtype dropdown DB-driven
-- B3c-3: Filter dropdown da DB-driven; eski hardcoded TE/NDE/OC kalktı; subtype'tan bağımsız faculty filter aktif
-
----
-
-### Seçmeli Tipleri
-
-> **Faz B B3c — yeni sayfa (2026-04-27)**
-
-| | |
-|---|---|
-| **Route** | `/secmeli-tipleri` |
-| **Dosya** | `SIS.Web/src/pages/ElectiveSubtypeManagementPage.tsx` |
-| **Roller** | systemAdmin (yalnızca CRUD); list endpoint multi-role lookup |
-| **Modal sayısı** | 1 (Dialog: 1 — create/edit ortak form) |
-| **Sidebar** | Ders İşlemleri > Seçmeli Tipleri (SortOrder=5) |
-
-**Veri kancaları (3):**
-- `useElectiveSubtypeList(includeInactive)`
-- `useCreateElectiveSubtype()`
-- `useUpdateElectiveSubtype()` (soft delete via IsActive=false)
-
-**API endpoint'leri (3):**
-- `GET /elective-subtypes?includeInactive=...` — multi-role
-- `POST /elective-subtypes` — `menu.secmeli-tipleri.create` (SysAdmin)
-- `PUT /elective-subtypes/{id}` — `menu.secmeli-tipleri.edit` (SysAdmin)
-
-**Davranış:**
-- Code immutable (Karar #14) — Edit modunda lock icon ile readonly
-- Türkçe ad + 4 scope flag (RequiresFaculty/ForbidsFaculty/RequiresDepartment/ForbidsDepartment) + SortOrder + IsActive editable
-- Client-side validation: çelişki engellenir (RequiresX + ForbidsX aynı anda olamaz)
-- Flag değişikliği uyarı banner'ı: "Mevcut gruplar etkilenmez, yeni grup validation'ı değişir"
-- Hard delete YOK — soft delete (IsActive=false toggle)
-
----
-
-### Sınıf Listeleri — KALDIRILDI (2026-05-11)
-
-Eski `/sinif-listeleri` (ClassListsPage.tsx) sayfası `Şubelendirme İşlemleri` (`/subelendirme-islemleri`, SectioningPage.tsx) ile aynı `useDepartmentClassLists` hook'unu paylaşıyordu ve aynı veriyi gösteriyordu. Tek kaynak olarak Şubelendirme İşlemleri korundu, görsel dili eski Sınıf Listeleri'nden alındı. Cleanup SQL: `scripts/2026-05-11-sinif-listeleri-removal.sql`.
-
----
-
-### Şubelendirme İşlemleri (Proliz parity, 2026-05-12)
-
-| | |
-|---|---|
-| **Route** | `/subelendirme-islemleri` |
-| **Dosya** | `SIS.Web/src/pages/SectioningPage.tsx` (orkestrasyon, ~360 satır) |
-| **Modül dizini** | `SIS.Web/src/pages/sectioning/` — types, constants, hooks, components |
-| **Roller** | SystemAdmin (shortcut), DepartmentManager, Dean, AdministrativeStaff, Instructor (sadece view) |
-| **Layout** | 4-panel grid: filtreler (sol üst), şubeler (sağ üst), dersler (sol alt), öğrenciler (sağ alt) + alt toolbar |
-
-**Permission key'leri (3):**
-- `menu.subelendirme-islemleri.view` — sayfaya erişim
-- `menu.subelendirme-islemleri.transfer` — şubeler arası öğrenci taşıma (Faz 4)
-- `menu.subelendirme-islemleri.auto-split` — otomatik şubelendirme (Faz 3)
-
-**Veri kancaları (8):**
-- `useAcademicOperationsContext()` — yetkili kapsam
-- `useActiveTerm()` — aktif dönem
-- `useAdminFaculties()` + `useAdminDepartmentsByStructure()` — filtreler
-- `useDepartmentClassLists()` — şube + öğrenci verisi (ortak class-lists endpoint)
-- `useUpdateOpenedSection()` — hoca / kontenjan güncelleme
-- `useBulkAssignInstructor()` — tüm şubelere toplu hoca atama
-- `useCloseSection()` / `useReactivateSection()` / `useDeleteAllSectionsHard()` — şube yaşam döngüsü
-- `useOpenCourse()` — yeni şube ekleme (sectionCount=1)
-- `useAutoSplitCourse()` — otomatik şubelendirme (Faz 3)
-- `useTransferStudentsBetweenSections()` — şubeler arası öğrenci taşıma (Faz 4)
-- `useDepartmentInstructors()` — hoca dropdown (atama dialog'larında)
-
-**API endpoint'leri (10):**
-- `GET /academicoperations/context`
-- `GET /academicoperations/class-lists` — şube + öğrenci listesi
-- `PUT /course-opening/section` — tek şube güncelleme (hoca / kontenjan)
-- `POST /course-opening/bulk-assign-instructor` — toplu hoca atama
-- `POST /course-opening/open` — yeni şube açma (sectionCount=1)
-- `POST /course-opening/auto-split` — otomatik şubelendirme (3 strateji)
-- `POST /course-opening/transfer-students` — şubeler arası öğrenci taşıma
-- `DELETE /course-opening/section/{id}` — şubeyi kapat (Status=Cancelled)
-- `PUT /course-opening/section/{id}/reactivate` — şubeyi yeniden aktifleştir
-- `DELETE /course-opening/course/{courseId}/hard` — dersin tüm şubelerini hard delete
-
-**Modal sayısı (8):**
-- `AddSectionDialog` — yeni şube ekleme (capacity + quotas + instructor)
-- `AssignInstructorDialog` — tek şube hoca değiştirme
-- `BulkAssignInstructorDialog` — tüm şubelere toplu hoca atama
-- `EditCapacityDialog` — kontenjan düzenleme (toplam + iç + dış)
-- `AutoSplitConfirmDialog` — otomatik şubelendirme onayı (delta + uyarı)
-- `ConfirmActionDialog` — kapatma / yeniden açma / tümünü silme onayları (3 ayrı kullanım)
-
-**Auto-split stratejileri (3):**
-- **Equal** — öğrenci numarasına göre round-robin
-- **EqualRepeat** — `CourseRegistration.IsRepeated` true olanları önce homojen dağıt, normal öğrenciler sonra
-- **ModOddEven** — son hane çift→şube1, tek→şube2 (yalnızca K=2 ile)
-
-**Şu an placeholder olan (yapılmadı):**
-- 3 ek strateji: Öğrenci Tipi / Grubu / Programlarına Göre (dropdown'dan çıkarıldı, backend'de yok)
-
-**SQL migrationlar:**
-- `scripts/2026-05-12-subelendirme-transfer-permission.sql` — Faz 4 permission grant
-- `scripts/2026-05-12-subelendirme-auto-split-permission.sql` — Faz 3 permission grant
-- `scripts/2026-05-12-sectiontransfer-removal.sql` — stub SectionTransferPage sayfası silindi
-
----
-
-### Şubeler Arası Öğrenci Transfer — KALDIRILDI (2026-05-12)
-
-Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfaydı (hiç implement edilmedi). İşlev `Şubelendirme İşlemleri` sayfasına taşındı (Faz 4 — `menu.subelendirme-islemleri.transfer` permission'ı + alt toolbar "Şubeye Taşı" butonu). Cleanup SQL: `scripts/2026-05-12-sectiontransfer-removal.sql`.
-
----
-
-
-## Anketler
-
-### Değerlendirme Dönemi Yönetimi
-
-| | |
-|---|---|
-| **Route** | `/degerlendirme-donemi-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/EvaluationPeriodAdminPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 3 (Dialog: 1, Sheet: 0, AlertDialog: 2) |
-
-**Veri kancaları (8):**
-- `useActiveEvaluationPeriod()`
-- `useAllEvaluationQuestions()`
-- `useCloseEvaluationPeriod()`
-- `useCreateEvaluationQuestion()`
-- `useDeleteEvaluationQuestion()`
-- `useOpenEvaluationPeriod()`
-- `useUpdateEvaluationQuestion()`
-- `useAdminTerms()`
-
-**API endpoint'leri (3):**
-- `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/uncancel`
-- `PUT ${API}/${id}`
-
----
-
-### Değerlendirme Sonuçları
-
-| | |
-|---|---|
-| **Route** | `/degerlendirme-sonuclari` |
-| **Dosya** | `SIS.Web/src/pages/EvaluationResultsPage.tsx` |
-| **Roller** | instructor, departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (2):**
-- `management`
-- `instructor`
-
-**Veri kancaları (8):**
-- `useInstructorSections()`
-- `useInstructorTerms()`
-- `useActiveEvaluationPeriod()`
-- `useDepartmentEvaluationSummary()`
-- `useSectionEvaluationResults()`
-- `useAdminFaculties()`
-- `useAdminDepartmentsByStructure()`
-- `useAdminTerms()`
-
-**API endpoint'leri (15):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/uncancel`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${API}/${id}`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### Ders Değerlendirme
-
-| | |
-|---|---|
-| **Route** | `/ders-degerlendirme` |
-| **Dosya** | `SIS.Web/src/pages/CourseEvaluationPage.tsx` |
+| **Route** | `/acilan-bolum-dersleri` |
+| **Dosya** | `SIS.Web/src/pages/OpenedDepartmentCoursesPage.tsx` |
 | **Roller** | student |
 | **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (2):**
-- `useActiveEvaluationPeriod()`
-- `useMyEvaluableCourses()`
-
 ---
 
-
-## Kaynak Yönetimi
-
-### Derslik Yönetimi
+### Akademik Takvim
 
 | | |
 |---|---|
-| **Route** | `/derslik-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/ClassroomManagementAdminPage.tsx` |
-| **Roller** | systemAdmin |
+| **Route** | `/akademik-takvim` |
+| **Dosya** | `SIS.Web/src/pages/AcademicCalendarPage.tsx` |
+| **Roller** | student, administrativeStaff, advisor, dean, departmentManager, instructor, systemAdmin |
 | **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (4):**
-- `useClassrooms()`
-- `useCreateClassroom()`
-- `useUpdateClassroom()`
-- `useDeleteClassroom()`
+**Sekmeler (2):**
+- `calendar`
+- `list`
 
 ---
 
-### Derslik-Fakülte Ataması
+### Alınan Dersler
 
 | | |
 |---|---|
-| **Route** | `/derslik-fakulte-atamasi` |
-| **Dosya** | `SIS.Web/src/pages/ClassroomAssignmentPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+| **Route** | `/alinan-dersler` |
+| **Dosya** | `SIS.Web/src/pages/MyCoursesPage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (8):**
-- `useAdminTerms()`
-- `useAdminFaculties()`
-- `useClassrooms()`
-- `useClassroomAssignments()`
-- `useCreateClassroomAssignment()`
-- `useDeleteClassroomAssignment()`
-- `useBulkAssignClassrooms()`
-- `useSuggestClassroomAssignments()`
+**Veri kancaları (1):**
+- `useCourseHistory()`
 
-**API endpoint'leri (15):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${API}/${termId}/cancel`
-- `POST ${API}/${termId}/uncancel`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${API}/${id}`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
+**API endpoint'leri (8):**
+- `DELETE /registrations/${registrationId}/drop`
+- `GET /registrations/attendance-status`
+- `GET /registrations/history`
+- `GET /registrations/history/pdf`
+- `GET /registrations/my`
+- `POST /registrations/${registrationId}/withdraw`
+- `POST /registrations/plan`
+- `POST /registrations/submit`
+
+---
+
+### Danışman Bilgileri
+
+| | |
+|---|---|
+| **Route** | `/danisman-bilgileri` |
+| **Dosya** | `SIS.Web/src/pages/AdvisorInfoPage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Duyurular
+
+| | |
+|---|---|
+| **Route** | `/duyurular` |
+| **Dosya** | `SIS.Web/src/pages/AnnouncementsPage.tsx` |
+| **Roller** | student, administrativeStaff, dean, departmentManager, systemAdmin, advisor, instructor |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useActiveAnnouncements()`
+- `useAnnouncementDetail()`
+- `useMarkAllAnnouncementsAsRead()`
+- `useMarkAnnouncementAsRead()`
+- `useAnnouncementCategories()`
 
 ---
 
 
-## Kullanıcı Yönetimi
+## Kullanıcı İşlemleri
 
-### Kullanıcı Listesi
+### Kullanıcı Grupları Sınırlandırmalar
+
+| | |
+|---|---|
+| **Route** | `/kullanici-grup-sinirlandirmalar` |
+| **Dosya** | `SIS.Web/src/pages/UserGroupRestrictionsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Kullanıcı Rapor Grupları
+
+| | |
+|---|---|
+| **Route** | `/kullanici-rapor-gruplari` |
+| **Dosya** | `SIS.Web/src/pages/UserReportGroupsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 4 (Dialog: 3, Sheet: 0, AlertDialog: 2) |
+
+**Sekmeler (4):**
+- `categories`
+- `reports`
+- `permissions` (grant editörü: rol/kişi/grup × kategori/rapor × izin/yasak)
+- `groups` (kullanıcı grupları + üye yönetimi)
+
+**Veri kancaları:**
+- `useReportCategories()`, `useCreateReportCategory()`, `useUpdateReportCategory()`, `useDeleteReportCategory()`
+- `useReports()`, `useCreateReport()`, `useUpdateReport()`, `useDeleteReport()`
+- `useReportGrants()`, `useSetReportGrant()`, `useDeleteReportGrant()`
+- `useReportUserGroups()`, `useCreateReportUserGroup()`, `useDeleteReportUserGroup()`, `useReportGroupMembers()`, `useAddGroupMember()`, `useRemoveGroupMember()`
+
+---
+
+### Kullanıcı Tanımlama
 
 | | |
 |---|---|
@@ -694,39 +159,225 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Roller** | systemAdmin |
 | **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (4):**
+**Veri kancaları (8):**
 - `useAdminUsers()`
 - `useUpdateUserRoles()`
 - `useResetPassword()`
 - `useSetUserStatus()`
+- `useAdminFaculties()`
+- `useClearUserScope()`
+- `useSetUserScope()`
+- `useUserScope()`
 
-**API endpoint'leri (4):**
+**API endpoint'leri (21):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
 - `GET ${API}/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
 - `POST ${API}/${id}/reset-password`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
 - `PUT ${API}/${id}/roles`
 - `PUT ${API}/${id}/status`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
 
 ---
 
-### Personel Listesi
+### Kullanıcı Vekalet İşlemleri
 
 | | |
 |---|---|
-| **Route** | `/personel-listesi` |
-| **Dosya** | `SIS.Web/src/pages/InstructorDirectoryPage.tsx` |
+| **Route** | `/kullanici-vekalet-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/UserDelegationPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 2 (Dialog: 1, Sheet: 0, AlertDialog: 1) |
 
 **Veri kancaları (3):**
-- `useAdminInstructors()`
-- `useCreateInstructor()`
-- `useAdminDepartments()`
+- `useCreateDelegation()`
+- `useDelegations()`
+- `useRevokeDelegation()`
 
-**API endpoint'leri (3):**
-- `GET /admin/advisors`
-- `GET /admin/departments`
-- `GET /admin/programs`
+---
 
+### Kullanıcı Yetki Grupları
+
+| | |
+|---|---|
+| **Route** | `/kullanici-yetki-gruplari` |
+| **Dosya** | `SIS.Web/src/pages/UserPermissionGroupsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
+
+**Veri kancaları (2):**
+- `usePermissionBundles()`
+- `useDeleteBundle()`
+
+---
+
+### LOG
+
+| | |
+|---|---|
+| **Route** | `/denetim-kayitlari` |
+| **Dosya** | `SIS.Web/src/pages/AuditLogPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 0, Sheet: 1, AlertDialog: 0) |
+
+**Veri kancaları (2):**
+- `useAuditLogs()`
+- `useAuditLogFilters()`
+
+**API endpoint'leri (5):**
+- `GET /admin/audit-logs`
+- `GET /admin/audit-logs/${id}`
+- `GET /admin/audit-logs/anomalies`
+- `GET /admin/audit-logs/export/csv`
+- `GET /admin/audit-logs/stats`
+
+---
+
+
+## Genel Ayarlar
+
+### Belge Sınırlandırmalar
+
+| | |
+|---|---|
+| **Route** | `/belge-sinirlandirmalar` |
+| **Dosya** | `SIS.Web/src/pages/DocumentRestrictionsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### EBYS İmza Yetkilileri
+
+| | |
+|---|---|
+| **Route** | `/ebys-imza-yetkilileri` |
+| **Dosya** | `SIS.Web/src/pages/EbysSignatureAuthoritiesPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Fakülte İmza Yükleme İşlemleri
+
+| | |
+|---|---|
+| **Route** | `/fakulte-imza-yukleme-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/FacultySignatureUploadPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Kurumsal Entegrasyon Tanımları
+
+| | |
+|---|---|
+| **Route** | `/kurumsal-entegrasyon-tanimlari` |
+| **Dosya** | `SIS.Web/src/pages/InstitutionalIntegrationPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Menü Yönetimi
+
+| | |
+|---|---|
+| **Route** | `/menu-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/MenuManagementPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
+
+**Veri kancaları (10):**
+- `useAvailableMenuPermissions()`
+- `useCreateItem()`
+- `useCreateModule()`
+- `useDeleteItem()`
+- `useDeleteModule()`
+- `useMenuTree()`
+- `useReorderItems()`
+- `useReorderModules()`
+- `useUpdateItem()`
+- `useUpdateModule()`
+
+---
+
+### Sistem Konfigürasyonu
+
+| | |
+|---|---|
+| **Route** | `/sistem-ayarlari` |
+| **Dosya** | `SIS.Web/src/pages/SystemConfigPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useConfigLimits()`
+- `useImportSystemConfigs()`
+- `useSystemConfigs()`
+- `useUpdateSystemConfig()`
+- `useDebounce()`
+
+**API endpoint'leri (5):**
+- `GET /admin/system-config`
+- `GET /admin/system-config/export`
+- `GET /admin/system-config/limits`
+- `POST /admin/system-config/import`
+- `PUT /admin/system-config/${id}`
+
+---
+
+### Üniversite Bilgileri
+
+| | |
+|---|---|
+| **Route** | `/universite-bilgileri` |
+| **Dosya** | `SIS.Web/src/pages/UniversityInfoPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Web Modül Ayarları
+
+| | |
+|---|---|
+| **Route** | `/web-modul-ayarlari` |
+| **Dosya** | `SIS.Web/src/pages/WebModuleSettingsPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (2):**
+- `useUpdateWebModuleControl()`
+- `useWebModuleControlSummaries()`
+
+---
+
+
+## Sık Kullanılanlar
+
+### Ana Sayfa
+
+| | |
+|---|---|
+| **Route** | `/` |
+| **Dosya** | `(bulunamadı)` |
+| **Roller** | administrativeStaff, advisor, dean, departmentManager, instructor, student, systemAdmin |
 ---
 
 
@@ -739,34 +390,23 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/donem-yonetimi` |
 | **Dosya** | `SIS.Web/src/pages/TermManagementPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 3 (Dialog: 2, Sheet: 0, AlertDialog: 1) |
+| **Modal sayısı** | 3 (Dialog: 3, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (5):**
+**Veri kancaları (7):**
 - `useAdminTerms()`
 - `useCreateTerm()`
 - `useUpdateTerm()`
 - `useCancelTerm()`
 - `useUncancelTerm()`
+- `useActivateTerm()`
+- `useDeactivateTerm()`
 
-**API endpoint'leri (3):**
+**API endpoint'leri (5):**
+- `POST ${API}/${termId}/activate`
 - `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
 - `POST ${API}/${termId}/uncancel`
 - `PUT ${API}/${id}`
-
----
-
-### Akademik Takvim (Görünüm)
-
-| | |
-|---|---|
-| **Route** | `/akademik-takvim` |
-| **Dosya** | `SIS.Web/src/pages/AcademicCalendarPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Sekmeler (2):**
-- `list`
-- `grid`
 
 ---
 
@@ -777,24 +417,32 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/bolum-tanimlari` |
 | **Dosya** | `SIS.Web/src/pages/DepartmentDefinitionsPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 3 (Dialog: 3, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (5):**
-- `useAdminFaculties()`
+**Veri kancaları (8):**
 - `useAdminDepartmentsByStructure()`
+- `useAdminFaculties()`
+- `useAdminProgramsByStructure()`
 - `useCreateDepartment()`
-- `useUpdateDepartment()`
 - `useDeleteDepartment()`
+- `useUpdateDepartment()`
+- `useBulkCreateDepartments()`
+- `useListController()`
 
-**API endpoint'leri (12):**
+**API endpoint'leri (17):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
 - `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
 - `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
 - `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
 - `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
 - `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
 - `POST ${BASE}/programs`
 - `PUT ${BASE}/departments/${id}`
 - `PUT ${BASE}/faculties/${id}`
@@ -809,81 +457,32 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/fakulte-tanimlari` |
 | **Dosya** | `SIS.Web/src/pages/FacultyDefinitionsPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (4):**
-- `useAdminFaculties()`
-- `useCreateFaculty()`
-- `useUpdateFaculty()`
-- `useDeleteFaculty()`
-
-**API endpoint'leri (12):**
-- `DELETE ${BASE}/departments/${id}`
-- `DELETE ${BASE}/faculties/${id}`
-- `DELETE ${BASE}/programs/${id}`
-- `GET ${BASE}/departments`
-- `GET ${BASE}/faculties`
-- `GET ${BASE}/programs`
-- `POST ${BASE}/departments`
-- `POST ${BASE}/faculties`
-- `POST ${BASE}/programs`
-- `PUT ${BASE}/departments/${id}`
-- `PUT ${BASE}/faculties/${id}`
-- `PUT ${BASE}/programs/${id}`
-
----
-
-### ÖSYM Kayıt Takvimi
-
-| | |
-|---|---|
-| **Route** | `/osym-kayit-takvimi` |
-| **Dosya** | `SIS.Web/src/pages/OsymRegistrationCalendarPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (4):**
-- `useOsymRegistrationCalendars()`
-- `useCreateOsymRegistrationCalendar()`
-- `useUpdateOsymRegistrationCalendar()`
-- `useDeleteOsymRegistrationCalendar()`
-
-**API endpoint'leri (2):**
-- `DELETE ${BASE}/${id}`
-- `PUT ${BASE}/${id}`
-
----
-
-### Program Kontenjan Bilgileri
-
-| | |
-|---|---|
-| **Route** | `/program-kontenjan` |
-| **Dosya** | `SIS.Web/src/pages/ProgramQuotaPage.tsx` |
-| **Roller** | dean, systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 3 (Dialog: 3, Sheet: 0, AlertDialog: 0) |
 
 **Veri kancaları (7):**
 - `useAdminFaculties()`
 - `useAdminDepartmentsByStructure()`
-- `useAdminProgramsByStructure()`
-- `useProgramQuotas()`
-- `useCreateProgramQuota()`
-- `useUpdateProgramQuota()`
-- `useDeleteProgramQuota()`
+- `useCreateFaculty()`
+- `useUpdateFaculty()`
+- `useDeleteFaculty()`
+- `useBulkCreateFaculties()`
+- `useListController()`
 
-**API endpoint'leri (14):**
-- `DELETE ${BASE}/${id}`
+**API endpoint'leri (17):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
 - `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
 - `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
 - `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
 - `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
 - `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
 - `POST ${BASE}/programs`
-- `PUT ${BASE}/${id}`
 - `PUT ${BASE}/departments/${id}`
 - `PUT ${BASE}/faculties/${id}`
 - `PUT ${BASE}/programs/${id}`
@@ -897,52 +496,35 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/program-tanimlari` |
 | **Dosya** | `SIS.Web/src/pages/ProgramDefinitionsPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 3 (Dialog: 3, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (6):**
-- `useAdminFaculties()`
+**Veri kancaları (7):**
 - `useAdminDepartmentsByStructure()`
+- `useAdminFaculties()`
 - `useAdminProgramsByStructure()`
 - `useCreateProgram()`
-- `useUpdateProgram()`
 - `useDeleteProgram()`
+- `useUpdateProgram()`
+- `useListController()`
 
-**API endpoint'leri (12):**
+**API endpoint'leri (17):**
 - `DELETE ${BASE}/departments/${id}`
 - `DELETE ${BASE}/faculties/${id}`
 - `DELETE ${BASE}/programs/${id}`
 - `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
 - `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
 - `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
 - `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
 - `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
 - `POST ${BASE}/programs`
 - `PUT ${BASE}/departments/${id}`
 - `PUT ${BASE}/faculties/${id}`
 - `PUT ${BASE}/programs/${id}`
-
----
-
-### Sınıf Atlatma Kuralları
-
-| | |
-|---|---|
-| **Route** | `/sinif-atlatma-kurallari` |
-| **Dosya** | `SIS.Web/src/pages/PromotionRulePage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (5):**
-- `usePromotionRules()`
-- `useCreatePromotionRule()`
-- `useUpdatePromotionRule()`
-- `useDeletePromotionRule()`
-- `useAdminPrograms()`
-
-**API endpoint'leri (3):**
-- `GET /admin/advisors`
-- `GET /admin/departments`
-- `GET /admin/programs`
 
 ---
 
@@ -952,15 +534,16 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 |---|---|
 | **Route** | `/akademik-takvim-olusturma` |
 | **Dosya** | `SIS.Web/src/pages/AcademicCalendarGeneratorPage.tsx` |
-| **Roller** | systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Roller** | administrativeStaff, systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
 **Sekmeler (3):**
 - `generator`
 - `draft`
 - `holidays`
 
-**Veri kancaları (10):**
+**Veri kancaları (11):**
+- `useAdminTerms()`
 - `useApplyDraft()`
 - `useCalendarDraft()`
 - `useCalendarDrafts()`
@@ -972,41 +555,23 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 - `useUpdateDraftEvent()`
 - `useWhatIfCalendar()`
 
-**API endpoint'leri (11):**
+**API endpoint'leri (16):**
 - `DELETE ${API}/drafts/${draftId}`
 - `GET ${API}/drafts`
 - `GET ${API}/drafts/${draftId}`
 - `GET ${API}/holidays/definitions`
 - `GET ${API}/templates`
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
 - `POST ${API}/drafts/${draftId}/apply`
 - `POST ${API}/drafts/${draftId}/rollback`
 - `POST ${API}/drafts/${draftId}/what-if`
 - `POST ${API}/generate`
+- `PUT ${API}/${id}`
 - `PUT ${API}/drafts/${draftId}/events/${encodeURIComponent(eventId)}`
 - `PUT ${API}/templates`
-
----
-
-
-## Danışmanlık İşlemleri
-
-### Ders Kısıtları
-
-| | |
-|---|---|
-| **Route** | `/danisman-ders-kisitlari` |
-| **Dosya** | `SIS.Web/src/pages/AdvisorCourseConstraintsPage.tsx` |
-| **Roller** | advisor, instructor |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (7):**
-- `useAdvisorConstraints()`
-- `useAdvisorStudents()`
-- `useDeleteAdvisorConstraint()`
-- `useUpdateAdvisorConstraint()`
-- `useUpsertAdvisorConstraint()`
-- `useStudentEligibility()`
-- `useActiveTerm()`
 
 ---
 
@@ -1034,16 +599,20 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/ders-kayit` |
 | **Dosya** | `SIS.Web/src/pages/CourseCatalogPage.tsx` |
 | **Roller** | student |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (7):**
+**Veri kancaları (8):**
 - `useStudentCatalog()`
 - `useMyRegistrations()`
 - `useAddToPlan()`
 - `useDropCourse()`
 - `useSubmitRegistration()`
 - `useStudentInfo()`
+- `useStudentPoolStatus()`
 - `useActiveTerm()`
+
+**API endpoint'leri (1):**
+- `GET /curriculum/student/${studentId}/pool-status`
 
 ---
 
@@ -1061,6 +630,22 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 
 ---
 
+### Dönem Ortalamaları
+
+| | |
+|---|---|
+| **Route** | `/donem-ortalamalari` |
+| **Dosya** | `SIS.Web/src/pages/TermGpaPage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (3):**
+- `useStudentInfo()`
+- `useStudentTranscript()`
+- `useTermGpaHistory()`
+
+---
+
 ### Kayıt Planım
 
 | | |
@@ -1068,12 +653,31 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Route** | `/plan` |
 | **Dosya** | `SIS.Web/src/pages/RegistrationPlanPage.tsx` |
 | **Roller** | student |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
 
-**Veri kancaları (4):**
+**Veri kancaları (5):**
 - `useMyRegistrations()`
 - `useDropCourse()`
 - `useSubmitRegistration()`
+- `useStudentInfo()`
+- `useStudentPoolStatus()`
+
+**API endpoint'leri (1):**
+- `GET /curriculum/student/${studentId}/pool-status`
+
+---
+
+### Müfredat Durum
+
+| | |
+|---|---|
+| **Route** | `/mufredat-durum` |
+| **Dosya** | `SIS.Web/src/pages/CurriculumStatusPage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (2):**
+- `useCurriculumStatus()`
 - `useStudentInfo()`
 
 ---
@@ -1123,74 +727,614 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 | **Roller** | student |
 | **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (2):**
+**Veri kancaları (3):**
+- `useCurriculumStatus()`
 - `useStudentInfo()`
 - `useStudentTranscript()`
 
 ---
 
 
-## Duyuru Yönetimi
+## Ders İşlemleri
 
-### Duyuru Yönetimi
+### Ders Aç (Hareket)
 
 | | |
 |---|---|
-| **Route** | `/duyuru-yonetimi` |
-| **Dosya** | `SIS.Web/src/pages/AnnouncementManagementPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
-
-**Veri kancaları (3):**
-- `useAllAnnouncements()`
-- `useAnnouncementDetail()`
-- `useDeleteAnnouncement()`
-
+| **Route** | `/donem-programi-aktarim` |
+| **Dosya** | `SIS.Web/src/pages/term-program-transfer.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
 ---
 
-
-## Genel İşlemler
-
-### Alınan Dersler
+### Ders Aç (Müfredat)
 
 | | |
 |---|---|
-| **Route** | `/alinan-dersler` |
-| **Dosya** | `SIS.Web/src/pages/MyCoursesPage.tsx` |
-| **Roller** | student |
+| **Route** | `/ders-acma-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/CourseOpeningPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
 | **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (1):**
-- `useCourseHistory()`
+**Veri kancaları (20):**
+- `useAcademicOperationsContext()`
+- `useActiveTerm()`
+- `useAdminTerms()`
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useAdminProgramsByStructure()`
+- `useBulkOpenCourses()`
+- `useCloseSection()`
+- `useCloseAllSections()`
+- `useDeleteAllSectionsHard()`
+- `useReactivateSection()`
+- `useCurriculumCoursesForOpening()`
+- `usePoolSlotsForOpening()`
+- `useDepartmentInstructors()`
+- `useExternalCourses()`
+- `useInstructorWorkload()`
+- `useOpenCourse()`
+- `useOpenedCourses()`
+- `useUpdateOpenedSection()`
+- `useDepartmentForecast()`
+
+**API endpoint'leri (22):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${API}/${id}`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
 
 ---
 
-### Ana Sayfa
+### Ders Kataloğu
 
 | | |
 |---|---|
-| **Route** | `/` |
-| **Dosya** | `(bulunamadı)` |
-| **Roller** | student, advisor, instructor, departmentManager, dean, systemAdmin |
+| **Route** | `/ders-katalogu` |
+| **Dosya** | `SIS.Web/src/pages/CourseCatalogAdminPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 4 (Dialog: 4, Sheet: 0, AlertDialog: 0) |
+
+**Sekmeler (7):**
+- `genel`
+- `akademik`
+- `onkosullar`
+- `mufredat`
+- `program`
+- `hocalar`
+- `istatistik`
+
+**Veri kancaları (16):**
+- `useAdminCourses()`
+- `useAdminCourseDetail()`
+- `useCreateCourse()`
+- `useUpdateCourse()`
+- `useDeleteCourse()`
+- `useAddPrerequisite()`
+- `useRemovePrerequisite()`
+- `useAddEquivalency()`
+- `useRemoveEquivalency()`
+- `useCrossLists()`
+- `useAddCrossList()`
+- `useRemoveCrossList()`
+- `useCourseSections()`
+- `useBulkDeleteCourses()`
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+
+**API endpoint'leri (30):**
+- `DELETE ${BASE}/${courseId}/cross-lists/${linkedCourseId}`
+- `DELETE ${BASE}/${courseId}/equivalencies/${equivalentCourseId}`
+- `DELETE ${BASE}/${courseId}/prerequisites/${requiredCourseId}`
+- `DELETE ${BASE}/${id}`
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/${courseId}/cross-lists`
+- `GET ${BASE}/${courseId}/curriculum-usage`
+- `GET ${BASE}/${courseId}/sections`
+- `GET ${BASE}/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${BASE}/${courseId}/cross-lists/${linkedCourseId}`
+- `POST ${BASE}/${courseId}/equivalencies`
+- `POST ${BASE}/${courseId}/prerequisites`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/${courseId}/prereq-rules`
+- `PUT ${BASE}/${id}`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
 ---
 
-### Duyurular
+### Ders Kontenjan İşlemleri
 
 | | |
 |---|---|
-| **Route** | `/duyurular` |
-| **Dosya** | `SIS.Web/src/pages/AnnouncementsPage.tsx` |
-| **Roller** | student, departmentManager, dean, systemAdmin |
+| **Route** | `/ders-kontenjan-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/CourseQuotaPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Ders Programı Oluşturma
+
+| | |
+|---|---|
+| **Route** | `/ders-programi-olusturma` |
+| **Dosya** | `SIS.Web/src/pages/FacultyPlanningPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useAcademicOperationsContext()`
+- `useActiveTerm()`
+- `useAdminFaculties()`
+- `useExportExcel()`
+- `useExportPdf()`
+
+**API endpoint'leri (17):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Ders Saatleri Yönetimi
+
+| | |
+|---|---|
+| **Route** | `/ders-saatleri-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/TimeSlotManagementPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 4 (Dialog: 4, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (7):**
+- `useAdminTerms()`
+- `useTimeSlots()`
+- `useCreateTimeSlot()`
+- `useUpdateTimeSlot()`
+- `useDeleteTimeSlot()`
+- `useRegenerateTimeSlots()`
+- `useScheduleSettings()`
+
+**API endpoint'leri (8):**
+- `DELETE ${BASE}/${id}`
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `POST ${BASE}/regenerate`
+- `PUT ${API}/${id}`
+- `PUT ${BASE}/${id}`
+
+---
+
+### Ders Veren Öğretim Üyeleri
+
+| | |
+|---|---|
+| **Route** | `/ders-veren-ogretim-uyeleri` |
+| **Dosya** | `SIS.Web/src/pages/InstructorCoursesReportPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (4):**
+- `useAcademicOperationsContext()`
+- `useDepartmentInstructors()`
+- `useInstructorWorkload()`
+- `useActiveTerm()`
+
+**API endpoint'leri (10):**
+- `GET /academicLevel/department/${departmentId}`
+- `GET /academicoperations/class-lists`
+- `GET /academicoperations/context`
+- `GET /academicoperations/curriculum-options`
+- `GET /academicoperations/curriculum-overview`
+- `GET /academicoperations/planning-summary`
+- `GET /academicoperations/students`
+- `GET /academicprogression/grade-lock-readiness/${departmentId}`
+- `POST /academicoperations/bulk-advisor-assignment`
+- `POST /academicoperations/bulk-curriculum-assignment`
+
+---
+
+### Derslik Doluluk Tablosu
+
+| | |
+|---|---|
+| **Route** | `/derslik-doluluk-tablosu` |
+| **Dosya** | `SIS.Web/src/pages/ClassroomManagementPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Müfredat İşlemleri
+
+| | |
+|---|---|
+| **Route** | `/mufredat-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/CurriculumManagementPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (10):**
+- `useCurriculumList()`
+- `useCurriculumDetail()`
+- `useCreateCurriculum()`
+- `useUpdateCurriculum()`
+- `useDeleteCurriculum()`
+- `useActivateCurriculum()`
+- `useAddCurriculumCourse()`
+- `useRemoveCurriculumCourse()`
+- `useCopyCurriculum()`
+- `useCurriculumPools()`
+
+---
+
+### Müfredat Sınıf Dönem Tanımları
+
+| | |
+|---|---|
+| **Route** | `/mufredat-sinif-donem-tanimlari` |
+| **Dosya** | `SIS.Web/src/pages/MufredatSinifDonemTanimlariPage.tsx` |
+| **Roller** | administrativeStaff, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useAdminProgramsByStructure()`
+- `useCurriculumList()`
+- `useCurriculumTermRules()`
+
+**API endpoint'leri (17):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Öğretim Elemanı Atama
+
+| | |
+|---|---|
+| **Route** | `/ogretim-elemani-atama` |
+| **Dosya** | `SIS.Web/src/pages/InstructorAssignmentPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (8):**
+- `useAcademicOperationsContext()`
+- `useActiveTerm()`
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useBulkAssignInstructor()`
+- `useDepartmentInstructors()`
+- `useOpenedCourses()`
+- `useUpdateOpenedSection()`
+
+**API endpoint'leri (17):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Program Kısıtlamaları
+
+| | |
+|---|---|
+| **Route** | `/ders-programi-kisitlamalari` |
+| **Dosya** | `SIS.Web/src/pages/ConstraintManagementPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
 | **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
 
-**Veri kancaları (2):**
-- `useActiveAnnouncements()`
-- `useAnnouncementDetail()`
+**Sekmeler (2):**
+- `constraints`
+- `pairing`
+
+**Veri kancaları (7):**
+- `usePermissions()`
+- `useConstraints()`
+- `useToggleConstraint()`
+- `useUpdateConstraintCategory()`
+- `useUpdateConstraintWeight()`
+- `useAdminTerms()`
+- `useUpdateConstraintParameters()`
+
+**API endpoint'leri (5):**
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `PUT ${API}/${id}`
+
+---
+
+### Program Onayı
+
+| | |
+|---|---|
+| **Route** | `/program-onayi` |
+| **Dosya** | `SIS.Web/src/pages/ScheduleApprovalPage.tsx` |
+| **Roller** | dean, systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (8):**
+- `useActiveTerm()`
+- `useAdminFaculties()`
+- `useScheduleApprovalStatus()`
+- `useApproveSchedule()`
+- `useRevokeScheduleApproval()`
+- `useFacultyPlanningOverview()`
+- `useFacultyPlanningSections()`
+- `useFacultyPlanningTimeSlots()`
+
+**API endpoint'leri (17):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Seçmeli Ders Yapılandırması
+
+| | |
+|---|---|
+| **Route** | `/secmeli-yapilandirma` |
+| **Dosya** | `(bulunamadı)` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+---
+
+### Sınav Müfredatı
+
+| | |
+|---|---|
+| **Route** | `/sinav-mufredati` |
+| **Dosya** | `SIS.Web/src/pages/ExamRegulationManagementPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
+
+**Açıklama:** Program bazında sınav yönergesi (Sınav Müfredatı) yönetimi. Her kayıt `(ProgramId, DegreeLevel, TermType, Year)` birleşimine aittir. Kapsam: ara sınav/YYS sayısı ve ağırlık sınırları, geçme notu + final/ham başarı barajları, BelowFloorGrade (baraj altı atanacak harf), harf notu aralıkları (AA…DD eşikleri + kilitli mi bayrağı), bağıl değerlendirme (T-skor eşikleri, InclusionLimit, AbsoluteFloor), 7 sınav kuralı toggle'ı. Devamsızlık eşikleri (hafta sayısı, teori/uygulama oranı, method) tüm üniversite için ortaktır; ayrı bir SystemConfig okuma endpoint'i ile sayfada gösterilir. Ayrıntılı mimari için bkz. `docs/CODEMAPS/exam-grade-system.md`.
+
+**Veri kancaları (6):**
+- `useAdminPrograms()`
+- `useExamRegulations(programId?)`
+- `useCreateExamRegulation()`
+- `useUpdateExamRegulation()`
+- `useDeleteExamRegulation()`
+- `useCloneExamRegulation()`
+- `useAttendancePolicy()`
+
+**Bileşenler:**
+- `ExamRegulationFormDialog` — `SIS.Web/src/components/exam-regulation/ExamRegulationFormDialog.tsx`
+
+**Controller:** `ExamRegulationController` → `api/admin/exam-regulations`  
+**Hooks dosyası:** `SIS.Web/src/hooks/useExamRegulations.ts`  
+**API modülü:** `SIS.Web/src/api/examRegulation.api.ts`
+
+**API endpoint'leri (7):**
+- `GET api/admin/exam-regulations` — liste (programId query filtresi opsiyonel)
+- `GET api/admin/exam-regulations/{id}` — tek kayıt
+- `POST api/admin/exam-regulations` — oluştur
+- `PUT api/admin/exam-regulations/{id}` — güncelle
+- `DELETE api/admin/exam-regulations/{id}` — sil
+- `POST api/admin/exam-regulations/{id}/clone` — yeni yıl/programa çoğalt
+- `GET api/admin/exam-regulations/attendance-policy` — üniversite devamsızlık politikasını okur (SystemConfig)
+
+**İzinler:**
+- `menu.sinav-mufredati.view`
+- `menu.sinav-mufredati.create`
+- `menu.sinav-mufredati.edit`
+- `menu.sinav-mufredati.delete`
+
+---
+
+### Şubelendirme İşlemleri
+
+| | |
+|---|---|
+| **Route** | `/subelendirme-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/SectioningPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+
+## Bölüm İşlemleri
+
+### Toplu Danışman Atama
+
+| | |
+|---|---|
+| **Route** | `/toplu-danisman-atama` |
+| **Dosya** | `SIS.Web/src/pages/BulkAdvisorAssignmentPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useAcademicOperationsContext()`
+- `useBulkAdvisorAssignment()`
+- `useDepartmentStudents()`
+- `useDepartmentInstructors()`
+- `usePermissions()`
+
+**API endpoint'leri (10):**
+- `GET /academicLevel/department/${departmentId}`
+- `GET /academicoperations/class-lists`
+- `GET /academicoperations/context`
+- `GET /academicoperations/curriculum-options`
+- `GET /academicoperations/curriculum-overview`
+- `GET /academicoperations/planning-summary`
+- `GET /academicoperations/students`
+- `GET /academicprogression/grade-lock-readiness/${departmentId}`
+- `POST /academicoperations/bulk-advisor-assignment`
+- `POST /academicoperations/bulk-curriculum-assignment`
+
+---
+
+### Toplu Müfredat Atama
+
+| | |
+|---|---|
+| **Route** | `/toplu-mufredat-atama` |
+| **Dosya** | `SIS.Web/src/pages/BulkCurriculumAssignmentPage.tsx` |
+| **Roller** | administrativeStaff, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (5):**
+- `useAcademicOperationsContext()`
+- `useBulkCurriculumAssignment()`
+- `useDepartmentCurriculumOptions()`
+- `useDepartmentStudents()`
+- `usePermissions()`
+
+**API endpoint'leri (10):**
+- `GET /academicLevel/department/${departmentId}`
+- `GET /academicoperations/class-lists`
+- `GET /academicoperations/context`
+- `GET /academicoperations/curriculum-options`
+- `GET /academicoperations/curriculum-overview`
+- `GET /academicoperations/planning-summary`
+- `GET /academicoperations/students`
+- `GET /academicprogression/grade-lock-readiness/${departmentId}`
+- `POST /academicoperations/bulk-advisor-assignment`
+- `POST /academicoperations/bulk-curriculum-assignment`
 
 ---
 
 
 ## Öğrenci İşlemleri
+
+### Ders Kayıt Düzenleme
+
+| | |
+|---|---|
+| **Route** | `/ders-kayit-duzenleme` |
+| **Dosya** | `SIS.Web/src/pages/CourseRegistrationEditPage.tsx` |
+| **Roller** | advisor, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Dersler Arası Öğrenci Transfer
+
+| | |
+|---|---|
+| **Route** | `/dersler-arasi-ogrenci-transfer` |
+| **Dosya** | `SIS.Web/src/pages/CourseTransferPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Harf Notu Düzenleme
+
+| | |
+|---|---|
+| **Route** | `/harf-notu-duzenleme` |
+| **Dosya** | `SIS.Web/src/pages/LetterGradeEditPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Öğrenci No Değiştirme
+
+| | |
+|---|---|
+| **Route** | `/ogrenci-no-degistirme` |
+| **Dosya** | `SIS.Web/src/pages/StudentNumberChangePage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
 
 ### Öğrenci Rehberi
 
@@ -1198,7 +1342,7 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 |---|---|
 | **Route** | `/ogrenci-rehberi` |
 | **Dosya** | `SIS.Web/src/pages/StudentDirectoryPage.tsx` |
-| **Roller** | departmentManager, dean, systemAdmin |
+| **Roller** | administrativeStaff, advisor, dean, departmentManager, student, systemAdmin |
 | **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
 
 **Veri kancaları (5):**
@@ -1208,62 +1352,417 @@ Eski `/subeler-arasi-ogrenci-transfer` (SectionTransferPage.tsx) stub bir sayfay
 - `useAdminPrograms()`
 - `useAdminAdvisors()`
 
-**API endpoint'leri (5):**
+**API endpoint'leri (8):**
 - `GET ${API}/${id}`
 - `GET /admin/advisors`
 - `GET /admin/departments`
 - `GET /admin/programs`
+- `POST ${API}/bulk-advisor-assignment/apply`
+- `POST ${API}/bulk-advisor-assignment/preview`
 - `PUT ${API}/${studentId}/advisor`
+- `PUT ${API}/bulk-advisor-assignment/advisor-settings`
+
+---
+
+### Sınıf Atlatma İşlemleri
+
+| | |
+|---|---|
+| **Route** | `/sinif-atlatma-islemleri` |
+| **Dosya** | `SIS.Web/src/pages/StudentPromotionPage.tsx` |
+| **Roller** | dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Toplu Ders Kaydı
+
+| | |
+|---|---|
+| **Route** | `/toplu-ders-kaydi` |
+| **Dosya** | `SIS.Web/src/pages/BulkCourseRegistrationPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+### Toplu Staj Danışman Atama
+
+| | |
+|---|---|
+| **Route** | `/toplu-staj-danisman-atama` |
+| **Dosya** | `SIS.Web/src/pages/BulkInternshipAdvisorAssignmentPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
 ---
 
 
-## Sistem
+## Anketler
 
-### Denetim Kayıtları
+### Değerlendirme Dönemi Yönetimi
 
 | | |
 |---|---|
-| **Route** | `/denetim-kayitlari` |
-| **Dosya** | `SIS.Web/src/pages/AuditLogPage.tsx` |
+| **Route** | `/degerlendirme-donemi-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/EvaluationPeriodAdminPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 0, Sheet: 1, AlertDialog: 0) |
+| **Modal sayısı** | 4 (Dialog: 1, Sheet: 0, AlertDialog: 3) |
+
+**Veri kancaları (9):**
+- `useActiveEvaluationPeriod()`
+- `useAllEvaluationQuestions()`
+- `useCloseEvaluationPeriod()`
+- `useCreateEvaluationQuestion()`
+- `useDeleteEvaluationQuestion()`
+- `useOpenEvaluationPeriod()`
+- `useRestoreEvaluationQuestion()`
+- `useUpdateEvaluationQuestion()`
+- `useAdminTerms()`
+
+**API endpoint'leri (5):**
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `PUT ${API}/${id}`
+
+---
+
+### Değerlendirme Sonuçları
+
+| | |
+|---|---|
+| **Route** | `/degerlendirme-sonuclari` |
+| **Dosya** | `SIS.Web/src/pages/EvaluationResultsPage.tsx` |
+| **Roller** | administrativeStaff, advisor, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 1 (Dialog: 1, Sheet: 0, AlertDialog: 0) |
+
+**Sekmeler (2):**
+- `management`
+- `instructor`
+
+**Veri kancaları (9):**
+- `useInstructorSections()`
+- `useInstructorTerms()`
+- `useActiveEvaluationPeriod()`
+- `useDepartmentEvaluationSummary()`
+- `useExportDepartmentEvaluationResults()`
+- `useSectionEvaluationResults()`
+- `useAdminFaculties()`
+- `useAdminDepartmentsByStructure()`
+- `useAdminTerms()`
+
+**API endpoint'leri (22):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${API}/${id}`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+### Ders Değerlendirme
+
+| | |
+|---|---|
+| **Route** | `/ders-degerlendirme` |
+| **Dosya** | `SIS.Web/src/pages/CourseEvaluationPage.tsx` |
+| **Roller** | student, systemAdmin |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
 
 **Veri kancaları (2):**
-- `useAuditLogs()`
-- `useAuditLogFilters()`
-
-**API endpoint'leri (5):**
-- `GET /admin/audit-logs`
-- `GET /admin/audit-logs/${id}`
-- `GET /admin/audit-logs/anomalies`
-- `GET /admin/audit-logs/export/csv`
-- `GET /admin/audit-logs/stats`
+- `useActiveEvaluationPeriod()`
+- `useMyEvaluableCourses()`
 
 ---
 
-### Sistem Ayarları
+
+## Kaynak Yönetimi
+
+### Derslik Yönetimi
 
 | | |
 |---|---|
-| **Route** | `/sistem-ayarlari` |
-| **Dosya** | `SIS.Web/src/pages/SystemConfigPage.tsx` |
+| **Route** | `/derslik-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/ClassroomManagementAdminPage.tsx` |
 | **Roller** | systemAdmin |
-| **Modal sayısı** | 1 (Dialog: 0, Sheet: 0, AlertDialog: 1) |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (4):**
+- `useClassrooms()`
+- `useCreateClassroom()`
+- `useUpdateClassroom()`
+- `useDeleteClassroom()`
+
+---
+
+### Derslik-Fakülte Ataması
+
+| | |
+|---|---|
+| **Route** | `/derslik-fakulte-atamasi` |
+| **Dosya** | `SIS.Web/src/pages/ClassroomAssignmentPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (7):**
+- `useAdminTerms()`
+- `useAdminFaculties()`
+- `useClassrooms()`
+- `useClassroomAssignments()`
+- `useDeleteClassroomAssignment()`
+- `useBulkAssignClassrooms()`
+- `useSuggestClassroomAssignments()`
+
+**API endpoint'leri (22):**
+- `DELETE ${BASE}/departments/${id}`
+- `DELETE ${BASE}/faculties/${id}`
+- `DELETE ${BASE}/programs/${id}`
+- `GET ${BASE}/departments`
+- `GET ${BASE}/departments/${departmentId}/deletion-summary`
+- `GET ${BASE}/faculties`
+- `GET ${BASE}/faculties/${facultyId}/deletion-summary`
+- `GET ${BASE}/programs`
+- `GET ${BASE}/programs/${programId}/deletion-summary`
+- `POST ${API}/${termId}/activate`
+- `POST ${API}/${termId}/cancel`
+- `POST ${API}/${termId}/deactivate`
+- `POST ${API}/${termId}/uncancel`
+- `POST ${BASE}/departments`
+- `POST ${BASE}/departments/bulk`
+- `POST ${BASE}/faculties`
+- `POST ${BASE}/faculties/bulk`
+- `POST ${BASE}/programs`
+- `PUT ${API}/${id}`
+- `PUT ${BASE}/departments/${id}`
+- `PUT ${BASE}/faculties/${id}`
+- `PUT ${BASE}/programs/${id}`
+
+---
+
+
+## Duyuru Yönetimi
+
+### Duyuru Kategorileri
+
+| | |
+|---|---|
+| **Route** | `/duyuru-kategorileri` |
+| **Dosya** | `SIS.Web/src/pages/AnnouncementCategoryPage.tsx` |
+| **Roller** | dean, departmentManager, systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 1, Sheet: 0, AlertDialog: 1) |
+
+**Veri kancaları (4):**
+- `useAnnouncementCategories()`
+- `useCreateAnnouncementCategory()`
+- `useDeleteAnnouncementCategory()`
+- `useUpdateAnnouncementCategory()`
+
+---
+
+### Duyuru Yönetimi
+
+| | |
+|---|---|
+| **Route** | `/duyuru-yonetimi` |
+| **Dosya** | `SIS.Web/src/pages/AnnouncementManagementPage.tsx` |
+| **Roller** | administrativeStaff, advisor, dean, departmentManager, instructor, systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 0, Sheet: 0, AlertDialog: 2) |
 
 **Veri kancaları (5):**
-- `useConfigLimits()`
-- `useImportSystemConfigs()`
-- `useSystemConfigs()`
-- `useUpdateSystemConfig()`
-- `useDebounce()`
+- `useAllAnnouncements()`
+- `useAnnouncementDetail()`
+- `useDeleteAnnouncement()`
+- `usePermanentDeleteAnnouncement()`
+- `useReactivateAnnouncement()`
 
-**API endpoint'leri (5):**
-- `GET /admin/system-config`
-- `GET /admin/system-config/export`
-- `GET /admin/system-config/limits`
-- `POST /admin/system-config/import`
-- `PUT /admin/system-config/${id}`
+---
+
+
+## Hesabım
+
+### Şifre Değiştir
+
+| | |
+|---|---|
+| **Route** | `/sifre-degistir` |
+| **Dosya** | `SIS.Web/src/pages/PasswordChangePage.tsx` |
+| **Roller** | student |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+---
+
+
+## Personel İşlemleri
+
+### Personel Listesi
+
+| | |
+|---|---|
+| **Route** | `/personel-listesi` |
+| **Dosya** | `SIS.Web/src/pages/InstructorDirectoryPage.tsx` |
+| **Roller** | systemAdmin |
+| **Modal sayısı** | 2 (Dialog: 2, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (3):**
+- `useAdminInstructors()`
+- `useCreateInstructor()`
+- `useAdminDepartments()`
+
+**API endpoint'leri (3):**
+- `GET /admin/advisors`
+- `GET /admin/departments`
+- `GET /admin/programs`
+
+---
+
+
+## Öğretim İşlemleri
+
+### Ders Kısıtları
+
+| | |
+|---|---|
+| **Route** | `/danisman-ders-kisitlari` |
+| **Dosya** | `SIS.Web/src/pages/AdvisorCourseConstraintsPage.tsx` |
+| **Roller** | advisor, instructor |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (7):**
+- `useAdvisorConstraints()`
+- `useAdvisorStudents()`
+- `useDeleteAdvisorConstraint()`
+- `useUpdateAdvisorConstraint()`
+- `useUpsertAdvisorConstraint()`
+- `useStudentEligibility()`
+- `useActiveTerm()`
+
+---
+
+### Ders Programım
+
+| | |
+|---|---|
+| **Route** | `/ders-programim` |
+| **Dosya** | `SIS.Web/src/pages/InstructorSchedulingPage.tsx` |
+| **Roller** | advisor, dean, departmentManager, instructor |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (1):**
+- `useInstructorSections()`
+
+**API endpoint'leri (4):**
+- `GET /scheduling/instructor/${instructorId}/timetable`
+- `POST /instructor/section/${sectionId}/schedule/apply`
+- `POST /instructor/section/${sectionId}/schedule/suggest`
+- `POST /instructor/section/${sectionId}/schedule/validate`
+
+---
+
+### Derslerim
+
+| | |
+|---|---|
+| **Route** | `/derslerim` |
+| **Dosya** | `SIS.Web/src/pages/InstructorSectionsPage.tsx` |
+| **Roller** | advisor, dean, departmentManager, instructor |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Veri kancaları (2):**
+- `useInstructorSections()`
+- `useSectionStudents()`
+
+---
+
+### Not Girişi
+
+| | |
+|---|---|
+| **Route** | `/not-girisi/:sectionId` |
+| **Dosya** | `SIS.Web/src/pages/GradeEntryPage.tsx` |
+| **Roller** | instructor (ve hocanın kendi section'ına erişim yetkisi) |
+| **Modal sayısı** | 2+ (bileşen ekleme dialog, sınav yoklama panel, bütünleme + mazeret panelleri) |
+
+**Açıklama:** Hocanın kendi section'ı için not girişi. Bileşen yönetimi (Midterm/Final/Other tipi), toplu skor girişi, Excel import/export, sınav katılım işaretleme (NotMarked/Present/Absent/Excused), canlı ağırlıklı ortalama + sınıf istatistik paneli, harf notu aralığı düzenleme, finalize/unfinalize. Finalize sonrasında bütünleme (FF öğrenciler) ve mazeret (I öğrenciler) panelleri aktif olur. Ayrıntılı pipeline için bkz. `docs/CODEMAPS/exam-grade-system.md`.
+
+**Veri kancaları (13):**
+- `useComponents`, `useAddComponent`, `useDeleteComponent`
+- `useGrades`, `useSubmitGrades`
+- `useGradingCriteria`, `useUpdateGradingCriteria`
+- `useSetExamAttendance`
+- `useFinalize`, `useUnfinalize`
+- `useDownloadTemplate`, `usePreviewImport`, `useApplyImport`
+
+**Controller:** `GradeController` → `api/instructor`  
+**Hooks dosyası:** `SIS.Web/src/hooks/useGradeData.ts`  
+**API modülü:** `SIS.Web/src/api/grade.api.ts`  
+**Makeup bileşenleri:** `SIS.Web/src/components/grade/MakeupSections.tsx`
+
+**İzinler (prefix: `menu.not-girisi.`):** `.view`, `.edit`, `.submit`, `.finalize`, `.unfinalize`, `.export`, `.import`
+---
+
+### Yoklama Yönetimi
+
+| | |
+|---|---|
+| **Route** | `/yoklama-girisi` |
+| **Dosya** | `SIS.Web/src/pages/AttendanceEntryPage.tsx` |
+| **Roller** | advisor, dean, departmentManager, instructor |
+| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+
+**Sekmeler (4):**
+- `entry`
+- `manual`
+- `qr`
+- `history`
+
+**Veri kancaları (7):**
+- `useInstructorSections()`
+- `useAttendanceMatrix()`
+- `useAttendanceSession()`
+- `useCloseQrAttendance()`
+- `useCreateAttendanceSession()`
+- `useOpenQrAttendance()`
+- `useSaveAttendanceRecords()`
+
+---
+
+
+## Raporlar
+
+### Raporlarım
+
+| | |
+|---|---|
+| **Route** | `/raporlarim` |
+| **Dosya** | `SIS.Web/src/pages/MyReportsPage.tsx` |
+| **Roller** | administrativeStaff, advisor, dean, departmentManager, instructor, student, systemAdmin |
+| **Modal sayısı** | 1 (Sheet: ReportRunPanel — in-page rapor çalıştırma) |
+
+**Veri kancaları:**
+- `useReportSchema()` — rapor parametre şeması
+- `useRunReport()` — raporu çalıştır (sayfalı sonuç)
+- `useExportReport()` — Excel/PDF indir
+
+Rapor motoru (Faz 1): rapora tıkla → sağdan Sheet → şemadan otomatik filtre → Çalıştır → tablo → Excel/PDF. Backend handler registry (`IReportHandler`), endpoint'ler `/api/me/reports/{code}/{schema,run,export}`.
 
 ---
 

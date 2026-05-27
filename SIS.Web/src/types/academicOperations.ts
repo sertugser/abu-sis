@@ -197,12 +197,15 @@ export interface DepartmentStudentListItem {
   status: string;
   cgpa: number;
   completedSemesters: number;
+  facultyId: number;
+  facultyName: string;
   programId: number;
   programName: string;
   programCode: string;
   curriculumId: number;
   curriculumVersion: string;
   curriculumName: string;
+  enrollmentDate: string;
   advisorId: number | null;
   advisorName: string | null;
 }
@@ -211,6 +214,9 @@ export interface DepartmentStudentList {
   departmentId: number;
   departmentName: string;
   totalStudents: number;
+  withoutAdvisorCount: number;
+  page: number;
+  pageSize: number;
   students: DepartmentStudentListItem[];
   notes: string[];
 }

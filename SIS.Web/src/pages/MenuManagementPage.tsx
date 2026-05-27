@@ -1,10 +1,10 @@
 import { createElement, useState } from 'react';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
-  ChevronsUp,
-  ChevronsDown,
   Loader2,
   Pencil,
   Plus,
@@ -13,7 +13,9 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import { getRoleDisplayLabel } from '../lib/roles';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,6 +91,7 @@ export default function MenuManagementPage() {
   const moduleMutationPending =
     createModule.isPending || updateModule.isPending;
   const itemMutationPending = createItem.isPending || updateItem.isPending;
+  const reorderPending = reorderModules.isPending || reorderItems.isPending;
 
   const handleSubmitModule = async (values: {
     slug: string;
@@ -207,16 +210,7 @@ export default function MenuManagementPage() {
   };
 
   return (
-    <div className="space-y-4">
-      {canManage && (
-        <div className="flex justify-end">
-          <Button onClick={() => setModuleDialog({ mode: 'create', parentId: null })}>
-            <Plus className="mr-2 h-4 w-4" />
-            Üst Seviye Modül
-          </Button>
-        </div>
-      )}
-
+    <div className="animate-fade-in space-y-4">
       {errorMsg && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -238,36 +232,53 @@ export default function MenuManagementPage() {
 
       {tree && tree.length === 0 && (
         <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Henüz hiç modül yok. "Üst Seviye Modül" butonuna basarak başlayın.
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center text-sm text-muted-foreground">
+            <p>Henüz menü grubu yok.</p>
+            {canManage && (
+              <Button onClick={() => setModuleDialog({ mode: 'create', parentId: null })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Yeni Menü Grubu
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
 
       {tree && tree.length > 0 && (
-        <div className="space-y-3">
-          {tree.map((mod, idx) => (
-            <ModuleCard
-              key={mod.id}
-              module={mod}
-              siblings={tree}
-              index={idx}
-              parentId={null}
-              expanded={expanded}
-              onToggle={toggleExpand}
-              canManage={canManage}
-              onEditModule={(m) => setModuleDialog({ mode: 'edit', module: m })}
-              onAddSubModule={(parent) =>
-                setModuleDialog({ mode: 'create', parentId: parent.id })
-              }
-              onDeleteModule={(m) => setDeleteTarget({ kind: 'module', module: m })}
-              onMoveModule={handleMoveModule}
-              onAddItem={(m) => setItemDialog({ mode: 'create', moduleId: m.id })}
-              onEditItem={(i) => setItemDialog({ mode: 'edit', item: i })}
-              onDeleteItem={(i) => setDeleteTarget({ kind: 'item', item: i })}
-              onMoveItem={handleMoveItem}
-            />
-          ))}
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+          {canManage && (
+            <div className="flex justify-end border-b bg-muted/30 px-3 py-2">
+              <Button size="sm" onClick={() => setModuleDialog({ mode: 'create', parentId: null })}>
+                <Plus className="mr-2 h-4 w-4" />
+                Yeni Menü Grubu
+              </Button>
+            </div>
+          )}
+          <div className="stagger-children divide-y">
+            {tree.map((mod, idx) => (
+              <ModuleCard
+                key={mod.id}
+                module={mod}
+                siblings={tree}
+                index={idx}
+                parentId={null}
+                expanded={expanded}
+                onToggle={toggleExpand}
+                canManage={canManage}
+                reorderPending={reorderPending}
+                onEditModule={(m) => setModuleDialog({ mode: 'edit', module: m })}
+                onAddSubModule={(parent) =>
+                  setModuleDialog({ mode: 'create', parentId: parent.id })
+                }
+                onDeleteModule={(m) => setDeleteTarget({ kind: 'module', module: m })}
+                onMoveModule={handleMoveModule}
+                onAddItem={(m) => setItemDialog({ mode: 'create', moduleId: m.id })}
+                onEditItem={(i) => setItemDialog({ mode: 'edit', item: i })}
+                onDeleteItem={(i) => setDeleteTarget({ kind: 'item', item: i })}
+                onMoveItem={handleMoveItem}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -321,6 +332,7 @@ interface ModuleCardProps {
   expanded: Set<number>;
   onToggle: (id: number) => void;
   canManage: boolean;
+  reorderPending: boolean;
   onEditModule: (m: MenuModuleAdminDto) => void;
   onAddSubModule: (parent: MenuModuleAdminDto) => void;
   onDeleteModule: (m: MenuModuleAdminDto) => void;
@@ -349,6 +361,7 @@ function ModuleCard({
   expanded,
   onToggle,
   canManage,
+  reorderPending,
   onEditModule,
   onAddSubModule,
   onDeleteModule,
@@ -360,139 +373,118 @@ function ModuleCard({
 }: ModuleCardProps) {
   const isExpanded = expanded.has(module.id);
   const iconName = module.icon && module.icon in ICON_MAP ? module.icon : 'HelpCircle';
-  const childCount = module.children.length + module.items.length;
+  const groupCount = module.children.length;
+  const pageCount = module.items.length;
   const isFirst = index === 0;
   const isLast = index === siblings.length - 1;
+  const roles = module.allowedRolesCsv
+    ? module.allowedRolesCsv.split(',').map((r) => r.trim()).filter(Boolean)
+    : [];
+
+  const summary =
+    groupCount > 0 && pageCount > 0
+      ? `${groupCount} grup · ${pageCount} sayfa`
+      : groupCount > 0
+        ? `${groupCount} grup`
+        : pageCount > 0
+          ? `${pageCount} sayfa`
+          : 'Boş';
 
   return (
-    <Card className={module.isActive ? '' : 'opacity-60'}>
-      <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-3">
+    <div className={cn(!module.isActive && 'opacity-60')}>
+      <div className="group flex items-center gap-2 px-3 py-2.5 transition-colors hover:bg-muted/40">
         <button
           type="button"
           onClick={() => onToggle(module.id)}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-muted"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted"
           aria-label={isExpanded ? 'Daralt' : 'Genişlet'}
         >
           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
-        {createElement(ICON_MAP[iconName], { className: 'h-4 w-4 text-muted-foreground' })}
-        <div className="min-w-0 flex-1">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <span className="truncate">{module.label}</span>
-            {!module.isActive && <Badge variant="outline">Pasif</Badge>}
-            {module.allowedRolesCsv && (
-              <Badge variant="secondary" className="text-[10px]">
-                {module.allowedRolesCsv}
-              </Badge>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+          {createElement(ICON_MAP[iconName], { className: 'h-4 w-4' })}
+        </span>
+        <button type="button" onClick={() => onToggle(module.id)} className="min-w-0 flex-1 text-left">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold">{module.label}</span>
+            {!module.isActive && (
+              <Badge variant="outline" className="text-[10px]">Pasif</Badge>
             )}
-          </CardTitle>
-          <CardDescription className="font-mono text-xs">
-            {module.slug} · {childCount} öğe
-          </CardDescription>
-        </div>
+            {roles.map((r) => (
+              <Badge key={r} variant="secondary" className="text-[10px]">
+                {getRoleDisplayLabel(r)}
+              </Badge>
+            ))}
+          </div>
+          <div className="text-xs text-muted-foreground">{summary}</div>
+        </button>
         {canManage && (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={isFirst}
-              onClick={() => onMoveModule(siblings, parentId, index, -1)}
-              title="Yukarı taşı"
-            >
-              <ChevronsUp className="h-4 w-4" />
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isFirst || reorderPending} onClick={() => onMoveModule(siblings, parentId, index, -1)} title="Yukarı taşı">
+              <ArrowUp className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={isLast}
-              onClick={() => onMoveModule(siblings, parentId, index, 1)}
-              title="Aşağı taşı"
-            >
-              <ChevronsDown className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLast || reorderPending} onClick={() => onMoveModule(siblings, parentId, index, 1)} title="Aşağı taşı">
+              <ArrowDown className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onEditModule(module)} title="Düzenle">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEditModule(module)} title="Düzenle">
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDeleteModule(module)}
-              title="Sil"
-              className="text-destructive hover:text-destructive"
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDeleteModule(module)} title="Sil">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         )}
-      </CardHeader>
+      </div>
       {isExpanded && (
-        <CardContent className="space-y-3 pl-12">
+        <div className="space-y-2 border-t px-3 py-2 pl-12">
           {canManage && (
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => onAddItem(module)}>
                 <Plus className="mr-1 h-3 w-3" /> Sayfa ekle
               </Button>
               <Button variant="outline" size="sm" onClick={() => onAddSubModule(module)}>
-                <Plus className="mr-1 h-3 w-3" /> Alt modül ekle
+                <Plus className="mr-1 h-3 w-3" /> Alt grup ekle
               </Button>
             </div>
           )}
 
-          {module.items.length > 0 && (
-            <div className="space-y-1">
+          {pageCount > 0 && (
+            <div className="space-y-0.5">
               {module.items.map((item, i) => (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-2 rounded-md border bg-card px-3 py-2 ${
-                    item.isActive ? '' : 'opacity-60'
-                  }`}
+                  className={cn(
+                    'group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60',
+                    !item.isActive && 'opacity-60',
+                  )}
                 >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium">{item.label}</span>
-                      {!item.isActive && <Badge variant="outline">Pasif</Badge>}
+                      <span className="truncate font-medium">{item.label}</span>
+                      {!item.isActive && (
+                        <Badge variant="outline" className="text-[10px]">Pasif</Badge>
+                      )}
                       {item.openInNewTab && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          yeni sekme
-                        </Badge>
+                        <Badge variant="secondary" className="text-[10px]">yeni sekme</Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-mono">{item.route}</span>
-                      <span>·</span>
-                      <span>{item.permissionKeys.length} yetki</span>
+                    <div className="text-xs text-muted-foreground">
+                      {item.permissionKeys.length} yetki
                     </div>
                   </div>
                   {canManage && (
-                    <div className="flex items-center gap-0.5">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={i === 0}
-                        onClick={() => onMoveItem(module.items, module.id, i, -1)}
-                        title="Yukarı"
-                      >
-                        <ChevronsUp className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={i === 0 || reorderPending} onClick={() => onMoveItem(module.items, module.id, i, -1)} title="Yukarı taşı">
+                        <ArrowUp className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={i === module.items.length - 1}
-                        onClick={() => onMoveItem(module.items, module.id, i, 1)}
-                        title="Aşağı"
-                      >
-                        <ChevronsDown className="h-3.5 w-3.5" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={i === pageCount - 1 || reorderPending} onClick={() => onMoveItem(module.items, module.id, i, 1)} title="Aşağı taşı">
+                        <ArrowDown className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => onEditItem(item)} title="Düzenle">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditItem(item)} title="Düzenle">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDeleteItem(item)}
-                        title="Sil"
-                        className="text-destructive hover:text-destructive"
-                      >
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDeleteItem(item)} title="Sil">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -502,8 +494,8 @@ function ModuleCard({
             </div>
           )}
 
-          {module.children.length > 0 && (
-            <div className="space-y-3 border-l pl-4">
+          {groupCount > 0 && (
+            <div className="space-y-2 border-l pl-3">
               {module.children.map((child, i) => (
                 <ModuleCard
                   key={child.id}
@@ -514,6 +506,7 @@ function ModuleCard({
                   expanded={expanded}
                   onToggle={onToggle}
                   canManage={canManage}
+                  reorderPending={reorderPending}
                   onEditModule={onEditModule}
                   onAddSubModule={onAddSubModule}
                   onDeleteModule={onDeleteModule}
@@ -526,9 +519,9 @@ function ModuleCard({
               ))}
             </div>
           )}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
 

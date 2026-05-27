@@ -5,18 +5,29 @@ import {
   applyImport,
   deleteComponent,
   downloadTemplate,
+  finalizeButunleme,
+  finalizeMazeret,
   finalizeSection,
+  getButunlemeRoster,
   getComponents,
   getGrades,
   getGradingCriteria,
+  getMazeretRoster,
   previewImport,
+  setButunlemeScores,
+  setExamAttendance,
+  setMazeretScores,
   submitGrades,
   unfinalizeSection,
   updateGradingCriteria,
 } from '../api/grade.api';
 import type {
+  ButunlemeScoreItem,
+  ExamAttendance,
+  GradeComponentType,
   GradeSubmitDto,
   GradingCriteria,
+  MazeretScoreItem,
 } from '../types/grade';
 
 export function useComponents(sectionId: number) {
@@ -46,7 +57,7 @@ export function useGradingCriteria(sectionId: number) {
 export function useAddComponent(sectionId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (component: { name: string; weight: number; order: number }) =>
+    mutationFn: (component: { name: string; weight: number; order: number; type: GradeComponentType }) =>
       addComponent(sectionId, component),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
@@ -126,6 +137,87 @@ export function useApplyImport(sectionId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['grades', sectionId] });
       qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
+    },
+  });
+}
+
+export function useSetExamAttendance(sectionId: number) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      componentId,
+      items,
+    }: {
+      componentId: number;
+      items: { studentId: number; attendance: ExamAttendance }[];
+    }) => setExamAttendance(sectionId, componentId, items),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+    },
+  });
+}
+
+// ── Bütünleme hooks ──────────────────────────────────────
+
+export function useButunlemeRoster(sectionId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['butunlemeRoster', sectionId],
+    queryFn: () => getButunlemeRoster(sectionId),
+    enabled,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useSetButunlemeScores(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: ButunlemeScoreItem[]) => setButunlemeScores(sectionId, items),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['butunlemeRoster', sectionId] });
+    },
+  });
+}
+
+export function useFinalizeButunleme(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => finalizeButunleme(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['butunlemeRoster', sectionId] });
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+    },
+  });
+}
+
+// ── Mazeret hooks ────────────────────────────────────────
+
+export function useMazeretRoster(sectionId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['mazeretRoster', sectionId],
+    queryFn: () => getMazeretRoster(sectionId),
+    enabled,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useSetMazeretScores(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: MazeretScoreItem[]) => setMazeretScores(sectionId, items),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mazeretRoster', sectionId] });
+    },
+  });
+}
+
+export function useFinalizeMazeret(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => finalizeMazeret(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mazeretRoster', sectionId] });
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
     },
   });
 }

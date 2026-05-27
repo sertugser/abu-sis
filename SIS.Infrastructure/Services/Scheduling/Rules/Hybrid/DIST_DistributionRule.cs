@@ -61,14 +61,19 @@ public sealed class DIST_DistributionRule : ISoftRulePredicate
         {
             if (dist.PreferenceLevel == PreferenceLevel.Unavailable) continue;
 
+            // Ceza ağırlığı config'ten (encoder ile TEK kaynak). Yalnız Discouraged/StronglyDiscouraged
+            // cezalandırılır — solver encoder'ı da Preferred/StronglyPreferred'ı modellemiyor (skip),
+            // bu yüzden evaluator da onları cezalandırmaz (eski "_ => 5.0" drift'i kaldırıldı).
+            double penalty = dist.PreferenceLevel switch
+            {
+                PreferenceLevel.StronglyDiscouraged => ctx.Config.DistStronglyDiscouragedWeight,
+                PreferenceLevel.Discouraged => ctx.Config.DistDiscouragedWeight,
+                _ => 0.0,
+            };
+            if (penalty <= 0) continue;
+
             foreach (var (candCourse, otherCourse, other) in FindViolatingPairs(c, dist, snapshot))
             {
-                var penalty = dist.PreferenceLevel switch
-                {
-                    PreferenceLevel.StronglyDiscouraged => 30.0,
-                    PreferenceLevel.Discouraged => 10.0,
-                    _ => 5.0,
-                };
                 totalPenalty += penalty;
                 notes.Add($"DIST: {dist.DistributionType} ihlali — {c.CourseCode} ↔ {other.CourseCode} (penalty {penalty})");
             }

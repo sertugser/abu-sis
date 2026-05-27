@@ -25,6 +25,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
 
     // DbSets
     public DbSet<Student> Students => Set<Student>();
+    public DbSet<StudentPersonalInfo> StudentPersonalInfos => Set<StudentPersonalInfo>();
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+    public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
+    public DbSet<IssuedDocument> IssuedDocuments => Set<IssuedDocument>();
+    public DbSet<StudentScholarshipDetail> StudentScholarshipDetails => Set<StudentScholarshipDetail>();
+    public DbSet<StudentPlacement> StudentPlacements => Set<StudentPlacement>();
     public DbSet<Instructor> Instructors => Set<Instructor>();
     public DbSet<AcademicCvActivity> AcademicCvActivities => Set<AcademicCvActivity>();
     public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -42,8 +48,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
-    public DbSet<OsymRegistrationCalendar> OsymRegistrationCalendars => Set<OsymRegistrationCalendar>();
-    public DbSet<ProgramQuota> ProgramQuotas => Set<ProgramQuota>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Classroom> Classrooms => Set<Classroom>();
 public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<GradeComponent> GradeComponents => Set<GradeComponent>();
@@ -66,6 +71,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<WebModuleSetting> WebModuleSettings => Set<WebModuleSetting>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
+    public DbSet<ExamRegulation> ExamRegulations => Set<ExamRegulation>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
@@ -88,14 +94,10 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<AnnouncementRead> AnnouncementReads => Set<AnnouncementRead>();
     public DbSet<AnnouncementCategory> AnnouncementCategories => Set<AnnouncementCategory>();
     public DbSet<AnnouncementAttachment> AnnouncementAttachments => Set<AnnouncementAttachment>();
-    public DbSet<ConstraintProfile> ConstraintProfiles => Set<ConstraintProfile>();
-    public DbSet<ConstraintProfileItem> ConstraintProfileItems => Set<ConstraintProfileItem>();
     public DbSet<DistributionConstraint> DistributionConstraints => Set<DistributionConstraint>();
     public DbSet<DistributionConstraintCourse> DistributionConstraintCourses => Set<DistributionConstraintCourse>();
     public DbSet<ConstraintExceptionRequest> ConstraintExceptionRequests => Set<ConstraintExceptionRequest>();
     public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
-    public DbSet<ConstraintViolationSnapshot> ConstraintViolationSnapshots => Set<ConstraintViolationSnapshot>();
-    public DbSet<ConstraintViolationSnapshotDetail> ConstraintViolationSnapshotDetails => Set<ConstraintViolationSnapshotDetail>();
     public DbSet<AdvisorCourseConstraint> AdvisorCourseConstraints => Set<AdvisorCourseConstraint>();
     public DbSet<CourseCrossList> CourseCrossLists => Set<CourseCrossList>();
 
@@ -115,8 +117,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     // ── RBAC (Phase 3 — Report Authorization) ───────────────────
     public DbSet<ReportCategory> ReportCategories => Set<ReportCategory>();
     public DbSet<ReportDefinition> ReportDefinitions => Set<ReportDefinition>();
-    public DbSet<ReportCategoryRolePermission> ReportCategoryRolePermissions => Set<ReportCategoryRolePermission>();
-    public DbSet<ReportPermissionOverride> ReportPermissionOverrides => Set<ReportPermissionOverride>();
+    public DbSet<ReportUserGroup> ReportUserGroups => Set<ReportUserGroup>();
+    public DbSet<ReportUserGroupMember> ReportUserGroupMembers => Set<ReportUserGroupMember>();
+    public DbSet<ReportAccessGrant> ReportAccessGrants => Set<ReportAccessGrant>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -130,6 +133,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(s => s.UserId).IsUnique();
             e.Property(s => s.Cgpa).HasPrecision(4, 2);
             e.Property(s => s.Sgpa).HasPrecision(4, 2);
+            e.Property(s => s.PreviousStudentNumber).HasMaxLength(40);
 
             e.HasOne<ApplicationUser>()
              .WithOne()
@@ -140,6 +144,113 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(s => s.AdvisorId)
              .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── StudentPersonalInfo (1-1 Student) ────────────────────
+        builder.Entity<StudentPersonalInfo>(e =>
+        {
+            e.HasOne<Student>()
+             .WithOne(s => s.PersonalInfo)
+             .HasForeignKey<StudentPersonalInfo>(p => p.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(p => p.StudentId).IsUnique();
+
+            // Contact
+            e.Property(p => p.MobilePhone).HasMaxLength(40);
+            e.Property(p => p.Phone).HasMaxLength(40);
+            e.Property(p => p.SecondaryEmail).HasMaxLength(120);
+            e.Property(p => p.AddressProvince).HasMaxLength(120);
+            e.Property(p => p.AddressDistrict).HasMaxLength(120);
+            e.Property(p => p.AddressLine).HasMaxLength(250);
+            e.Property(p => p.PostalCode).HasMaxLength(40);
+            e.Property(p => p.EmergencyContactName).HasMaxLength(120);
+            e.Property(p => p.EmergencyContactPhone).HasMaxLength(40);
+            e.Property(p => p.EmergencyContactRelation).HasMaxLength(120);
+
+            // Demographic
+            e.Property(p => p.BirthPlace).HasMaxLength(120);
+            e.Property(p => p.Nationality).HasMaxLength(120);
+            e.Property(p => p.BloodType).HasMaxLength(10);
+            e.Property(p => p.PassportNo).HasMaxLength(40);
+
+            // Military
+            e.Property(p => p.MilitaryOffice).HasMaxLength(120);
+
+            // Photo
+            e.Property(p => p.PhotoExtension).HasMaxLength(10);
+        });
+
+        // ── DocumentType (seeded reference catalog) ──────────────
+        builder.Entity<DocumentType>(e =>
+        {
+            e.HasIndex(d => d.Code).IsUnique();
+            e.Property(d => d.Code).HasMaxLength(40);
+            e.Property(d => d.Name).HasMaxLength(160);
+        });
+
+        // ── StudentDocument (per-student uploaded docs, ≤1 per type) ──
+        builder.Entity<StudentDocument>(e =>
+        {
+            e.HasOne<Student>()
+             .WithMany(s => s.Documents)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne<DocumentType>()
+             .WithMany()
+             .HasForeignKey(d => d.DocumentTypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // At most one document per (student, type).
+            e.HasIndex(d => new { d.StudentId, d.DocumentTypeId }).IsUnique();
+
+            e.Property(d => d.FileExtension).HasMaxLength(10);
+            e.Property(d => d.OriginalFileName).HasMaxLength(260);
+        });
+
+        // ── IssuedDocument (append-only log of generated documents) ──
+        builder.Entity<IssuedDocument>(e =>
+        {
+            e.HasOne<Student>()
+             .WithMany(s => s.IssuedDocuments)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(d => new { d.StudentId, d.IssuedAt });
+
+            e.Property(d => d.DocumentNumber).HasMaxLength(40);
+        });
+
+        // ── StudentScholarshipDetail (1-to-many child of Student) ──
+        builder.Entity<StudentScholarshipDetail>(e =>
+        {
+            e.ToTable(t => t.HasCheckConstraint(
+                "CK_StudentScholarshipDetail_RatePercent",
+                "\"RatePercent\" IS NULL OR (\"RatePercent\" >= 0 AND \"RatePercent\" <= 100)"));
+
+            e.HasOne<Student>()
+             .WithMany(s => s.ScholarshipDetails)
+             .HasForeignKey(d => d.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.StudentId, d.IsActive });
+            e.Property(d => d.RatePercent).HasPrecision(5, 2);
+            e.Property(d => d.Source).HasMaxLength(160);
+            e.Property(d => d.Note).HasMaxLength(500);
+        });
+
+        builder.Entity<StudentPlacement>(e =>
+        {
+            e.HasOne<Student>()
+             .WithOne(s => s.Placement)
+             .HasForeignKey<StudentPlacement>(p => p.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(p => p.StudentId).IsUnique();
+            e.Property(p => p.Score).HasPrecision(9, 4);
+            e.Property(p => p.ScoreType).HasMaxLength(20);
+            e.Property(p => p.QuotaType).HasMaxLength(80);
+            e.Property(p => p.PlacedProgramName).HasMaxLength(200);
+            e.Property(p => p.Note).HasMaxLength(500);
         });
 
         // ── Instructor ───────────────────────────────────────────
@@ -579,6 +690,7 @@ builder.Entity<GradeComponent>(e =>
             e.HasIndex(sg => new { sg.CourseRegistrationId, sg.GradeComponentId }).IsUnique();
 
             e.Property(sg => sg.Score).HasPrecision(5, 2);
+            e.Property(sg => sg.MakeupScore).HasPrecision(5, 2);
 
             e.HasOne(sg => sg.CourseRegistration)
              .WithMany()
@@ -648,8 +760,16 @@ builder.Entity<GradingCriteria>(e =>
         // ── AcademicTerm ───────────────────────────────────────
         builder.Entity<AcademicTerm>(e =>
         {
-            e.Property(t => t.IsActivated).HasDefaultValue(true);
+            // Varsayılan KAPALI: dönem oluşunca otomatik aktif olmaz; admin "Kullanıma Aç"
+            // ile tek-aktif olarak açar (Proliz/Banner modeli).
+            e.Property(t => t.IsActivated).HasDefaultValue(false);
             e.HasIndex(t => new { t.Year, t.TermType }).IsUnique();
+
+            // Faz metotları (IsRegistrationOpen/AddDrop/Withdrawal/GradeEntry) AcademicCalendar
+            // yüklenmemişse sessizce false döner — ".Include unutuldu" ile "takvim yok" ayırt edilemez.
+            // AutoInclude her AcademicTerm sorgusunda takvimi otomatik yükleyerek bu tuzağı kapatır.
+            // İstisnai durumda sorgu bazında .IgnoreAutoInclude() ile devre dışı bırakılabilir.
+            e.Navigation(t => t.AcademicCalendar).AutoInclude();
         });
 
         // ── TermAcademicCalendar (1-1 AcademicTerm) ────────────
@@ -673,6 +793,19 @@ builder.Entity<GradingCriteria>(e =>
 
             e.HasIndex(ev => new { ev.TermId, ev.StartDate });
             e.HasIndex(ev => new { ev.IsGenerated, ev.GeneratedDraftId });
+        });
+
+        // ── Notification (kişisel bildirim) ────────────────────
+        builder.Entity<Notification>(e =>
+        {
+            e.Property(n => n.Title).HasMaxLength(200);
+            e.Property(n => n.Body).HasMaxLength(2000);
+            e.Property(n => n.Link).HasMaxLength(500);
+            e.Property(n => n.EntityRef).HasMaxLength(120);
+            e.Property(n => n.GroupKey).HasMaxLength(120);
+
+            // Zil/sayfa sorguları: kullanıcının okunmamışları + en güncel önce.
+            e.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt });
         });
 
         // ── Academic Calendar Generator ────────────────────────
@@ -731,6 +864,16 @@ builder.Entity<GradingCriteria>(e =>
             // Kapasite yetmeyen lab oturumları 2+ oda'ya bölünebilir (ör. BM101 lab L139+L141 aynı anda).
             // ClassroomId'nin index'e dahil edilmesi (section, slot, classroom) üçlüsünü unique yapar.
             e.HasIndex(ss => new { ss.CourseSectionId, ss.TimeSlotId, ss.ClassroomId }).IsUnique();
+
+            // Çift-rezervasyon koruması (DB seviyesi): aynı derslik + aynı zaman dilimi iki FARKLI
+            // satırda olamaz → cross-section classroom double-booking fiziksel olarak engellenir.
+            // Partial: ClassroomId IS NOT NULL (online dersler hariç). Lab-split bozulmaz (aynı slot
+            // farklı oda = farklı ClassroomId). H1 ClassroomConflict kuralının DB karşılığı; SkipHard/
+            // Force ile yazma yollarının arkasındaki tek güvenlik ağı.
+            e.HasIndex(ss => new { ss.ClassroomId, ss.TimeSlotId })
+             .IsUnique()
+             .HasFilter("\"ClassroomId\" IS NOT NULL")
+             .HasDatabaseName("IX_SectionSchedules_Classroom_TimeSlot_Unique");
 
             e.HasOne(ss => ss.CourseSection)
              .WithMany(cs => cs.SectionSchedules)
@@ -901,6 +1044,9 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(al => al.Timestamp);
             e.HasIndex(al => new { al.EntityType, al.EntityId });
             e.HasIndex(al => al.UserId);
+            // Action filtre/sıralamada ve stats+anomali sayımlarında ağır kullanılıyor.
+            // (Timestamp, Action) bileşik indeksi "son X saatte Action=Y" anomali sorgularını da kapsar.
+            e.HasIndex(al => new { al.Timestamp, al.Action });
         });
 
         // ── SystemConfig ─────────────────────────────────────────
@@ -950,6 +1096,23 @@ builder.Entity<GradingCriteria>(e =>
              .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── ExamRegulation ───────────────────────────────────────
+        builder.Entity<ExamRegulation>(e =>
+        {
+            e.HasIndex(r => new { r.ProgramId, r.DegreeLevel, r.TermType, r.Year }).IsUnique();
+            e.Property(r => r.Name).HasMaxLength(200).IsRequired();
+            e.Property(r => r.MinMidtermWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MaxMidtermWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MinFinalWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.MaxFinalWeightPercent).HasPrecision(5, 2);
+            e.Property(r => r.PassingGrade).HasPrecision(5, 2);
+            e.Property(r => r.RawScoreFloor1).HasPrecision(5, 2);
+            e.Property(r => r.RawScoreFloor2).HasPrecision(5, 2);
+            e.Property(r => r.FinalExamFloor).HasPrecision(5, 2);
+            e.HasOne(r => r.Program).WithMany()
+             .HasForeignKey(r => r.ProgramId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         // ── Classroom ────────────────────────────────────────────
         builder.Entity<Classroom>(e =>
         {
@@ -994,22 +1157,6 @@ builder.Entity<GradingCriteria>(e =>
             e.HasOne(ce => ce.Term).WithMany().HasForeignKey(ce => ce.TermId).OnDelete(DeleteBehavior.SetNull);
         });
 
-        // ── ConstraintProfile ────────────────────────────────────
-        builder.Entity<ConstraintProfileItem>(e =>
-        {
-            e.HasIndex(i => new { i.ProfileId, i.ConstraintDefinitionId }).IsUnique();
-
-            e.HasOne(i => i.Profile)
-             .WithMany(p => p.Items)
-             .HasForeignKey(i => i.ProfileId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne(i => i.ConstraintDefinition)
-             .WithMany()
-             .HasForeignKey(i => i.ConstraintDefinitionId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
         // ── DistributionConstraint ──────────────────────────────
         builder.Entity<DistributionConstraint>(e =>
         {
@@ -1038,19 +1185,6 @@ builder.Entity<GradingCriteria>(e =>
         {
             e.HasIndex(s => new { s.RequestId, s.StepOrder });
             e.HasOne(s => s.Request).WithMany(r => r.ApprovalSteps).HasForeignKey(s => s.RequestId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ── ConstraintViolationSnapshot ────────────────────────────
-        builder.Entity<ConstraintViolationSnapshot>(e =>
-        {
-            e.HasIndex(s => new { s.TermId, s.SnapshotAt });
-            e.HasOne(s => s.Term).WithMany().HasForeignKey(s => s.TermId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        builder.Entity<ConstraintViolationSnapshotDetail>(e =>
-        {
-            e.HasIndex(d => d.SnapshotId);
-            e.HasOne(d => d.Snapshot).WithMany(s => s.Details).HasForeignKey(d => d.SnapshotId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Performance Indexes ──────────────────────────────────
@@ -1243,25 +1377,6 @@ builder.Entity<GradingCriteria>(e =>
             e.HasIndex(r => r.UserId);
         });
 
-        // ── OsymRegistrationCalendar ───────────────────────────
-        builder.Entity<OsymRegistrationCalendar>(e =>
-        {
-            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(500);
-            e.HasIndex(x => new { x.Year, x.Type });
-        });
-
-        // ── ProgramQuota ────────────────────────────────────────
-        builder.Entity<ProgramQuota>(e =>
-        {
-            e.Property(x => x.Description).HasMaxLength(500);
-            e.HasOne(q => q.Program)
-             .WithMany()
-             .HasForeignKey(q => q.ProgramId)
-             .OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(q => new { q.ProgramId, q.Year, q.Type }).IsUnique();
-        });
-
         // ── UserScope ────────────────────────────────────────────
         builder.Entity<UserScope>(e =>
         {
@@ -1339,80 +1454,70 @@ builder.Entity<GradingCriteria>(e =>
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── RBAC Phase 3: ReportCategoryRolePermission (composite PK) ─
-        builder.Entity<ReportCategoryRolePermission>(e =>
+        // ── RBAC Phase 3 (Faz 2): ReportUserGroup ───────────────
+        builder.Entity<ReportUserGroup>(e =>
         {
-            e.HasKey(rp => new { rp.CategoryId, rp.RoleId });
-
-            e.HasOne(rp => rp.Category)
-             .WithMany()
-             .HasForeignKey(rp => rp.CategoryId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasOne<IdentityRole<int>>()
-             .WithMany()
-             .HasForeignKey(rp => rp.RoleId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            e.HasIndex(rp => rp.RoleId);
+            e.Property(g => g.Name).HasMaxLength(200).IsRequired();
+            e.Property(g => g.Description).HasMaxLength(500);
+            e.HasIndex(g => g.Name).IsUnique();
         });
 
-        // ── RBAC Phase 3: ReportPermissionOverride ──────────────
-        builder.Entity<ReportPermissionOverride>(e =>
+        builder.Entity<ReportUserGroupMember>(e =>
         {
-            e.Property(o => o.Reason).HasMaxLength(500);
-
-            e.HasOne(o => o.Report)
-             .WithMany()
-             .HasForeignKey(o => o.ReportId)
+            e.HasKey(m => new { m.GroupId, m.UserId });
+            e.HasOne(m => m.Group)
+             .WithMany(g => g.Members)
+             .HasForeignKey(m => m.GroupId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.UserId);
+        });
 
-            e.HasOne<IdentityRole<int>>()
-             .WithMany()
-             .HasForeignKey(o => o.RoleId)
-             .OnDelete(DeleteBehavior.Cascade);
-
-            // Aynı (rapor, rol) çiftine tek override
-            e.HasIndex(o => new { o.ReportId, o.RoleId }).IsUnique();
-            e.HasIndex(o => o.RoleId);
+        // ── RBAC Phase 3 (Faz 2): ReportAccessGrant (birleşik) ──
+        builder.Entity<ReportAccessGrant>(e =>
+        {
+            e.Property(g => g.Reason).HasMaxLength(500);
+            e.Property(g => g.ScopeKind).HasConversion<int>();
+            e.Property(g => g.SubjectKind).HasConversion<int>();
+            e.Property(g => g.Effect).HasConversion<int>();
+            // Aynı (hedef, özne) için tek satır → upsert
+            e.HasIndex(g => new { g.ScopeKind, g.TargetId, g.SubjectKind, g.SubjectId }).IsUnique();
+            e.HasIndex(g => new { g.SubjectKind, g.SubjectId });
         });
 
         // ── Permission Scope Query Filters (Phase 2) ─────────────
+        // _scope.FacultyIds: kullanıcının erişebildiği fakülteler (kendi + vekâletten devralınan birleşim).
         builder.Entity<Faculty>().HasQueryFilter(faculty =>
-            !_scope.IsActive || _scope.FacultyId == faculty.Id);
+            !_scope.IsActive || _scope.FacultyIds.Contains(faculty.Id));
 
         builder.Entity<Department>().HasQueryFilter(department =>
-            !_scope.IsActive || _scope.FacultyId == department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(department.FacultyId));
 
         builder.Entity<AcademicProgram>().HasQueryFilter(program =>
-            !_scope.IsActive || _scope.FacultyId == program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(program.Department.FacultyId));
 
         builder.Entity<Curriculum>().HasQueryFilter(curriculum =>
-            !_scope.IsActive || _scope.FacultyId == curriculum.Program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(curriculum.Program.Department.FacultyId));
 
         builder.Entity<Course>().HasQueryFilter(course =>
-            !_scope.IsActive || (course.DepartmentId != null && _scope.FacultyId == course.Department!.FacultyId));
+            !_scope.IsActive || (course.Department != null && _scope.FacultyIds.Contains(course.Department.FacultyId)));
 
         builder.Entity<CourseSection>().HasQueryFilter(section =>
-            !_scope.IsActive || (section.Course.DepartmentId != null && _scope.FacultyId == section.Course.Department!.FacultyId));
+            !_scope.IsActive || (section.Course.Department != null && _scope.FacultyIds.Contains(section.Course.Department.FacultyId)));
 
         builder.Entity<Student>().HasQueryFilter(student =>
-            !_scope.IsActive || student.StudentPrograms.Any(program => program.Program.Department.FacultyId == _scope.FacultyId));
+            !_scope.IsActive || student.StudentPrograms.Any(program => _scope.FacultyIds.Contains(program.Program.Department.FacultyId)));
 
         builder.Entity<Instructor>().HasQueryFilter(instructor =>
-            !_scope.IsActive || _scope.FacultyId == instructor.Department.FacultyId);
-
-        builder.Entity<ProgramQuota>().HasQueryFilter(quota =>
-            !_scope.IsActive || _scope.FacultyId == quota.Program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(instructor.Department.FacultyId));
 
         builder.Entity<ElectiveGroup>().HasQueryFilter(group =>
             !_scope.IsActive
             || (group.DepartmentId == null && group.FacultyId == null)
-            || (group.DepartmentId != null && _scope.FacultyId == group.Department!.FacultyId)
-            || (group.DepartmentId == null && group.FacultyId != null && _scope.FacultyId == group.FacultyId));
+            || (group.DepartmentId != null && _scope.FacultyIds.Contains(group.Department!.FacultyId))
+            || (group.DepartmentId == null && group.FacultyId != null && _scope.FacultyIds.Contains(group.FacultyId.Value)));
 
         builder.Entity<CurriculumElectivePool>().HasQueryFilter(pool =>
-            !_scope.IsActive || _scope.FacultyId == pool.Curriculum.Program.Department.FacultyId);
+            !_scope.IsActive || _scope.FacultyIds.Contains(pool.Curriculum.Program.Department.FacultyId));
 
         // ── RBAC: Permission ────────────────────────────────────
         builder.Entity<Permission>(e =>

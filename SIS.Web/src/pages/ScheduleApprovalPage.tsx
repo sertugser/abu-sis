@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActiveTerm } from '../hooks/useActiveTerm';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import {
   useScheduleApprovalStatus,
   useApproveSchedule,
@@ -98,7 +98,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'blue', badge }: {
 
 export default function ScheduleApprovalPage() {
   const { data: activeTerm } = useActiveTerm();
-  const { data: faculties, isLoading: facultiesLoading } = useAdminFaculties();
+  const { data: faculties, isLoading: facultiesLoading } = useFacultyLookup();
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | null>(null);
   const facultyId = selectedFacultyId ?? faculties?.[0]?.id ?? null;
   const termId = activeTerm?.id;

@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using SIS.API.Authorization;
+using SIS.Application.Admin.DTOs;
+using SIS.Application.Admin.Services;
 using SIS.Application.Identity.DTOs;
 using SIS.Application.Identity.Services;
 
@@ -11,10 +13,29 @@ namespace SIS.API.Controllers.Admin;
 public class PermissionDelegationsController : ControllerBase
 {
     private readonly IPermissionDelegationService _service;
+    private readonly IAdminUserService _userService;
 
-    public PermissionDelegationsController(IPermissionDelegationService service)
+    public PermissionDelegationsController(
+        IPermissionDelegationService service,
+        IAdminUserService userService)
     {
         _service = service;
+        _userService = userService;
+    }
+
+    /// <summary>
+    /// Vekâlet oluştururken Yetkiyi Veren/Vekil seçimi için kullanıcı arama.
+    /// Vekâlet sayfasının kendi yetkisiyle korunur — ayrı bir "kullanıcı tanımlama" yetkisi gerektirmez (#5).
+    /// </summary>
+    [HttpGet("users")]
+    [RequirePermission("menu.kullanici-vekalet-islemleri.view")]
+    public async Task<IActionResult> SearchUsers(
+        [FromQuery] string? search = null,
+        [FromQuery] int pageSize = 10)
+    {
+        var filter = new AdminUserFilterDto(search, Role: null, IsActive: null, Page: 1, PageSize: pageSize);
+        var result = await _userService.GetUsersAsync(filter);
+        return Ok(result);
     }
 
     [HttpGet]

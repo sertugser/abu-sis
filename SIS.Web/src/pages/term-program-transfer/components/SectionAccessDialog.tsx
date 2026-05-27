@@ -23,8 +23,8 @@ import {
 } from '../../../hooks/useCourseAccessPolicy';
 import {
   useAdminDepartmentsByStructure,
-  useAdminFaculties,
 } from '../../../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../../../hooks/useAdminLookup';
 import type { OpenedCourseSectionDto } from '../../../types/courseOpening';
 
 interface SectionAccessDialogProps {
@@ -50,7 +50,7 @@ export function SectionAccessDialog({ section, termId, open, onOpenChange }: Sec
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
 
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: departments = [] } = useAdminDepartmentsByStructure(
     addMode === 'department' && selectedFacultyId ? Number(selectedFacultyId) : undefined,
   );

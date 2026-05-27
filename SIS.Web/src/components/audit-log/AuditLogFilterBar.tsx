@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -42,9 +41,9 @@ export function AuditLogFilterBar({
   onEntityIdChange, onSearchChange,
   onFromChange, onToChange, onApply,
 }: AuditLogFilterBarProps) {
+  // Kart sarmalayıcısı yok — sayfadaki tek yüzeyin (Card) içinde bir bölüm olarak render edilir.
   return (
-    <Card className="animate-fade-in border-dashed">
-      <CardContent className="pt-4 pb-4">
+    <div className="animate-fade-in px-4 py-4">
         <div className="flex flex-wrap items-end gap-3">
           <FilterField label="Varlık Tipi">
             <Select value={entityType || 'all'} onValueChange={(v: string) => onEntityTypeChange(v === 'all' ? '' : v)}>
@@ -97,7 +96,7 @@ export function AuditLogFilterBar({
           <FilterField label="İçerik Arama">
             <Input
               className="h-9 w-44"
-              placeholder="JSON içinde ara..."
+              placeholder="En az 2 karakter..."
               value={search}
               onChange={e => onSearchChange(e.target.value)}
             />
@@ -126,7 +125,6 @@ export function AuditLogFilterBar({
             Ara
           </Button>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }

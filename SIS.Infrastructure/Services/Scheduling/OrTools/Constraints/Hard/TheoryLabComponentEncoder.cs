@@ -36,11 +36,13 @@ public sealed class TheoryLabComponentEncoder : IConstraintEncoder
                 continue;
 
             var theory = ctx.Variables.GetLectureInterval(section.Id);
-            var lab = ctx.Variables.GetLabInterval(section.Id);
-            if (theory == null || lab == null)
+            if (theory == null)
                 continue;
 
-            ctx.Model.AddNoOverlap(new[] { theory, lab });
+            // Çoklu-blok lab: teori, lab'ın HER bloğuyla çakışmamalı (yalnız blok 0 değil).
+            // Cross-section path (EncodeCrossSection) zaten çoğul; same-section da hizalandı.
+            foreach (var lab in ctx.Variables.GetLabIntervals(section.Id))
+                ctx.Model.AddNoOverlap(new[] { theory, lab });
             ctx.Assumptions.Register(Code, primarySectionId: section.Id, secondarySectionId: null);
         }
     }

@@ -191,7 +191,13 @@ public class ExcelScheduleService : IExcelScheduleService
         // iç border → her ders kartı net ayırt edilebilir.
         var gridSheet = workbook.Worksheets.Add("Haftalık Grid");
 
-        var days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
+        // Hafta içi sabit + veride GERÇEKTEN olan hafta sonu günleri (Cmt/Paz). Hafta sonu slotu
+        // programlanabildiği için (bkz. weekend search) o günlerde ders varsa grid'de de görünmeli;
+        // yoksa grid hafta içiyle dar kalır (her zaman 7 sütuna genişletme yok).
+        var presentDays = rows.Select(r => r.DayOfWeek).ToHashSet();
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }
+            .Concat(new[] { DayOfWeek.Saturday, DayOfWeek.Sunday }.Where(presentDays.Contains))
+            .ToArray();
 
         // Collect distinct slot orders for the term
         var slotOrders = rows
@@ -482,7 +488,7 @@ public class ExcelScheduleService : IExcelScheduleService
                     });
                     page.Footer().AlignCenter().Text(x =>
                     {
-                        x.Span($"Oluşturulma: {DateTime.Now:dd.MM.yyyy HH:mm}").FontSize(8);
+                        x.Span($"Oluşturulma: {TurkeyNow():dd.MM.yyyy HH:mm}").FontSize(8);
                     });
                 });
             }
@@ -651,7 +657,7 @@ public class ExcelScheduleService : IExcelScheduleService
 
                     page.Footer().Row(row =>
                     {
-                        row.RelativeItem().Text($"Oluşturulma: {DateTime.Now:dd.MM.yyyy HH:mm} · {pivotClassrooms.Count} derslik")
+                        row.RelativeItem().Text($"Oluşturulma: {TurkeyNow():dd.MM.yyyy HH:mm} · {pivotClassrooms.Count} derslik")
                             .FontSize(7);
                         row.RelativeItem().AlignRight().Text(x =>
                         {
@@ -762,7 +768,7 @@ public class ExcelScheduleService : IExcelScheduleService
 
                     page.Footer().Row(row =>
                     {
-                        row.RelativeItem().Text($"Oluşturulma: {DateTime.Now:dd.MM.yyyy HH:mm}").FontSize(7);
+                        row.RelativeItem().Text($"Oluşturulma: {TurkeyNow():dd.MM.yyyy HH:mm}").FontSize(7);
                         row.RelativeItem().AlignRight().Text(x =>
                         {
                             x.Span("Sayfa ").FontSize(7);
@@ -981,12 +987,19 @@ public class ExcelScheduleService : IExcelScheduleService
             TimeSlot? timeSlot = null;
             if (errors.Count == 0)
             {
+                // Bitiş saati verilmişse onu da eşleştir — yalnız StartTime eşleşmesi, 09:00-17:00
+                // gibi bir satırı 09:00-09:50 slotuna bağlayıp süreyi sessizce kırpıyordu. Export her
+                // SectionSchedule için tek slot (tam başlangıç-bitiş) yazdığından tam eşleşme doğrudur.
+                var endProvided = endTime != default;
                 timeSlot = timeSlots.FirstOrDefault(ts =>
                     ts.DayOfWeek == dayOfWeek &&
-                    ts.StartTime == startTime);
+                    ts.StartTime == startTime &&
+                    (!endProvided || ts.EndTime == endTime));
 
                 if (timeSlot == null)
-                    errors.Add($"Zaman dilimi bulunamadı: {dayRaw} {startTimeRaw}");
+                    errors.Add(endProvided
+                        ? $"Zaman dilimi bulunamadı: {dayRaw} {startTimeRaw}-{endTimeRaw}"
+                        : $"Zaman dilimi bulunamadı: {dayRaw} {startTimeRaw}");
             }
 
             // Validate: classroom exists
@@ -1181,6 +1194,17 @@ public class ExcelScheduleService : IExcelScheduleService
             {
                 AppliedCount = rowsToApply.Count,
             };
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            // Önizleme ile uygulama arasında başka bir atama yazıldıysa (#33 TOCTOU), DB'nin
+            // (ClassroomId, TimeSlotId) unique index'i çift-rezervasyonu reddeder. Serializable
+            // transaction geri alınır; ham 500 yerine net, yol gösterici mesaj döndürülür.
+            if (transaction is not null)
+                await transaction.RollbackAsync(ct);
+            throw new ScheduleImportSessionInvalidException(
+                "İçe aktarım sırasında derslik/zaman çakışması oluştu (önizlemeden sonra başka bir "
+                + "atama yapılmış olabilir). Hiçbir satır uygulanmadı; önizlemeyi yenileyip tekrar deneyin.");
         }
         finally
         {
@@ -1607,6 +1631,13 @@ public class ExcelScheduleService : IExcelScheduleService
         DayOfWeek.Sunday    => "Pazar",
         _                   => day.ToString()
     };
+
+    /// <summary>
+    /// Export "Oluşturulma" damgası için Türkiye yerel saati. Sistem her yerde UtcNow tutuyor;
+    /// DateTime.Now sunucu TZ'sine bağlıydı (UTC sunucuda yanlış saat gösterirdi). Türkiye sabit
+    /// UTC+3 (2016'dan beri DST yok) → UtcNow + 3 saat, sunucu TZ'sinden bağımsız doğru sonuç.
+    /// </summary>
+    private static DateTime TurkeyNow() => DateTime.UtcNow.AddHours(3);
 
     // ── Ders kartı renkleri (Haftalık Grid sheet için) ─────────────────────
     // Excel hücre background renkleri olarak kullanılır. Ders kodu prefix'ine göre

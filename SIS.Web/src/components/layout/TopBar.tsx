@@ -8,18 +8,7 @@ import NotificationBell from '../notifications/NotificationBell';
 
 import { flattenModuleItems } from './SidebarModules';
 import { useMenu } from '../../hooks/useMenu';
-
-const TERM_TYPE_LABELS: Record<string, string> = {
-  Fall: 'Güz',
-  Spring: 'Bahar',
-  Summer: 'Yaz',
-  FallResit: 'Güz Tekders',
-  SpringResit: 'Bahar Tekders',
-  SummerResit: 'Yaz Tekders',
-  SpringOther: 'Bahar Diğer',
-  SummerOther: 'Yaz Diğer',
-  Exemption: 'Muafiyet',
-};
+import { TERM_TYPE_LABELS } from '../../lib/termTypes';
 
 /**
  * Backend'den gelen menüden route → sayfa başlığı haritası kurar.

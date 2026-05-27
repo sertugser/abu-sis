@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { classroomTypeLabel } from '@/lib/classroomLabels';
 import type { ClassroomFilterOptions } from '@/types/scheduling';
 
 export interface ClassroomFilterState {
@@ -16,14 +17,6 @@ export const EMPTY_FILTERS: ClassroomFilterState = {
   classroomType: null,
   minCapacity: null,
   maxCapacity: null,
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  Lecture: 'Normal Sınıf',
-  Lab: 'Laboratuvar',
-  Computer: 'Bilgisayar Lab',
-  Seminar: 'Seminer',
-  Amphitheater: 'Amfi',
 };
 
 const CAPACITY_RANGES = [
@@ -58,7 +51,7 @@ export default function ClassroomFilters({ filters, onChange, options }: Classro
   }
   if (filters.classroomType) {
     activeChips.push({
-      label: TYPE_LABELS[filters.classroomType] ?? filters.classroomType,
+      label: classroomTypeLabel(filters.classroomType),
       onRemove: () => onChange({ ...filters, classroomType: null }),
     });
   }
@@ -106,7 +99,7 @@ export default function ClassroomFilters({ filters, onChange, options }: Classro
         >
           <option value="">Tüm Tipler</option>
           {(options?.classroomTypes ?? []).map(t => (
-            <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+            <option key={t} value={t}>{classroomTypeLabel(t)}</option>
           ))}
         </select>
 

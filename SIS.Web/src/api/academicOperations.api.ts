@@ -45,6 +45,15 @@ export interface DepartmentStudentQuery {
   programId?: number | null;
   curriculumId?: number | null;
   advisorId?: number | null;
+  hasAdvisor?: boolean | null;
+  hasFailingCourse?: boolean | null;
+  classYear?: number | null;
+  studentNoFrom?: string;
+  studentNoTo?: string;
+  enrollmentFrom?: string;
+  enrollmentTo?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export async function getDepartmentStudents(
@@ -59,6 +68,15 @@ export async function getDepartmentStudents(
       programId: query.programId || undefined,
       curriculumId: query.curriculumId || undefined,
       advisorId: query.advisorId || undefined,
+      hasAdvisor: query.hasAdvisor ?? undefined,
+      hasFailingCourse: query.hasFailingCourse ?? undefined,
+      classYear: query.classYear || undefined,
+      studentNoFrom: query.studentNoFrom || undefined,
+      studentNoTo: query.studentNoTo || undefined,
+      enrollmentFrom: query.enrollmentFrom || undefined,
+      enrollmentTo: query.enrollmentTo || undefined,
+      page: query.page || undefined,
+      pageSize: query.pageSize || undefined,
     },
   });
   return data;

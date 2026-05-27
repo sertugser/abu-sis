@@ -19,7 +19,7 @@ import {
   Plus, Search, Sparkles, Trash2, X, ArrowRight,
 } from 'lucide-react';
 import { useAdminTerms, type AdminTermDto } from '../hooks/useAdminTerms';
-import { useAdminFaculties } from '../hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useClassrooms } from '../hooks/useClassrooms';
 import {
   useClassroomAssignments,
@@ -72,7 +72,7 @@ function paletteFor(id: number) {
 
 export default function ClassroomAssignmentPage() {
   const { data: terms = [], isLoading: termsLoading } = useAdminTerms();
-  const { data: faculties = [] } = useAdminFaculties();
+  const { data: faculties = [] } = useFacultyLookup();
   const { data: classrooms = [] } = useClassrooms();
 
   // Term selection: default to active term
@@ -103,6 +103,8 @@ export default function ClassroomAssignmentPage() {
   // Suggestion data
   const [suggestionData, setSuggestionData] = useState<ClassroomAssignmentSuggestionDto | null>(null);
   const [suggestDialogOpen, setSuggestDialogOpen] = useState(false);
+  // Öneri uygulamada backend'den dönen kısmi hatalar (200 OK + errors[]).
+  const [suggestApplyErrors, setSuggestApplyErrors] = useState<string[]>([]);
 
   // Stats dialog
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
@@ -206,6 +208,7 @@ export default function ClassroomAssignmentPage() {
     suggestMutation.mutate(termId, {
       onSuccess: (data) => {
         setSuggestionData(data);
+        setSuggestApplyErrors([]);
         setSuggestDialogOpen(true);
       },
     });
@@ -230,7 +233,13 @@ export default function ClassroomAssignmentPage() {
         })),
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          // Backend hepsini reddetse bile HTTP 200 döner; errors[] sessizce yutulmamalı.
+          if (result.errors.length > 0) {
+            setSuggestApplyErrors(result.errors);
+            return; // dialog açık kalsın ki kullanıcı kısmi/total hatayı görsün
+          }
+          setSuggestApplyErrors([]);
           setSuggestDialogOpen(false);
           setSuggestionData(null);
         },
@@ -258,8 +267,21 @@ export default function ClassroomAssignmentPage() {
         })),
       },
       {
-        onSuccess: () => {
-          setSelectedClassroomIds(new Set());
+        onSuccess: (result) => {
+          // Başarıyla atananları seçimden çıkar (kısmi başarı durumunda).
+          const createdIds = new Set(result.created.map(c => c.classroomId));
+          setSelectedClassroomIds(prev => {
+            const next = new Set(prev);
+            createdIds.forEach(id => next.delete(id));
+            return next;
+          });
+          // Backend HTTP 200 + errors[] dönebilir — sessizce yutma, kullanıcıya göster.
+          if (result.errors.length > 0) {
+            setBulkError(
+              `${result.created.length} derslik atandı, ${result.errors.length} başarısız: ${result.errors.join(' ')}`,
+            );
+            return; // dialog açık kalsın
+          }
           setBulkFacultyId(0);
           setBulkConfirmOpen(false);
         },
@@ -777,11 +799,15 @@ export default function ClassroomAssignmentPage() {
       {/* ── Suggestion Dialog ────────────────────────────────────────────── */}
       <ClassroomSuggestionDialog
         open={suggestDialogOpen}
-        onOpenChange={setSuggestDialogOpen}
+        onOpenChange={(open) => {
+          setSuggestDialogOpen(open);
+          if (!open) setSuggestApplyErrors([]);
+        }}
         data={suggestionData}
         onApplyAll={handleApplyAllSuggestions}
         applying={bulkMutation.isPending}
         applyError={bulkMutation.isError}
+        applyErrors={suggestApplyErrors}
       />
     </div>
   );

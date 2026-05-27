@@ -358,7 +358,11 @@ public class CourseSectionLifecycleService(
         var registeredCount = await _helpers.GetRegisteredCountAsync(section.Id, ct);
         var draftOrPendingCount = await _helpers.GetDraftOrPendingCountAsync(section.Id, ct);
 
-        if (request.InstructorId.HasValue)
+        if (request.ClearInstructor)
+        {
+            section.InstructorId = null;
+        }
+        else if (request.InstructorId.HasValue)
         {
             await _helpers.ValidateInstructorAssignmentAsync(request.InstructorId.Value, section.Course.DepartmentId, ct);
             await ValidateInstructorWeeklyLoadLimitAsync(
@@ -367,6 +371,8 @@ public class CourseSectionLifecycleService(
                 section.Course.TheoryHours + section.Course.LabHours,
                 ct,
                 excludedSectionId: section.Id);
+            await ValidateInstructorTimeOverlapAsync(
+                request.InstructorId.Value, section.Id, section.TermId, section.CrossListGroupId, ct);
             section.InstructorId = request.InstructorId.Value;
         }
 
@@ -622,6 +628,53 @@ public class CourseSectionLifecycleService(
                 $"Ogretim uyesi haftalik ders saati limiti asiliyor ({projectedWeeklyHours}/{effectiveMaxWeeklyHours} saat).");
         }
     }
+
+    /// <summary>
+    /// "Bir öğretim üyesi çakışan section'lara atanamaz" kuralı (CLAUDE.md) manuel atama için.
+    /// Hedef section zaten yerleşmişse (SectionSchedules var), hocanın aynı dönemdeki DİĞER
+    /// section'larının blokları (cross-list akranları hariç — aynı fiziksel ders) ile zaman
+    /// çakışması varsa atama reddedilir. Section henüz yerleşmemişse çakışma imkânsız → no-op.
+    /// (Otomatik programlamada bunu H2 encoder enforce ediyor; manuel atama o yolu baypas ediyordu.)
+    /// </summary>
+    private async Task ValidateInstructorTimeOverlapAsync(
+        int instructorId, int sectionId, int termId, int? crossListGroupId, CancellationToken ct)
+    {
+        var thisBlocks = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => ss.CourseSectionId == sectionId)
+            .Select(ss => new { ss.TimeSlot.DayOfWeek, ss.TimeSlot.StartTime, ss.TimeSlot.EndTime })
+            .ToListAsync(ct);
+        if (thisBlocks.Count == 0)
+            return;
+
+        var otherBlocks = await _context.SectionSchedules
+            .AsNoTracking()
+            .Where(ss => ss.CourseSection.TermId == termId
+                && ss.CourseSection.InstructorId == instructorId
+                && ss.CourseSectionId != sectionId
+                // Cross-list akranı (aynı non-null grup) aynı fiziksel ders → çakışma sayılmaz.
+                && !(crossListGroupId != null && ss.CourseSection.CrossListGroupId == crossListGroupId))
+            .Select(ss => new { ss.CourseSection.Course.Code, ss.TimeSlot.DayOfWeek, ss.TimeSlot.StartTime, ss.TimeSlot.EndTime })
+            .ToListAsync(ct);
+
+        foreach (var a in thisBlocks)
+        foreach (var b in otherBlocks)
+        {
+            if (a.DayOfWeek == b.DayOfWeek && a.StartTime < b.EndTime && b.StartTime < a.EndTime)
+            {
+                throw new InvalidOperationException(
+                    $"Öğretim üyesi aynı zaman aralığında başka bir derse ('{b.Code}') atanmış durumda "
+                    + $"({DayLabelTr(a.DayOfWeek)} {a.StartTime:HH\\:mm}-{a.EndTime:HH\\:mm}). Çakışan atama yapılamaz.");
+            }
+        }
+    }
+
+    private static string DayLabelTr(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Pazartesi", DayOfWeek.Tuesday => "Salı", DayOfWeek.Wednesday => "Çarşamba",
+        DayOfWeek.Thursday => "Perşembe", DayOfWeek.Friday => "Cuma", DayOfWeek.Saturday => "Cumartesi",
+        _ => "Pazar",
+    };
     /// <summary>
     /// Bir dersin tüm şubelerini DB'den fiziksel siler (hard delete).
     /// CloseAllSectionsAsync'in aksine geri alınamaz; ders "hiç açılmamış gibi" olur.

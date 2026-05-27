@@ -89,6 +89,7 @@ public class MenuAdminService : IMenuAdminService
             if (!parentExists) throw new ArgumentException("Parent modül bulunamadı.");
         }
 
+        var allowedRolesCsv = await NormalizeAndValidateRolesCsvAsync(dto.AllowedRolesCsv, ct);
         var nextSort = await NextModuleSortOrder(dto.ParentId, ct);
 
         var module = new MenuModule
@@ -97,7 +98,7 @@ public class MenuAdminService : IMenuAdminService
             Slug = dto.Slug.Trim(),
             Label = dto.Label.Trim(),
             Icon = string.IsNullOrWhiteSpace(dto.Icon) ? null : dto.Icon.Trim(),
-            AllowedRolesCsv = NormalizeCsv(dto.AllowedRolesCsv),
+            AllowedRolesCsv = allowedRolesCsv,
             SortOrder = nextSort,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -127,9 +128,11 @@ public class MenuAdminService : IMenuAdminService
         var module = await _context.MenuModules.FirstOrDefaultAsync(m => m.Id == moduleId, ct)
             ?? throw new KeyNotFoundException("Modül bulunamadı.");
 
+        var allowedRolesCsv = await NormalizeAndValidateRolesCsvAsync(dto.AllowedRolesCsv, ct);
+
         module.Label = dto.Label.Trim();
         module.Icon = string.IsNullOrWhiteSpace(dto.Icon) ? null : dto.Icon.Trim();
-        module.AllowedRolesCsv = NormalizeCsv(dto.AllowedRolesCsv);
+        module.AllowedRolesCsv = allowedRolesCsv;
         module.IsActive = dto.IsActive;
         module.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
@@ -214,7 +217,7 @@ public class MenuAdminService : IMenuAdminService
     {
         ValidateSlug(dto.Slug);
         if (string.IsNullOrWhiteSpace(dto.Label)) throw new ArgumentException("Label zorunludur.");
-        if (string.IsNullOrWhiteSpace(dto.Route)) throw new ArgumentException("Route zorunludur.");
+        ValidateRoute(dto.Route);
 
         var module = await _context.MenuModules.FirstOrDefaultAsync(m => m.Id == dto.ModuleId, ct)
             ?? throw new ArgumentException("Modül bulunamadı.");
@@ -223,6 +226,7 @@ public class MenuAdminService : IMenuAdminService
             throw new InvalidOperationException("Bu modülde aynı route'a sahip başka bir item var.");
 
         var permissions = await ResolvePermissionsAsync(dto.PermissionKeys, ct);
+        EnsureHasPermission(permissions);
 
         var nextSort = await NextItemSortOrder(dto.ModuleId, ct);
         var item = new MenuItem
@@ -263,7 +267,7 @@ public class MenuAdminService : IMenuAdminService
     public async Task<MenuItemAdminDto> UpdateItemAsync(int itemId, UpdateMenuItemDto dto, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(dto.Label)) throw new ArgumentException("Label zorunludur.");
-        if (string.IsNullOrWhiteSpace(dto.Route)) throw new ArgumentException("Route zorunludur.");
+        ValidateRoute(dto.Route);
 
         var item = await _context.MenuItems
             .Include(i => i.MenuItemPermissions)
@@ -277,13 +281,15 @@ public class MenuAdminService : IMenuAdminService
             if (clash) throw new InvalidOperationException("Bu modülde aynı route'a sahip başka bir item var.");
         }
 
+        var permissions = await ResolvePermissionsAsync(dto.PermissionKeys, ct);
+        EnsureHasPermission(permissions);
+
         item.Label = dto.Label.Trim();
         item.Route = dto.Route.Trim();
         item.OpenInNewTab = dto.OpenInNewTab;
         item.IsActive = dto.IsActive;
         item.UpdatedAt = DateTime.UtcNow;
 
-        var permissions = await ResolvePermissionsAsync(dto.PermissionKeys, ct);
         var newIds = permissions.Select(p => p.Id).ToHashSet();
         var existing = item.MenuItemPermissions.ToList();
 
@@ -395,6 +401,42 @@ public class MenuAdminService : IMenuAdminService
             if (!(ch is >= 'a' and <= 'z' or >= '0' and <= '9' or '-'))
                 throw new ArgumentException("Slug sadece küçük harf, rakam ve tire içerebilir.");
         }
+    }
+
+    private static void ValidateRoute(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            throw new ArgumentException("Route zorunludur.");
+        if (!route.Trim().StartsWith('/'))
+            throw new ArgumentException("Route '/' ile başlamalıdır.");
+    }
+
+    private static void EnsureHasPermission(List<Permission> permissions)
+    {
+        // Yetkisiz item sidebar filtresinde (MenuService) hiç kimseye görünmez —
+        // sessiz kayıp yerine erken hata.
+        if (permissions.Count == 0)
+            throw new ArgumentException("Sayfa için en az bir yetki seçilmelidir.");
+    }
+
+    /// <summary>
+    /// CSV'yi normalize eder ve her rol adının gerçekten var olduğunu doğrular.
+    /// Tanımsız rol → modül sessizce kimseye görünmez; bu yüzden erken hata veriyoruz.
+    /// </summary>
+    private async Task<string?> NormalizeAndValidateRolesCsvAsync(string? csv, CancellationToken ct)
+    {
+        var normalized = NormalizeCsv(csv);
+        if (normalized is null) return null;
+
+        var roles = normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var knownRoles = await _context.Roles
+            .Select(r => r.Name!)
+            .ToListAsync(ct);
+        var unknown = roles.Where(r => !knownRoles.Contains(r, StringComparer.Ordinal)).ToList();
+        if (unknown.Count > 0)
+            throw new ArgumentException($"Bilinmeyen rol: {string.Join(", ", unknown)}");
+
+        return normalized;
     }
 
     private static string? NormalizeCsv(string? csv)

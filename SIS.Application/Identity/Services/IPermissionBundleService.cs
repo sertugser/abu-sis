@@ -26,4 +26,10 @@ public interface IPermissionBundleService
     /// Bir role'e uygulanmış bundle'ların ID listesi.
     /// </summary>
     Task<List<int>> GetAppliedBundleIdsAsync(int roleId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bir role'e uygulanmış bundle'lar + her birinin stale (güncel değil) durumu.
+    /// Stale: paketin güncel permission seti, role uygulanmış snapshot'tan farklı.
+    /// </summary>
+    Task<List<AppliedBundleDto>> GetAppliedBundlesAsync(int roleId, CancellationToken ct = default);
 }

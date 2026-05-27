@@ -4,6 +4,8 @@ export interface ScheduleSlot {
   endTime: string;
   classroomId?: number;
   classroomName?: string;
+  /** Teori/Lab — düzenleyici ayrı blok sürüklediğinde backend'in doğru etiketlemesi için. */
+  blockType?: 'Theory' | 'Lab';
 }
 
 
@@ -72,9 +74,18 @@ export interface ClassroomScheduleSlot {
   day: number;
   startHour: number;
   endHour: number;
+  startTime: string;
+  endTime: string;
   courseName: string;
   courseCode: string;
   instructorName: string;
+}
+
+export interface TimeSlotSummary {
+  slotOrder: number;
+  startTime: string;
+  endTime: string;
+  label: string;
 }
 
 export interface ClassroomInfo {
@@ -86,6 +97,7 @@ export interface ClassroomInfo {
   floor: number;
   facultyId: number;
   facultyName: string;
+  weeklyOccupancyRate: number;
   schedules: ClassroomScheduleSlot[];
 }
 
@@ -108,6 +120,7 @@ export interface ClassroomFilterOptions {
   faculties: ClassroomFacultyOption[];
   buildings: string[];
   classroomTypes: string[];
+  slots: TimeSlotSummary[];
 }
 
 export interface AvailableClassroomResult {
@@ -124,8 +137,8 @@ export interface AvailableClassroomResult {
 export interface AvailableClassroomSearchParams {
   termId: number;
   days: number[];
-  startHour: number;
-  endHour: number;
+  startTime: string;
+  endTime: string;
   minCapacity?: number;
   classroomType?: string;
   facultyId?: number;

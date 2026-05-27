@@ -14,10 +14,23 @@ namespace SIS.Infrastructure.Services.Scheduling.Rules.Hard;
 /// (varsa). "Aynı kohortta" gibi belirsiz ifadeler yerine "X. sınıf öğrencileri her iki dersi
 /// de alır" gibi sebep + sonuç açıklar. Tüm değerler DB'deki o anki state'ten dinamik.
 /// </summary>
-public sealed class H5_CurriculumConflictRule : IRulePredicate
+public sealed class H5_CurriculumConflictRule : ISoftRulePredicate
 {
     public string Code => "H5";
     public RuleCategory DefaultCategory => RuleCategory.Hard;
+
+    // Soft modda (admin "Tercihli") penalty: ihlal başına solver SoftThresholds.H5Weight default'u (10).
+    // RuleEngine sonra def.Weight (kullanıcı ağırlığı) ile çarpar — H8/DIST hybrid pattern.
+    private const double SoftPenaltyPerViolation = 10;
+
+    public SoftRuleResult CalculatePenalty(RuleContext ctx)
+    {
+        var violations = Evaluate(ctx);
+        if (violations.Count == 0) return SoftRuleResult.Zero;
+        var notes = violations.Take(5).Select(v => v.Message).ToList();
+        var sections = violations.Select(v => v.SectionId).Distinct().Count();
+        return new SoftRuleResult(violations.Count * SoftPenaltyPerViolation, violations.Count, sections, notes);
+    }
 
     public IReadOnlyList<RuleViolation> Evaluate(RuleContext ctx)
     {

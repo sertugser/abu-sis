@@ -27,7 +27,7 @@ public interface IFacultyPlanningService
 
     Task<List<AvailableClassroomDto>> GetAvailableClassroomsAsync(
         int termId, DayOfWeek? day = null, TimeOnly? startTime = null, TimeOnly? endTime = null,
-        int? minCapacity = null, string? type = null, CancellationToken ct = default);
+        int? minCapacity = null, string? type = null, int? facultyId = null, CancellationToken ct = default);
 
     Task<List<SchedulingConflictDto>> GetConflictsAsync(int facultyId, int termId, CancellationToken ct = default);
 

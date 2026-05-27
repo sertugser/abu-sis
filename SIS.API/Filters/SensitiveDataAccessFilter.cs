@@ -22,7 +22,13 @@ public class SensitiveDataAccessFilter : IAsyncActionFilter
         if (context.HttpContext.Request.Method != "GET")
             return;
 
-        if (executedContext.Result is not ObjectResult { StatusCode: null or (>= 200 and < 300) })
+        // Başarılı veri dönüşlerini logla: JSON gövdesi (ObjectResult 2xx) veya dosya indirme
+        // (FileResult — CSV export gibi). FileResult ObjectResult olmadığı için ayrıca kontrol edilir,
+        // aksi halde toplu export'lar sessizce loglanmadan geçerdi.
+        var isSuccessfulPayload =
+            executedContext.Result is ObjectResult { StatusCode: null or (>= 200 and < 300) }
+            || executedContext.Result is FileResult;
+        if (!isSuccessfulPayload)
             return;
 
         var attr = context.ActionDescriptor.EndpointMetadata

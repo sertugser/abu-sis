@@ -44,3 +44,13 @@ public class ApplyBundleToRoleDto
 {
     public int BundleId { get; set; }
 }
+
+/// <summary>
+/// Bir role uygulanmış paketin durumu. <see cref="IsStale"/> true ise paketin güncel
+/// içeriği, role uygulanmış (snapshot) haliyle aynı değil → "Yeniden Uygula" gerekir.
+/// </summary>
+public class AppliedBundleDto
+{
+    public int BundleId { get; set; }
+    public bool IsStale { get; set; }
+}

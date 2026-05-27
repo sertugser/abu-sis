@@ -1,13 +1,21 @@
 // SIS.Web/src/api/grade.api.ts
 import apiClient from './axios';
 import type {
+  ButunlemeFinalizeResponse,
+  ButunlemeRosterResponse,
+  ButunlemeScoreItem,
+  ExamAttendance,
   FinalizeResponse,
   GradeComponent,
+  GradeComponentType,
   GradeSubmitDto,
   GradesResponse,
   GradingCriteria,
   ImportApplyResponse,
   ImportPreviewResponse,
+  MazeretFinalizeResponse,
+  MazeretRosterResponse,
+  MazeretScoreItem,
 } from '../types/grade';
 
 // Bileşen CRUD
@@ -18,7 +26,7 @@ export async function getComponents(sectionId: number): Promise<GradeComponent[]
 
 export async function addComponent(
   sectionId: number,
-  component: { name: string; weight: number; order: number }
+  component: { name: string; weight: number; order: number; type: GradeComponentType }
 ): Promise<void> {
   await apiClient.post(`/instructor/section/${sectionId}/components`, component);
 }
@@ -94,6 +102,18 @@ export async function previewImport(
   return data;
 }
 
+// Sınav katılım işaretleme
+export async function setExamAttendance(
+  sectionId: number,
+  componentId: number,
+  items: { studentId: number; attendance: ExamAttendance }[]
+): Promise<void> {
+  await apiClient.put(`/instructor/section/${sectionId}/exam-attendance`, {
+    componentId,
+    items,
+  });
+}
+
 // Excel apply
 export async function applyImport(
   sectionId: number,
@@ -112,5 +132,47 @@ export async function applyImport(
     }
   );
 
+  return data;
+}
+
+// ── Bütünleme ───────────────────────────────────────────
+
+export async function getButunlemeRoster(sectionId: number): Promise<ButunlemeRosterResponse> {
+  const { data } = await apiClient.get(`/instructor/section/${sectionId}/makeup/butunleme`);
+  return data;
+}
+
+export async function setButunlemeScores(
+  sectionId: number,
+  items: ButunlemeScoreItem[]
+): Promise<void> {
+  await apiClient.put(`/instructor/section/${sectionId}/makeup/butunleme-scores`, { items });
+}
+
+export async function finalizeButunleme(sectionId: number): Promise<ButunlemeFinalizeResponse> {
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/makeup/butunleme-finalize`
+  );
+  return data;
+}
+
+// ── Mazeret ─────────────────────────────────────────────
+
+export async function getMazeretRoster(sectionId: number): Promise<MazeretRosterResponse> {
+  const { data } = await apiClient.get(`/instructor/section/${sectionId}/makeup/mazeret`);
+  return data;
+}
+
+export async function setMazeretScores(
+  sectionId: number,
+  items: MazeretScoreItem[]
+): Promise<void> {
+  await apiClient.put(`/instructor/section/${sectionId}/makeup/mazeret-scores`, { items });
+}
+
+export async function finalizeMazeret(sectionId: number): Promise<MazeretFinalizeResponse> {
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/makeup/mazeret-finalize`
+  );
   return data;
 }

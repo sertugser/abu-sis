@@ -114,7 +114,7 @@ public class AdminCourseCatalogService(AppDbContext db) : IAdminCourseCatalogSer
         // 3. Aktif dönem section bilgisi (KO/DO/Kon + Öğretim Üyesi)
         var now = DateTime.UtcNow;
         var activeTerm = await db.AcademicTerms
-            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
+            .ActiveTerm()
             .Select(t => new { t.Id })
             .FirstOrDefaultAsync();
 

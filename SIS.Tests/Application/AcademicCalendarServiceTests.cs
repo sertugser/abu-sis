@@ -597,4 +597,39 @@ public class AcademicCalendarServiceTests
         list.Single(t => t.TermId == term1.Id).HasCalendar.Should().BeTrue();
         list.Single(t => t.TermId == term2.Id).HasCalendar.Should().BeFalse();
     }
+
+    [Fact]
+    public void AcademicCalendarNavigation_IsConfiguredAsAutoInclude()
+    {
+        using var ctx = CreateContext();
+
+        var navigation = ctx.Model
+            .FindEntityType(typeof(AcademicTerm))!
+            .FindNavigation(nameof(AcademicTerm.AcademicCalendar))!;
+
+        // AutoInclude → faz metotlarının ".Include unutuldu = takvim yok" tuzağına düşmesini engeller.
+        navigation.IsEagerLoaded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AcademicTermQuery_LoadsCalendar_WithoutExplicitInclude()
+    {
+        var dbName = $"AutoInc-{Guid.NewGuid()}";
+        DbContextOptions<AppDbContext> Options() =>
+            new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(dbName).Options;
+
+        int termId;
+        using (var seedCtx = new AppDbContext(Options()))
+        {
+            var term = SeedTerm(seedCtx);
+            await CreateService(seedCtx).UpsertAsync(term.Id, ValidDto(term));
+            termId = term.Id;
+        }
+
+        // Takvimi hiç track etmemiş TAZE context — navigasyonu yalnızca AutoInclude doldurabilir.
+        using var queryCtx = new AppDbContext(Options());
+        var loaded = await queryCtx.AcademicTerms.FirstAsync(t => t.Id == termId);
+
+        loaded.AcademicCalendar.Should().NotBeNull();
+    }
 }

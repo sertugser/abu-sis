@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.AcademicOperations.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
+using SIS.Domain.Entities;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -63,8 +64,8 @@ public class SchedulingController : ControllerBase
     public async Task<IActionResult> SearchAvailableClassrooms(
         [FromQuery] int termId,
         [FromQuery] string days,
-        [FromQuery] int startHour,
-        [FromQuery] int endHour,
+        [FromQuery] string startTime,
+        [FromQuery] string endTime,
         [FromQuery] int? minCapacity,
         [FromQuery] string? classroomType,
         [FromQuery] int? facultyId,
@@ -74,14 +75,19 @@ public class SchedulingController : ControllerBase
         if (termId <= 0) return BadRequest(new { error = "Gecerli bir termId gonderilmelidir." });
         if (string.IsNullOrWhiteSpace(days)) return BadRequest(new { error = "En az bir gun secilmelidir." });
 
-        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 1 && d <= 5).ToList();
-        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (1-5)." });
+        // Gün değerleri System.DayOfWeek kodlaması (Pazar=0 … Cumartesi=6). Hafta sonu (Cmt/Paz)
+        // slotları da oluşturulabildiği için arama tüm haftaya açık — eski 1-5 clamp'i hafta sonu
+        // slotlarını programlanamaz bırakıyordu (TimeSlot oluşturma ile çelişki).
+        var dayList = days.Split(',').Select(d => int.TryParse(d.Trim(), out var v) ? v : -1).Where(d => d >= 0 && d <= 6).ToList();
+        if (dayList.Count == 0) return BadRequest(new { error = "Gecerli gun degerleri gonderilmelidir (0-6)." });
 
-        if (startHour < 8 || startHour > 17 || endHour < 8 || endHour > 17 || startHour > endHour)
-            return BadRequest(new { error = "Saat araligi 8-17 arasi olmalidir." });
+        if (!TimeOnly.TryParse(startTime, out var start) || !TimeOnly.TryParse(endTime, out var end))
+            return BadRequest(new { error = "Baslangic/bitis saati gecerli formatta olmalidir (HH:mm)." });
+        if (end <= start)
+            return BadRequest(new { error = "Bitis saati baslangictan sonra olmalidir." });
 
         return Ok(await _schedulingService.SearchAvailableClassroomsAsync(
-            termId, dayList, startHour, endHour, minCapacity, classroomType, facultyId, buildingName, cancellationToken));
+            termId, dayList, start, end, minCapacity, classroomType, facultyId, buildingName, cancellationToken));
     }
 
     [HttpGet("classroom-filters")]
@@ -210,6 +216,19 @@ public class SchedulingController : ControllerBase
             .Include(ss => ss.TimeSlot)
             .Where(ss => ss.CourseSectionId == section2.Id)
             .ToListAsync(cancellationToken);
+
+        // Bağımsız takas (yalnız slot VEYA yalnız derslik) + farklı blok sayısı ill-defined:
+        // SwapSectionScheduleRecordsAsync slot kaynağını (n adet) derslik kaynağıyla (m adet) zip'ler;
+        // n≠m olunca derslikler yanlış slotlara eşlenir / bloklar düşer. Tam takas (ikisi birden) blok
+        // sayısından bağımsız tutarlıdır. Bu yüzden yalnız tek-boyutlu takasta eşit blok sayısı zorunlu.
+        if (request.SwapSlots != request.SwapClassrooms
+            && swapSchedules1.Count != swapSchedules2.Count)
+        {
+            return BadRequest(new
+            {
+                error = "Farklı blok sayısına sahip section'lar yalnızca slot ve derslik birlikte takas edilebilir."
+            });
+        }
 
         // Preserve originals for rollback
         var origClassroomId1 = section1.ClassroomId;
@@ -427,7 +446,8 @@ public class SchedulingController : ControllerBase
         var nowSched = DateTime.UtcNow;
         return await _context.AcademicTerms
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => !t.IsCancelled && t.IsActivated && t.TermStart <= nowSched && t.TermEnd >= nowSched, ct);
+            .ActiveTerm()
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task<string> GetInstructorDisplayNameAsync(Domain.Entities.Instructor instructor, CancellationToken ct)
@@ -539,12 +559,15 @@ public class SchedulingController : ControllerBase
         if (section == null)
             return NotFound(new { error = "Şube bulunamadı." });
 
-        if (!section.Course.DepartmentId.HasValue)
-            return null; // Ortak ders — herkes erişebilir
-
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         if (roles.Contains("SystemAdministrator") || roles.Contains("AdministrativeStaff"))
             return null;
+
+        if (!section.Course.DepartmentId.HasValue)
+            // Ortak ders (bölümsüz) üniversite-geneli kaynaktır; fakülte/bölüm sahipliği çözülemez.
+            // Yalnız SysAdmin/AdministrativeStaff yönetebilir (yukarıda izin verildi) — Dean/Bölüm
+            // Başkanı bu section üzerinde lock/swap/validate yapamaz (eski "herkes erişebilir" açığı).
+            return Forbid();
 
         var instructor = await _context.Instructors
             .AsNoTracking()

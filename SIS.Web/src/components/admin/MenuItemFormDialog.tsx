@@ -173,8 +173,11 @@ export default function MenuItemFormDialog({
     });
   };
 
+  const hasNoPermission = selectedKeys.length === 0;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (hasNoPermission) return;
     await onSubmit({ slug, label, route, openInNewTab, isActive, permissionKeys: selectedKeys });
   };
 
@@ -242,7 +245,12 @@ export default function MenuItemFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Yetkiler (item için OR mantığı — biri yeterli)</Label>
+            <Label>Yetkiler (item için OR mantığı — biri yeterli, en az bir tane zorunlu)</Label>
+            {hasNoPermission && (
+              <p className="text-xs text-destructive">
+                En az bir yetki seçin. Yetkisiz sayfa hiçbir kullanıcının menüsünde görünmez.
+              </p>
+            )}
             <Input
               placeholder="Yetki ara..."
               value={permFilter}
@@ -367,7 +375,7 @@ export default function MenuItemFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               İptal
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || hasNoPermission}>
               {isPending ? 'Kaydediliyor...' : isEdit ? 'Güncelle' : 'Oluştur'}
             </Button>
           </DialogFooter>

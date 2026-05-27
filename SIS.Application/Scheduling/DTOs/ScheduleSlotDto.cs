@@ -1,3 +1,5 @@
+using SIS.Domain.Enums;
+
 namespace SIS.Application.Scheduling.DTOs;
 
 public class ScheduleSlotDto
@@ -13,4 +15,11 @@ public class ScheduleSlotDto
     public TimeOnly EndTime { get; set; }
     public int? ClassroomId { get; set; }
     public string? ClassroomName { get; set; }
+
+    /// <summary>
+    /// Bloğun teori mi lab mı olduğu. Sağlanırsa ScheduleWriter bunu doğrudan yazar; null ise
+    /// pozisyonel heuristik (ilk N slot teori) uygulanır. Düzenleyici teori/lab bloklarını ayrı
+    /// sürüklediği için bu alan, yazımda lab'ın yanlışlıkla "teori" etiketlenmesini önler.
+    /// </summary>
+    public ScheduleBlockType? BlockType { get; set; }
 }

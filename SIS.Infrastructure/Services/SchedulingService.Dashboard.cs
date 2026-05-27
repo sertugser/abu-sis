@@ -45,11 +45,11 @@ public partial class SchedulingService
 
         var classroomQuery = _context.Classrooms.AsNoTracking().AsQueryable();
 
-        if (facultyId.HasValue)
-        {
-            var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
-            classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
-        }
+        // Term-scope: rapor her zaman döneme atanmış dersliklerle sınırlı (fakülte
+        // seçilmese bile). Önceki davranışta fakülte seçilmeyince DB'deki tüm
+        // derslikler sayılıyordu → döneme atanmamışlar paydayı şişiriyordu.
+        var assignedIds = classroomIdsForTerm.Select(x => x.ClassroomId).ToHashSet();
+        classroomQuery = classroomQuery.Where(c => assignedIds.Contains(c.Id));
 
         if (!string.IsNullOrWhiteSpace(buildingName))
             classroomQuery = classroomQuery.Where(c => c.BuildingName == buildingName);
@@ -66,6 +66,9 @@ public partial class SchedulingService
         var classrooms = await classroomQuery.ToListAsync(cancellationToken);
         result.TotalClassrooms = classrooms.Count;
 
+        // Haftalık doluluk oranını tek formülle (slot grid) hesaplamak için.
+        var slotGrid = await LoadTermSlotGridAsync(resolvedTerm.Id, cancellationToken);
+
         // Her derslik için o donemdeki dersleri haritala
         var classroomSchedules = snapshot.Sections
             .Where(s => s.PrimaryClassroomId.HasValue)
@@ -77,15 +80,28 @@ public partial class SchedulingService
                     Day = slot.Day,
                     StartHour = slot.StartTime.Hour,
                     EndHour = slot.EndTime.Minute > 0 ? slot.EndTime.Hour : slot.EndTime.Hour - 1,
+                    StartTime = slot.StartTime.ToString("HH:mm"),
+                    EndTime = slot.EndTime.ToString("HH:mm"),
                     CourseCode = s.CourseCode,
                     CourseName = s.CourseName,
                     InstructorName = s.InstructorName
                 })).ToList()
             );
 
+        // Doluluk için ham blok pencereleri (gün + gerçek saatler).
+        var blockTuplesByClassroom = snapshot.Sections
+            .Where(s => s.PrimaryClassroomId.HasValue)
+            .GroupBy(s => s.PrimaryClassroomId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.SelectMany(s => s.Blocks.Select(b => (Day: b.Day, b.StartTime, b.EndTime))).ToList());
+
         result.Classrooms = classrooms.Select(c =>
         {
             var fac = facultyLookup.TryGetValue(c.Id, out var f) ? f : null;
+            var blocks = blockTuplesByClassroom.TryGetValue(c.Id, out var bt)
+                ? bt
+                : new List<(int Day, TimeOnly StartTime, TimeOnly EndTime)>();
             return new ClassroomInfoDto
             {
                 Id = c.Id,
@@ -96,6 +112,7 @@ public partial class SchedulingService
                 Floor = c.Floor,
                 FacultyId = fac?.FacultyId ?? 0,
                 FacultyName = fac?.FacultyName ?? string.Empty,
+                WeeklyOccupancyRate = ComputeWeeklyOccupancyRate(blocks, slotGrid),
                 Schedules = classroomSchedules.TryGetValue(c.Id, out var schedules) ? schedules : new()
             };
         }).OrderBy(c => c.Name).ToList();
@@ -115,37 +132,18 @@ public partial class SchedulingService
             .OrderBy(ts => ts.SlotOrder)
             .ToList();
 
-        var workDayIndices = timeSlots
-            .Select(ts => (int)ts.DayOfWeek - 1)
-            .Distinct()
-            .Where(d => d >= 0 && d <= 4)
-            .OrderBy(d => d)
-            .ToList();
-
-        // TimeSlot yoksa fallback: 8-17
-        if (distinctSlots.Count == 0)
-        {
-            for (int d = 0; d < 5; d++) workDayIndices.Add(d);
-            workDayIndices = workDayIndices.Distinct().OrderBy(d => d).ToList();
-            for (int h = 8; h <= 17; h++)
-            {
-                distinctSlots.Add(new Domain.Entities.TimeSlot
-                {
-                    SlotOrder = h - 7,
-                    StartTime = new TimeOnly(h, 0),
-                    EndTime = new TimeOnly(h, 50),
-                });
-            }
-        }
-
+        // Heatmap hücreleri GERÇEK timeslot'lardan kurulur (kartezyen workdays×slots DEĞİL) → günler
+        // arası değişken slot sayısında payda doğru olur. Yalnız hafta içi (Pzt-Cum). TimeSlot yoksa
+        // fabrikasyon YOK: heatmap boş kalır, occupancy 0 → gerçek "slot tanımlı değil" durumu yansır
+        // (eski 8-17 uydurması olmayan veriyi varmış gibi gösteriyordu).
         var heatmapMap = new Dictionary<(int day, int slotOrder), int>();
-        foreach (var dayIdx in workDayIndices)
+        foreach (var ts in timeSlots)
         {
-            foreach (var slot in distinctSlots)
-            {
-                heatmapMap[(dayIdx, slot.SlotOrder)] = 0;
-            }
+            var dayIdx = (int)ts.DayOfWeek - 1;
+            if (dayIdx < 0 || dayIdx > 4) continue;
+            heatmapMap[(dayIdx, ts.SlotOrder)] = 0;
         }
+        var gridCellCount = heatmapMap.Count;
 
         var timeSlotsPerDay = timeSlots
             .GroupBy(ts => (int)ts.DayOfWeek - 1)
@@ -214,8 +212,9 @@ public partial class SchedulingService
         }
 
         int slotsPerDay = distinctSlots.Count;
-        int totalDays = workDayIndices.Count;
-        int totalSlots = result.TotalClassrooms * totalDays * slotsPerDay;
+        // Payda = derslik × GERÇEK hücre sayısı (günler arası değişken slot sayısını da yansıtır;
+        // eski totalDays × slotsPerDay her günün tüm slotlara sahip olduğunu varsayıp şişiriyordu).
+        int totalSlots = result.TotalClassrooms * gridCellCount;
         int usedSlots = heatmapMap.Values.Sum();
         result.EmptySlots = Math.Max(0, totalSlots - usedSlots);
         result.OccupancyRate = totalSlots > 0 ? Math.Round((double)usedSlots / totalSlots * 100) : 0;

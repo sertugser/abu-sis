@@ -6,6 +6,7 @@ using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services;
 using SIS.Tests.TestHelpers;
 
 namespace SIS.Tests.API;
@@ -81,7 +82,7 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
     private ElectiveGroupController CreateGroupController() => new(_context);
 
     private CurriculumController CreateCurriculumController() =>
-        new(_context, new ElectiveGroupScopeValidator());
+        new(_context, new ElectiveGroupScopeValidator(), new CourseStatisticsService(_context));
 
     private static string MessageOf(IActionResult result)
     {

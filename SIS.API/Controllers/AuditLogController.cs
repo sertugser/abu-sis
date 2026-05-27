@@ -29,10 +29,11 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     /// <summary>
     /// Filtrelenebilir, sayfalanmış, sıralanabilir audit log listesi döner.
     /// </summary>
+    // Not: Rutin listeleme her sayfa render/yenileme'de çağrıldığı için "hassas veri erişimi"
+    // olarak loglanmaz (gürültü olur). Erişim loglaması tek-kayıt detay ve toplu export'ta yapılır.
     [HttpGet]
     [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
-    [SensitiveDataAccess("AuditLog")]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? entityType,
         [FromQuery] string? entityId,
@@ -73,6 +74,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     [HttpGet("export/csv")]
     [RequirePermission("menu.audit-log.export")]
     [EnableRateLimiting("AuditLogExport")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
     [SensitiveDataAccess("AuditLog")]
     public async Task<IActionResult> ExportCsv(
         [FromQuery] string? entityType,
@@ -132,6 +134,7 @@ public class AuditLogController(AppDbContext context) : ControllerBase
     [HttpGet("{id:int}")]
     [RequirePermission("menu.audit-log.view")]
     [EnableRateLimiting("AuditLogRead")]
+    [ServiceFilter(typeof(SensitiveDataAccessFilter))]
     [SensitiveDataAccess("AuditLog", EntityIdRouteParam = "id")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
@@ -157,33 +160,6 @@ public class AuditLogController(AppDbContext context) : ControllerBase
             al.EntityId, al.OldValue, al.NewValue, al.Timestamp, al.IpAddress);
 
         return Ok(log);
-    }
-
-    /// <summary>
-    /// Bugün ve son 7 günün özet istatistiklerini döner.
-    /// </summary>
-    [HttpGet("stats")]
-    [RequirePermission("menu.audit-log.view")]
-    [EnableRateLimiting("AuditLogRead")]
-    public async Task<IActionResult> GetStats(CancellationToken ct)
-    {
-        var todayUtc = DateTime.UtcNow.Date;
-        var sevenDaysAgo = todayUtc.AddDays(-7);
-
-        var stats = await _context.AuditLogs
-            .AsNoTracking()
-            .Where(al => al.Timestamp >= sevenDaysAgo)
-            .GroupBy(_ => 1)
-            .Select(g => new AuditLogStatsDto(
-                g.Count(al => al.Timestamp >= todayUtc),
-                g.Count(al => al.Timestamp >= todayUtc && al.Action == "LoginFailed"),
-                g.Count(al => al.Timestamp >= todayUtc && al.Action == "SystemError"),
-                g.Count(al => al.Timestamp >= todayUtc && (al.Action == "Unauthorized" || al.Action == "Forbidden")),
-                g.Count()
-            ))
-            .FirstOrDefaultAsync(ct);
-
-        return Ok(stats ?? new AuditLogStatsDto(0, 0, 0, 0, 0));
     }
 
     /// <summary>
@@ -282,19 +258,40 @@ public class AuditLogController(AppDbContext context) : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
+            // Case-insensitive arama (ILike) + LIKE wildcard'larını ('%', '_', '\') escape et,
+            // böylece kullanıcının girdiği karakterler literal olarak aranır.
+            var pattern = $"%{EscapeLikePattern(search)}%";
             query = query.Where(al =>
-                (al.OldValue != null && al.OldValue.Contains(search)) ||
-                (al.NewValue != null && al.NewValue.Contains(search)));
+                (al.OldValue != null && EF.Functions.ILike(al.OldValue, pattern)) ||
+                (al.NewValue != null && EF.Functions.ILike(al.NewValue, pattern)));
         }
 
+        // Tarih filtreleri kullanıcının seçtiği Türkiye takvim günü olarak yorumlanır (sunucu TZ'inden
+        // bağımsız). from → günün Türkiye 00:00'ı (UTC), to → ertesi günün Türkiye 00:00'ı (UTC, dışlayan).
         if (from.HasValue)
-            query = query.Where(al => al.Timestamp >= from.Value.ToUniversalTime());
+            query = query.Where(al => al.Timestamp >= TurkeyDateStartUtc(from.Value));
 
         if (to.HasValue)
-            query = query.Where(al => al.Timestamp < to.Value.Date.AddDays(1).ToUniversalTime());
+            query = query.Where(al => al.Timestamp < TurkeyDateStartUtc(to.Value.AddDays(1)));
 
         return query;
     }
+
+    // Türkiye kalıcı olarak UTC+3 (2016'dan beri yaz saati uygulaması yok).
+    private static readonly TimeSpan TurkeyOffset = TimeSpan.FromHours(3);
+
+    /// <summary>
+    /// Verilen tarihin Türkiye yerel gün başlangıcını (00:00 +03:00) UTC'ye çevirir.
+    /// Sunucu saat diliminden bağımsız deterministik sonuç verir.
+    /// </summary>
+    private static DateTime TurkeyDateStartUtc(DateTime date) =>
+        new DateTimeOffset(DateTime.SpecifyKind(date.Date, DateTimeKind.Unspecified), TurkeyOffset).UtcDateTime;
+
+    /// <summary>
+    /// LIKE/ILIKE özel karakterlerini (\, %, _) escape eder — kullanıcı girdisi literal aranır.
+    /// </summary>
+    private static string EscapeLikePattern(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private static IQueryable<AuditLog> ApplySorting(IQueryable<AuditLog> query, string? sortBy, string? sortDir)
     {

@@ -54,7 +54,7 @@ public class AdminTermService : IAdminTermService
             .AnyAsync(t => t.Year == dto.Year && t.TermType == termType);
         if (exists)
             throw new InvalidOperationException(
-                $"{dto.Year} yılı için {GetTermTypeLabel(termType)} dönemi zaten mevcut.");
+                $"{dto.Year} yılı için {TermLabels.Get(termType)} dönemi zaten mevcut.");
 
         var termStart = DateTime.SpecifyKind(dto.TermStart, DateTimeKind.Utc);
         var termEnd = DateTime.SpecifyKind(dto.TermEnd, DateTimeKind.Utc);
@@ -80,7 +80,8 @@ public class AdminTermService : IAdminTermService
             TermEnd = termEnd,
             OverrideStart = overrideStart,
             OverrideEnd = overrideEnd,
-            IsActivated = true,
+            // Yeni dönem KAPALI başlar; admin "Kullanıma Aç" ile tek-aktif olarak açar.
+            IsActivated = false,
             IsCancelled = false,
             YoksisStatus = ParseYoksisStatus(dto.YoksisStatus),
             CreatedAt = _clock.UtcNow
@@ -139,11 +140,26 @@ public class AdminTermService : IAdminTermService
         if (term.IsCancelled)
             throw new InvalidOperationException("Iptal edilmis donem aktif edilemez. Once iptali geri alin.");
 
-        if (term.IsActivated)
-            return;
+        // Tek-aktif değişmezi (Proliz/Banner "tek güncel dönem" modeli): bu dönemi açarken
+        // hâlihazırda açık olan diğer tüm dönemleri kapatırız. Böylece her an en çok bir
+        // dönem "Kullanıma Açık" kalır ve "aktif dönem" sorguları belirsizliğe düşmez.
+        var activatedTerms = await _context.AcademicTerms
+            .Where(t => t.IsActivated)
+            .ToListAsync();
 
-        term.IsActivated = true;
-        term.UpdatedAt = _clock.UtcNow;
+        var now = _clock.UtcNow;
+        foreach (var other in activatedTerms.Where(t => t.Id != id))
+        {
+            other.IsActivated = false;
+            other.UpdatedAt = now;
+        }
+
+        if (!term.IsActivated)
+        {
+            term.IsActivated = true;
+            term.UpdatedAt = now;
+        }
+
         await _context.SaveChangesAsync();
 
         await _timeSlotService.GenerateTimeSlotsForTermAsync(term.Id);
@@ -240,7 +256,7 @@ public class AdminTermService : IAdminTermService
             t.Id, t.Name, t.ShortName, t.EnglishName, t.ShortEnglishName, t.OtherName,
             t.Year,
             t.TermType.ToString(),
-            GetTermTypeLabel(t.TermType),
+            TermLabels.Get(t.TermType),
             status.ToString(),
             GetStatusLabel(status),
             t.IsActivated,
@@ -264,20 +280,6 @@ public class AdminTermService : IAdminTermService
         TermStatus.Active    => "Aktif",
         TermStatus.Cancelled => "İptal",
         _                    => s.ToString()
-    };
-
-    public static string GetTermTypeLabel(TermType t) => t switch
-    {
-        TermType.Fall         => "Güz",
-        TermType.Spring       => "Bahar",
-        TermType.Summer       => "Yaz",
-        TermType.FallResit    => "Güz Tekders",
-        TermType.SpringResit  => "Bahar Tekders",
-        TermType.SummerResit  => "Yaz Tekders",
-        TermType.SpringOther  => "Bahar Diğer",
-        TermType.SummerOther  => "Yaz Diğer",
-        TermType.Exemption    => "Muafiyet",
-        _                     => t.ToString()
     };
 
     private static TermType ParseTermType(string s) => s switch

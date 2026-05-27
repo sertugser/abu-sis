@@ -15,6 +15,7 @@ import {
   deleteAllSectionsHard,
   reactivateSection,
   bulkAssignInstructor,
+  copyInstructorAssignments,
   transferStudentsBetweenSections,
   autoSplitCourse,
   getPreviousTermCourses,
@@ -23,7 +24,7 @@ import {
 } from '../api/courseOpening.api';
 import { QUERY_KEYS } from '../lib/constants';
 import { useToast } from '../components/ui/global-toast';
-import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, TransferFromTermRequest, TransferStudentsToSectionRequest, AutoSplitCourseRequest } from '../types/courseOpening';
+import type { OpenCourseRequest, BulkOpenCoursesRequest, UpdateOpenedSectionRequest, BulkAssignInstructorRequest, CopyInstructorAssignmentsRequest, TransferFromTermRequest, TransferStudentsToSectionRequest, AutoSplitCourseRequest } from '../types/courseOpening';
 
 /**
  * Backend'den dönen hata mesajını standart şekilde çıkarır.
@@ -218,6 +219,38 @@ export function useBulkAssignInstructor(departmentId: number, termId: number) {
     },
     onError: (error) => {
       showError('Toplu hoca atama başarısız', getApiErrorMessage(error));
+    },
+  });
+}
+
+export function useCopyInstructorAssignments(departmentId: number, targetTermId: number) {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+  return useMutation({
+    mutationFn: (request: CopyInstructorAssignmentsRequest) => copyInstructorAssignments(request),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, targetTermId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, targetTermId) });
+      queryClient.invalidateQueries({ queryKey: ['courseOpening', 'workload'] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.departmentInstructors(departmentId) });
+      if (result) {
+        const assigned = result.assignedCount ?? 0;
+        const skipped = result.skippedNoSourceCount ?? 0;
+        const failed = result.failedCount ?? 0;
+        if (assigned === 0 && failed === 0) {
+          showSuccess('Kopyalanacak atama bulunamadı', `Kaynak dönemde eşleşen hoca yok (atlanan: ${skipped}).`);
+        } else if (failed === 0) {
+          showSuccess('Hoca atamaları kopyalandı', `${assigned} şubeye atandı, ${skipped} şube atlandı.`);
+        } else {
+          showError(
+            'Kopyalama kısmen tamamlandı',
+            `${assigned} atandı, ${failed} hata, ${skipped} atlandı. Detay: ${(result.errors ?? []).slice(0, 2).join(' • ')}`,
+          );
+        }
+      }
+    },
+    onError: (error) => {
+      showError('Hoca atamaları kopyalanamadı', getApiErrorMessage(error));
     },
   });
 }

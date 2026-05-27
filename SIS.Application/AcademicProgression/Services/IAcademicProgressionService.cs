@@ -27,4 +27,16 @@ public interface IAcademicProgressionService
         int departmentId,
         int? termId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tek bir öğrencinin sınıf atlatma uygunluğunu (PromotionRule bazlı) değerlendirir.
+    /// Toplu işlemle aynı kural mantığını kullanır. Öğrenci yoksa null döner.
+    /// </summary>
+    Task<StudentPromotionStatusDto?> EvaluateStudentPromotionAsync(int studentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Öğrencinin sınıf seviyesini doğrudan ayarlar (CompletedSemesters = (targetLevel-1)*2).
+    /// Manuel override ve geri alma için temel mutasyon primitifi.
+    /// </summary>
+    Task SetStudentLevelAsync(int studentId, int targetLevel, CancellationToken ct = default);
 }

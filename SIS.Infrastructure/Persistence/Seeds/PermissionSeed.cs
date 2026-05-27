@@ -74,18 +74,6 @@ public static class PermissionSeed
         ("menu.akademik-takvim-olusturma.apply",         PermissionCategory.Menu, "Üretilen takvimi uygula"),
         ("menu.akademik-takvim-olusturma.rollback",      PermissionCategory.Menu, "Uygulanan takvimi geri al"),
 
-        // ÖSYM Kayıt Takvimi
-        ("menu.osym-kayit-takvimi.view",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi listesi"),
-        ("menu.osym-kayit-takvimi.create",               PermissionCategory.Menu, "Yeni ÖSYM kayıt takvimi"),
-        ("menu.osym-kayit-takvimi.edit",                 PermissionCategory.Menu, "ÖSYM kayıt takvimi düzenleme"),
-        ("menu.osym-kayit-takvimi.delete",               PermissionCategory.Menu, "ÖSYM kayıt takvimi silme"),
-
-        // Program Kontenjan Bilgileri
-        ("menu.program-kontenjan.view",                  PermissionCategory.Menu, "Program kontenjan listesi"),
-        ("menu.program-kontenjan.create",                PermissionCategory.Menu, "Yeni program kontenjan"),
-        ("menu.program-kontenjan.edit",                  PermissionCategory.Menu, "Program kontenjan düzenleme"),
-        ("menu.program-kontenjan.delete",                PermissionCategory.Menu, "Program kontenjan silme"),
-
         // Sınıf Atlatma Kuralları
         ("menu.sinif-atlatma-kurallari.view",            PermissionCategory.Menu, "Sınıf atlatma kuralları listesi"),
         ("menu.sinif-atlatma-kurallari.create",          PermissionCategory.Menu, "Yeni promotion rule"),
@@ -154,6 +142,10 @@ public static class PermissionSeed
         ("menu.mufredat-islemleri.publish",              PermissionCategory.Menu, "Müfredat yayınlama"),
         ("menu.mufredat-islemleri.archive",              PermissionCategory.Menu, "Müfredat arşivleme"),
 
+        // Müfredat Ders İntibak İşlemleri (standalone toplu intibak — PreviousCourse eşleştirmesi)
+        ("menu.mufredat-ders-intibak.view",              PermissionCategory.Menu, "Müfredat ders intibak (önceki ders eşleştirmesi) görüntüleme"),
+        ("menu.mufredat-ders-intibak.edit",              PermissionCategory.Menu, "Müfredat ders intibak toplu kaydetme"),
+
         // Müfredat Sınıf Dönem Tanımları
         ("menu.mufredat-sinif-donem.view",               PermissionCategory.Menu, "Müfredat term-rules listesi"),
         ("menu.mufredat-sinif-donem.create",             PermissionCategory.Menu, "Yeni term-rule oluşturma"),
@@ -186,6 +178,12 @@ public static class PermissionSeed
         ("menu.ders-acma-islemleri.close-all",           PermissionCategory.Menu, "Tüm dersi kapatma"),
         ("menu.ders-acma-islemleri.reactivate",          PermissionCategory.Menu, "Section yeniden aktifleştirme"),
 
+        // Sınav Müfredatı (program seviyesi sınav yönergeleri — ExamRegulationController)
+        ("menu.sinav-mufredati.view",                    PermissionCategory.Menu, "Sınav yönergesi görüntüleme"),
+        ("menu.sinav-mufredati.edit",                    PermissionCategory.Menu, "Sınav yönergesi düzenleme"),
+        ("menu.sinav-mufredati.create",                  PermissionCategory.Menu, "Sınav yönergesi oluşturma"),
+        ("menu.sinav-mufredati.delete",                  PermissionCategory.Menu, "Sınav yönergesi silme"),
+
         // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
         ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
         ("menu.subelendirme-islemleri.transfer",         PermissionCategory.Menu, "Şubeler arası öğrenci taşıma"),
@@ -202,14 +200,12 @@ public static class PermissionSeed
         ("menu.ders-saatleri-yonetimi.regenerate",       PermissionCategory.Menu, "Time slot grid yeniden üret"),
 
         // Ders Programı Kısıtlamaları
-        ("menu.ders-programi-kisitlamalari.view",        PermissionCategory.Menu, "Constraint görüntüleme (profile/distribution/analytics)"),
-        ("menu.ders-programi-kisitlamalari.create",      PermissionCategory.Menu, "Yeni constraint/profile/distribution"),
+        ("menu.ders-programi-kisitlamalari.view",        PermissionCategory.Menu, "Constraint görüntüleme (distribution dahil)"),
+        ("menu.ders-programi-kisitlamalari.create",      PermissionCategory.Menu, "Yeni constraint/distribution"),
         ("menu.ders-programi-kisitlamalari.edit",        PermissionCategory.Menu, "Constraint parametre/category/weight düzenleme"),
-        ("menu.ders-programi-kisitlamalari.delete",      PermissionCategory.Menu, "Constraint/profile/distribution silme"),
+        ("menu.ders-programi-kisitlamalari.delete",      PermissionCategory.Menu, "Constraint/distribution silme"),
         ("menu.ders-programi-kisitlamalari.toggle",      PermissionCategory.Menu, "Constraint aktif/pasif toggle"),
-        ("menu.ders-programi-kisitlamalari.snapshot",    PermissionCategory.Menu, "Constraint analytics snapshot"),
         ("menu.ders-programi-kisitlamalari.simulate",    PermissionCategory.Menu, "Constraint simülasyon (move/suggest/change)"),
-        ("menu.ders-programi-kisitlamalari.apply",       PermissionCategory.Menu, "Constraint profile uygulama"),
         ("menu.ders-programi-kisitlamalari.exception",   PermissionCategory.Menu, "Constraint exception oluştur/sil"),
         ("menu.ders-programi-kisitlamalari.exception-request",  PermissionCategory.Menu, "Exception talebi oluştur (authenticated)"),
         ("menu.ders-programi-kisitlamalari.exception-my",       PermissionCategory.Menu, "Kendi exception talepleri"),
@@ -289,25 +285,28 @@ public static class PermissionSeed
         // ═══════════════════════════════════════════════════════════════════════════
         ("menu.ogrenci-rehberi.view",                    PermissionCategory.Menu, "Öğrenci listesi/detay görüntüleme"),
         ("menu.ogrenci-rehberi.create",                  PermissionCategory.Menu, "Yeni öğrenci oluşturma"),
-        ("menu.ogrenci-rehberi.eligibility",             PermissionCategory.Menu, "Öğrenci ders uygunluk analizi"),
+        ("menu.ogrenci-rehberi.edit-academic",           PermissionCategory.Menu, "Öğrenci akademik bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.edit-personal",           PermissionCategory.Menu, "Öğrenci kişisel bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.edit-documents",          PermissionCategory.Menu, "Öğrenci belgesi yönetimi"),
+        ("menu.ogrenci-rehberi.generate-documents",      PermissionCategory.Menu, "Öğrenci belgesi üretme"),
+        ("menu.ogrenci-rehberi.edit-scholarship",        PermissionCategory.Menu, "Öğrenci burs bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.edit-placement",          PermissionCategory.Menu, "Öğrenci yerleştirme bilgisi düzenleme"),
+        ("menu.ogrenci-rehberi.integration",             PermissionCategory.Menu, "Öğrenci NVİ/YÖKSİS entegrasyon sorguları"),
 
         // Sidebar placeholder sayfaları (Faz 4 — backend stub)
         ("menu.ogrenci-no-degistirme.view",              PermissionCategory.Menu, "Öğrenci no değiştirme sayfası"),
+        ("menu.ogrenci-no-degistirme.change",            PermissionCategory.Menu, "Öğrenci numarası değiştirme"),
         ("menu.sinif-atlatma-islemleri.view",            PermissionCategory.Menu, "Sınıf atlatma işlemleri sayfası"),
         ("menu.sinif-atlatma-islemleri.promote",         PermissionCategory.Menu, "Sınıf atlatma uygulama"),
         ("menu.sinif-atlatma-islemleri.rollback",        PermissionCategory.Menu, "Sınıf atlatmayı geri alma"),
         ("menu.sinif-atlatma-islemleri.export",          PermissionCategory.Menu, "Promotion sonuçlarını export"),
         ("menu.toplu-danisman-atama.view",               PermissionCategory.Menu, "Toplu danışman atama sayfası"),
         ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
-        ("menu.toplu-staj-danisman-atama.view",          PermissionCategory.Menu, "Toplu staj danışman atama sayfası"),
         ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
-        ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Tek/toplu müfredat ataması"),
-        ("menu.toplu-ders-kaydi.view",                   PermissionCategory.Menu, "Toplu ders kaydı sayfası"),
+        ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Toplu müfredat ataması"),
         ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
         ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
         ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
-        // menu.subeler-arasi-ogrenci-transfer.view — 2026-05-12'de silindi; işlev SectioningPage'e taşındı (menu.subelendirme-islemleri.transfer)
-        ("menu.dersler-arasi-ogrenci-transfer.view",     PermissionCategory.Menu, "Dersler arası öğrenci transfer sayfası"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -363,10 +362,8 @@ public static class PermissionSeed
         ("menu.kullanici-tanimlama.set-status",          PermissionCategory.Menu, "Kullanıcı aktif/pasif durumu"),
         ("menu.personel-listesi.view",                   PermissionCategory.Menu, "Personel (instructor) listesi"),
         ("menu.personel-listesi.create",                 PermissionCategory.Menu, "Yeni personel oluşturma"),
-        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası"),
+        // "Kullanıcı Yetki Grupları" sayfası system.permission-bundle.view ile korunur (M-1 standardizasyon).
         ("menu.kullanici-rapor-gruplari.view",           PermissionCategory.Menu, "Kullanıcı rapor grupları sayfası"),
-        ("menu.kullanici-grup-sinirlandirmalar.view",    PermissionCategory.Menu, "Kullanıcı grup sınırlandırmalar sayfası"),
-        ("menu.kullanici-rapor-tasarim-gruplari.view",   PermissionCategory.Menu, "Kullanıcı rapor tasarım grupları sayfası"),
         ("menu.kullanici-vekalet-islemleri.view",        PermissionCategory.Menu, "Kullanıcı vekalet işlemleri sayfası"),
         ("menu.kullanici-vekalet-islemleri.manage",      PermissionCategory.Menu, "Vekâlet oluşturma/iptal etme (audit'li)"),
         ("menu.audit-log.view",                          PermissionCategory.Menu, "Denetim kayıtları listesi/stats/anomalies"),
@@ -375,8 +372,6 @@ public static class PermissionSeed
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 11.2: Yönetim → Genel Ayarlar
         // ═══════════════════════════════════════════════════════════════════════════
-        ("menu.universite-bilgileri.view",               PermissionCategory.Menu, "Üniversite bilgileri sayfası"),
-        ("menu.kurumsal-entegrasyon-tanimlari.view",     PermissionCategory.Menu, "Kurumsal entegrasyon tanımları sayfası"),
         ("menu.belge-sinirlandirmalar.view",             PermissionCategory.Menu, "Belge sınırlandırmalar sayfası"),
         ("menu.web-modul-ayarlari.view",                 PermissionCategory.Menu, "Web modül ayarları sayfası"),
         ("menu.web-modul-ayarlari.edit",                 PermissionCategory.Menu, "Web modül ayarları düzenleme"),
@@ -386,8 +381,6 @@ public static class PermissionSeed
         ("menu.system-config.edit",                      PermissionCategory.Menu, "Sistem konfigürasyonu düzenleme"),
         ("menu.system-config.export",                    PermissionCategory.Menu, "Sistem konfigürasyonu export"),
         ("menu.system-config.import",                    PermissionCategory.Menu, "Sistem konfigürasyonu import"),
-        ("menu.ebys-imza-yetkilileri.view",              PermissionCategory.Menu, "EBYS imza yetkilileri sayfası"),
-        ("menu.fakulte-imza-yukleme.view",               PermissionCategory.Menu, "Fakülte imza yükleme sayfası"),
 
         // ─── system.* (Phase 1) ─────────────────────────────────────────────
         // Sidebar'da görünmeyen, sadece SystemAdministrator'ın admin UI'da kullandığı permission'lar.
@@ -403,9 +396,9 @@ public static class PermissionSeed
         ("system.user-scope.view",                       PermissionCategory.System, "Kullanıcı scope bilgisini görüntüleme (admin UI)"),
         ("system.user-scope.assign",                     PermissionCategory.System, "Kullanıcı scope atama/güncelleme/temizleme (admin UI)"),
 
-        // ─── menu.* (Phase 2 — Permission Bundles sayfası) ──────────────────
-        ("menu.kullanici-yetki-gruplari.view",           PermissionCategory.Menu, "Kullanıcı yetki grupları sayfası görüntüleme"),
-        ("menu.kullanici-yetki-gruplari.manage",         PermissionCategory.Menu, "Kullanıcı yetki grupları oluşturma/düzenleme/silme"),
+        // Not: "Kullanıcı Yetki Grupları" sayfası system.permission-bundle.* anahtarlarını kullanır
+        // (yukarıda Phase 2 bloğunda). Eski menu.kullanici-yetki-gruplari.* anahtarları kaldırıldı —
+        // .view yukarıda Kullanıcı İşlemleri bloğunda zaten tanımlı, .manage hiç kullanılmıyordu.
 
         // ─── menu.* + system.* (Menü Yönetimi — Admin Menu Editor) ─────────
         ("menu.menu-yonetimi.view",                      PermissionCategory.Menu, "Menü yönetimi sayfası görüntüleme"),
@@ -433,6 +426,10 @@ public static class PermissionSeed
 
         var missing = All
             .Where(p => !existingSet.Contains(p.Key))
+            // Defansif dedup: All listesinde yanlışlıkla aynı Key iki kez yazılırsa
+            // (Permissions.Key UNIQUE olduğu için) taze DB seed'inde çökmemesi adına tekilleştir.
+            .GroupBy(p => p.Key, StringComparer.Ordinal)
+            .Select(g => g.First())
             .Select(p => new Permission
             {
                 Key = p.Key,

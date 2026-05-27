@@ -39,9 +39,6 @@ public static class SchedulingServiceCollectionExtensions
         // What-if simulation engine
         services.AddScoped<ISimulationService, SimulationService>();
 
-        // Constraint snapshot / analytics
-        services.AddScoped<IConstraintSnapshotService, ConstraintSnapshotService>();
-
         // ── OR-Tools v2 Engine ───────────────────────────────────────────
         // Encoder'lar (Faz 2 PoC: sadece H1)
         services.AddScoped<IConstraintEncoder, ClassroomConflictEncoder>();

@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { QUERY_KEYS } from '../lib/constants';
 import apiClient from '../api/axios';
 import type { PagedResult } from './useAdminUsers';
 
@@ -18,16 +17,31 @@ export interface AdminStudentListItem {
   programCode: string;
   departmentName: string;
   advisorName?: string;
+  nationalId?: string | null;
+  isScholarshipStudent?: boolean;
+  enrollmentDate?: string | null;
+  classYear?: number | null;
   transcriptAccessible?: boolean;
   transcriptAccessMessage?: string;
 }
 
 export interface AdminStudentDetail extends AdminStudentListItem {
+  userId: number;
   sgpa: number | null;
   frozenSemesterCount: number | null;
   isScholarshipStudent: boolean;
   hasFinancialBlock: boolean;
   advisorId?: number;
+  programId: number | null;
+  curriculumId: number | null;
+  programType: string;
+  enrollmentDate?: string | null;
+  classYear?: number | null;
+  departureDate?: string | null;
+  previousStudentNumber?: string | null;
+  nationalId?: string | null;
+  entranceType?: string | null;
+  entranceTypeLabel?: string | null;
 }
 
 export interface AdminStudentFilter {
@@ -39,6 +53,15 @@ export interface AdminStudentFilter {
   maxCgpa?: number;
   page?: number;
   pageSize?: number;
+  advisorId?: number;
+  hasAdvisor?: boolean;
+  curriculumId?: number;
+  classYear?: number;
+  studentNoFrom?: string;
+  studentNoTo?: string;
+  enrollmentFrom?: string;
+  enrollmentTo?: string;
+  hasFailingCourse?: boolean;
 }
 
 export interface CreateStudentDto {
@@ -54,105 +77,9 @@ export interface CreateStudentDto {
   overrideEmail?: string;
 }
 
-export interface BulkAdvisorAssignmentPreviewRequest {
-  departmentId: number;
-  programId?: number | null;
-  includeStudentsWithAdvisor: boolean;
-  page?: number;
-  pageSize?: number;
-  studentSearch?: string | null;
-  advisorFilterType?: 'assigned' | 'current' | null;
-  advisorFilterId?: number | null;
-}
-
-export interface BulkAdvisorAssignmentApplyRequest {
-  assignments: BulkAdvisorAssignmentApplyItem[];
-}
-
-export interface BulkAdvisorAssignmentApplyItem {
-  studentId: number;
-  advisorId: number;
-}
-
-export interface BulkAdvisorCandidate {
-  advisorId: number;
-  advisorName: string;
-  departmentId: number;
-  departmentName: string;
-  currentStudentCount: number;
-  plannedNewStudentCount: number;
-  plannedTotalStudentCount: number;
-  isAvailableForAdvisorAssignment: boolean;
-  advisorAssignmentCapacity?: number | null;
-}
-
-export interface BulkAdvisorAssignmentPreviewItem {
-  studentId: number;
-  studentNumber: string;
-  studentName: string;
-  programId: number;
-  programName: string;
-  departmentId: number;
-  departmentName: string;
-  completedSemesters: number;
-  currentAdvisorId?: number | null;
-  currentAdvisorName?: string | null;
-  suggestedAdvisorId: number;
-  suggestedAdvisorName: string;
-  reason: string;
-}
-
-export interface BulkAdvisorAssignmentPreviewResponse {
-  departmentId: number;
-  departmentName: string;
-  programId?: number | null;
-  programName?: string | null;
-  totalStudentCount: number;
-  plannedAssignmentCount: number;
-  alreadyAssignedCount: number;
-  page: number;
-  pageSize: number;
-  totalAssignmentCount: number;
-  totalPages: number;
-  advisors: BulkAdvisorCandidate[];
-  assignments: BulkAdvisorAssignmentPreviewItem[];
-  warnings: string[];
-}
-
-export interface BulkAdvisorAssignmentApplyResponse {
-  updatedCount: number;
-  skippedCount: number;
-  skippedItems: BulkAdvisorAssignmentSkippedItem[];
-}
-
-export interface BulkAdvisorAssignmentSkippedItem {
-  studentId: number;
-  reason: string;
-}
-
-export interface BulkAdvisorSettingsUpdateRequest {
-  advisors: BulkAdvisorSettingUpdateItem[];
-}
-
-export interface BulkAdvisorSettingUpdateItem {
-  advisorId: number;
-  isAvailableForAdvisorAssignment: boolean;
-  advisorAssignmentCapacity?: number | null;
-}
-
-export interface BulkAdvisorSettingsUpdateResponse {
-  updatedCount: number;
-}
-
 export function useAdminStudents(filter: AdminStudentFilter) {
   return useQuery({
-    queryKey: QUERY_KEYS.adminStudents(
-      filter.search,
-      filter.programId,
-      filter.departmentId,
-      filter.status,
-      filter.page
-    ),
+    queryKey: ['admin', 'students', 'list', filter],
     queryFn: async () => {
       const { data } = await apiClient.get<PagedResult<AdminStudentListItem>>(API, {
         params: filter,
@@ -165,7 +92,7 @@ export function useAdminStudents(filter: AdminStudentFilter) {
 
 export function useAdminStudent(id: number | null) {
   return useQuery({
-    queryKey: ['admin', 'students', id],
+    queryKey: ['admin', 'students', 'detail', id],
     queryFn: async () => {
       const { data } = await apiClient.get<AdminStudentDetail>(`${API}/${id}`);
       return data;
@@ -197,46 +124,47 @@ export function useAssignAdvisor() {
   });
 }
 
-export function usePreviewBulkAdvisorAssignment() {
-  return useMutation({
-    mutationFn: async (dto: BulkAdvisorAssignmentPreviewRequest) => {
-      const { data } = await apiClient.post<BulkAdvisorAssignmentPreviewResponse>(
-        `${API}/bulk-advisor-assignment/preview`,
-        dto
-      );
-
-      return data;
-    },
-  });
-}
-
-export function useApplyBulkAdvisorAssignment() {
+export function useChangeStudentNumber() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (dto: BulkAdvisorAssignmentApplyRequest) => {
-      const { data } = await apiClient.post<BulkAdvisorAssignmentApplyResponse>(
-        `${API}/bulk-advisor-assignment/apply`,
-        dto
-      );
-
-      return data;
+    mutationFn: async ({
+      studentId,
+      newStudentNumber,
+    }: {
+      studentId: number;
+      newStudentNumber: string;
+    }) => {
+      await apiClient.put(`${API}/${studentId}/student-number`, { newStudentNumber });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'students'] });
+    onSuccess: (_d, { studentId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'list'] });
     },
   });
 }
 
-export function useUpdateBulkAdvisorSettings() {
-  return useMutation({
-    mutationFn: async (dto: BulkAdvisorSettingsUpdateRequest) => {
-      const { data } = await apiClient.put<BulkAdvisorSettingsUpdateResponse>(
-        `${API}/bulk-advisor-assignment/advisor-settings`,
-        dto
-      );
+export interface UpdateStudentAcademic {
+  status: string;
+  advisorId?: number;
+  programId: number;
+  curriculumId: number;
+  programType: string;
+  isScholarshipStudent: boolean;
+  hasFinancialBlock: boolean;
+  departureDate?: string | null;
+}
 
-      return data;
+export function useUpdateStudentAcademic() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ studentId, dto }: { studentId: number; dto: UpdateStudentAcademic }) => {
+      await apiClient.put(`${API}/${studentId}/academic`, dto);
+    },
+    onSuccess: (_d, { studentId }) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'detail', studentId] });
+      qc.invalidateQueries({ queryKey: ['admin', 'students', 'list'] });
     },
   });
 }

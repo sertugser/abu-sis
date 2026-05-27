@@ -161,8 +161,8 @@ public class SolverRequestBuilderSoftThresholdsTests
         provider.Ints["SoftConstraint.S2.MaxDailyHours"] = 8;
         provider.Ints["Schedule.S2Weight"] = 15;
         provider.Ints["SoftConstraint.S4.MinCoPairThreshold"] = 25;
-        provider.Strings["Schedule.LunchBreak.Start"] = "12:00";
-        provider.Strings["Schedule.LunchBreak.End"] = "13:00";
+        provider.Strings["Schedule.LunchBreakStart"] = "12:00";
+        provider.Strings["Schedule.LunchBreakEnd"] = "13:00";
         provider.Ints["Schedule.DistDiscouragedWeight"] = 100;
         provider.Ints["Schedule.DistStronglyDiscouragedWeight"] = 500;
         var builder = new SolverRequestBuilder(ctx, provider);

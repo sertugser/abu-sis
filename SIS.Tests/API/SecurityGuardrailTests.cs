@@ -47,7 +47,19 @@ public class SecurityGuardrailTests
                        endpoint.Body.Contains("_attachmentService.UploadAsync")
                     && Regex.IsMatch(endpoint.MethodAttributes, @"\[RequestSizeLimit\(");
 
-                return !excelOk && !attachmentOk;
+                // Pattern 3: Öğrenci profil fotoğrafı upload — central StudentPhotoValidator
+                // (content-type whitelist + magic byte + boyut) + explicit RequestSizeLimit
+                var studentPhotoOk =
+                       endpoint.Body.Contains("StudentPhotoValidator.Validate")
+                    && Regex.IsMatch(endpoint.MethodAttributes, @"\[RequestSizeLimit\(");
+
+                // Pattern 4: Öğrenci belgesi upload — central StudentDocumentValidator
+                // (content-type whitelist [pdf/jpeg/png] + magic byte + boyut) + explicit RequestSizeLimit
+                var studentDocumentOk =
+                       endpoint.Body.Contains("StudentDocumentValidator.Validate")
+                    && Regex.IsMatch(endpoint.MethodAttributes, @"\[RequestSizeLimit\(");
+
+                return !excelOk && !attachmentOk && !studentPhotoOk && !studentDocumentOk;
             })
             .Select(endpoint => endpoint.Location)
             .ToList();

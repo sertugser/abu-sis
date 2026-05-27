@@ -25,11 +25,14 @@ import { getAcquisitionBadgeClass, getGradeBadgeClass } from '@/lib/gradeUtils';
 import { CourseActionMenu } from '@/components/my-courses/CourseActionMenu';
 import { CourseInfoSheet } from '@/components/my-courses/CourseInfoSheet';
 import { CourseDetailSheet } from '@/components/my-courses/CourseDetailSheet';
+import { useToast } from '@/components/ui/global-toast';
+import { toApiError } from '@/lib/apiError';
 
 const ALL_TERMS_VALUE = 'all';
 
 export default function MyCoursesPage() {
   const { data: history, isLoading, error } = useCourseHistory();
+  const { showError } = useToast();
   const [selectedTermId, setSelectedTermId] = useState<string>(ALL_TERMS_VALUE);
   const [infoCourseId, setInfoCourseId] = useState<number | null>(null);
   const [detailRegistrationId, setDetailRegistrationId] = useState<number | null>(null);
@@ -69,6 +72,8 @@ export default function MyCoursesPage() {
       }
       // URL'i sonra revoke et — yeni sekme yüklemeyi bitirsin
       setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      showError('PDF oluşturulamadı', toApiError(err, 'Alınan dersler raporu hazırlanamadı.').message);
     } finally {
       setIsPrinting(false);
     }
@@ -97,7 +102,7 @@ export default function MyCoursesPage() {
       <div className="py-16 text-center">
         <GraduationCap className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
         <h3 className="font-heading text-lg font-semibold text-foreground">Ders geçmişi bulunamadı</h3>
-        <p className="mt-1 text-muted-foreground">Henüz tamamlanmış bir döneminiz bulunmamaktadır.</p>
+        <p className="mt-1 text-muted-foreground">Henüz alınmış bir ders kaydınız bulunmamaktadır.</p>
       </div>
     );
   }
@@ -258,7 +263,7 @@ export default function MyCoursesPage() {
       <div className="grid gap-x-8 gap-y-3 border-t border-dashed border-border px-1 pt-4 pb-2 text-[12px] leading-snug md:grid-cols-2">
         <div>
           <p className="font-semibold text-destructive">
-            (Ders Sonuçlandırılmadı) ne anlama geliyor:
+            Not sütununda "—" görünüyorsa ders henüz sonuçlandırılmamış olabilir:
           </p>
           <ol className="list-decimal pl-5 text-muted-foreground">
             <li>Yarıyıl sonu sınavı notu henüz girilmedi</li>
@@ -268,7 +273,7 @@ export default function MyCoursesPage() {
           </ol>
         </div>
         <div>
-          <p className="font-semibold text-primary">Harf notu "—" olarak görünüyorsa:</p>
+          <p className="font-semibold text-primary">Harf notu hesaplandığı halde "—" görünüyorsa:</p>
           <p className="text-muted-foreground">
             Akademik takvime göre harf notlarının ilan tarihi bekleniyor.
             İlgili tarihleri akademik takvimden kontrol edebilirsiniz.

@@ -33,6 +33,8 @@ using SIS.Application.Announcement.Attachments;
 using SIS.Application.Announcement.Configuration;
 using SIS.Application.Announcement.Security;
 using SIS.Application.Announcement.Services;
+using SIS.Application.StudentCard.Services;
+using SIS.Application.Integration;
 using SIS.Infrastructure.BackgroundServices;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
@@ -41,6 +43,7 @@ using SIS.Infrastructure.Services.Scope;
 using SIS.Infrastructure.Services.CourseEvaluation;
 using SIS.Infrastructure.Services.Announcement;
 using SIS.Infrastructure.Services.CalendarGenerator;
+using SIS.Infrastructure.Services.Integration;
 
 var builder = WebApplication.CreateBuilder(args);
 StartupSecurityValidator.Validate(builder.Configuration, builder.Environment);
@@ -214,6 +217,9 @@ builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleProgr
 // Singleton — tüm hub instance'ları aynı registry üzerinden çalışır.
 builder.Services.AddSingleton<SIS.Application.Scheduling.Services.IScheduleCancelRegistry,
     SIS.Infrastructure.Services.Scheduling.ScheduleCancelRegistry>();
+// Bildirim gerçek-zamanlı push (SignalR). IHubContext singleton-safe → Singleton.
+builder.Services.AddSingleton<SIS.Application.Notifications.Services.INotificationRealtimePush,
+    SIS.API.Hubs.SignalRNotificationPush>();
 
 // Register Auth services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -226,6 +232,10 @@ builder.Services.AddScoped<IRegistrationValidationService, RegistrationValidatio
 builder.Services.AddScoped<IAdvisorConstraintService, AdvisorConstraintService>();
 builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 builder.Services.AddScoped<ICourseRegistrationService, CourseRegistrationService>();
+builder.Services.AddScoped<ICurriculumStatusService, CurriculumStatusService>();
+builder.Services.AddScoped<SIS.Application.Curriculum.Services.ICourseStatisticsService, SIS.Infrastructure.Services.CourseStatisticsService>();
+builder.Services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
+builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
@@ -235,6 +245,7 @@ builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
+builder.Services.AddScoped<SIS.Application.Grading.IExamRegulationResolver, SIS.Infrastructure.Services.ExamRegulationResolver>();
 builder.Services.AddScoped<EnrollmentForecastService>();
 builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
@@ -264,6 +275,18 @@ builder.Services.AddScoped<IExcelScheduleService, ExcelScheduleService>();
 // Admin services
 builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<IAdminStudentService, AdminStudentService>();
+builder.Services.AddScoped<IStudentPersonalInfoService, StudentPersonalInfoService>();
+builder.Services.AddScoped<IStudentScholarshipService, StudentScholarshipService>();
+builder.Services.AddScoped<IStudentPlacementService, StudentPlacementService>();
+builder.Services.AddScoped<IExternalIdentityService, MockNviIdentityService>();
+builder.Services.AddScoped<IExternalStudentReportingService, MockYoksisReportingService>();
+builder.Services.AddScoped<IStudentDocumentService, StudentDocumentService>();
+builder.Services.AddScoped<IIssuedDocumentService, IssuedDocumentService>();
+builder.Services.AddScoped<IStudentDocumentPdfService, StudentDocumentPdfService>();
+// QuestPDF Community lisansı bir kez ayarlanır (paylaşılan statik state'e her istekte yazmamak için).
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+builder.Services.AddScoped<IStudentPhotoStorage, FileSystemStudentPhotoStorage>();
+builder.Services.AddScoped<IStudentDocumentStorage, FileSystemStudentDocumentStorage>();
 builder.Services.AddScoped<IAdminInstructorService, AdminInstructorService>();
 builder.Services.AddScoped<IAdminTermService, AdminTermService>();
 builder.Services.AddScoped<SIS.Application.AcademicCalendar.Services.IAcademicCalendarService, AcademicCalendarService>();
@@ -272,8 +295,6 @@ builder.Services.AddScoped<IHolidayCalculatorService, HolidayCalculatorService>(
 builder.Services.AddScoped<IAcademicCalendarRuleService, AcademicCalendarRuleService>();
 builder.Services.AddScoped<ICalendarGeneratorService, CalendarGeneratorService>();
 builder.Services.AddScoped<IAdminAcademicStructureService, AdminAcademicStructureService>();
-builder.Services.AddScoped<IOsymRegistrationCalendarService, OsymRegistrationCalendarService>();
-builder.Services.AddScoped<IProgramQuotaService, ProgramQuotaService>();
 builder.Services.AddScoped<IAdminCourseCatalogService, AdminCourseCatalogService>();
 builder.Services.AddScoped<ISystemConfigProvider, SystemConfigProvider>();
 builder.Services.AddScoped<IWebModuleSettingsProvider, WebModuleSettingsProvider>();
@@ -286,6 +307,20 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IMenuAdminService, MenuAdminService>();
 builder.Services.AddScoped<IPermissionDelegationService, PermissionDelegationService>();
 builder.Services.AddScoped<IReportAuthorizationService, ReportAuthorizationService>();
+builder.Services.AddScoped<SIS.Application.Reports.IReportAccessResolver, SIS.Infrastructure.Services.Reports.ReportAccessResolver>();
+
+// Rapor motoru (Faz 1): handler registry + tek çatı
+builder.Services.AddScoped<SIS.Application.Reports.IUserRoleReader, SIS.Infrastructure.Services.Reports.UserRoleReader>();
+builder.Services.AddScoped<SIS.Application.Reports.IReportExecutionService, SIS.Infrastructure.Services.Reports.ReportExecutionService>();
+builder.Services.AddSingleton<SIS.Application.Reports.IReportExportService, SIS.Infrastructure.Services.Reports.ReportExportService>();
+// Tüm IReportHandler implementasyonlarını otomatik kaydet (yeni rapor = sadece yeni handler sınıfı)
+foreach (var handlerType in typeof(SIS.Infrastructure.Services.Reports.Handlers.StudentListReportHandler).Assembly.GetTypes()
+             .Where(t => t is { IsAbstract: false, IsInterface: false }
+                         && typeof(SIS.Application.Reports.IReportHandler).IsAssignableFrom(t)))
+{
+    builder.Services.AddScoped(typeof(SIS.Application.Reports.IReportHandler), handlerType);
+}
+
 builder.Services.AddScoped<ICurrentUserScope, CurrentUserScope>();
 builder.Services.AddScoped<IScopeGuard, ScopeGuard>();
 builder.Services.AddScoped<IScopeResolver, ScopeResolver>();
@@ -337,6 +372,7 @@ app.UseMiddleware<SIS.API.Middleware.ScopePreloadMiddleware>();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<SIS.API.Hubs.ScheduleProgressHub>("/hubs/schedule-progress");
+app.MapHub<SIS.API.Hubs.NotificationHub>("/hubs/notifications");
 
 // Seed database
 if (app.Environment.IsDevelopment())

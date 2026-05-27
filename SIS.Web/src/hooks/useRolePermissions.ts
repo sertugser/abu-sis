@@ -33,6 +33,8 @@ export function useRolePermissions(roleId: number | null) {
   });
 }
 
+// getRolePermissions artık { manualPermissionIds, bundlePermissionIds } döner.
+
 export function useUpdateRolePermissions() {
   const qc = useQueryClient();
   return useMutation({

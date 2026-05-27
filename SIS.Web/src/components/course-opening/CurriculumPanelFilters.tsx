@@ -1,10 +1,11 @@
 import { Input } from '@/components/ui/input';
 import type { AccessibleDepartment } from '../../types/academicOperations';
-import type { FacultyDto, DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { DepartmentDto, ProgramDto } from '../../hooks/useAdminAcademicStructure';
+import type { LookupFaculty } from '../../hooks/useAdminLookup';
 import { AcademicHierarchyFilter } from './AcademicHierarchyFilter';
 
 export interface CurriculumPanelFiltersProps {
-  faculties: FacultyDto[];
+  faculties: LookupFaculty[];
   structureDepartments: DepartmentDto[];
   accessibleDepartments: AccessibleDepartment[];
   programs: ProgramDto[];

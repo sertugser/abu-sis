@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Loader2, Plus, ShieldOff } from 'lucide-react';
+import { AlertCircle, Inbox, Loader2, Plus, RefreshCw, ShieldOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -73,7 +73,7 @@ export default function UserDelegationPage() {
   const canManage = hasPermission('menu.kullanici-vekalet-islemleri.manage');
 
   const [includeInactive, setIncludeInactive] = useState(false);
-  const { data: rows, isLoading, error } = useDelegations({ includeInactive });
+  const { data: rows, isLoading, error, refetch, isFetching } = useDelegations({ includeInactive });
 
   const createMutation = useCreateDelegation();
   const revokeMutation = useRevokeDelegation();
@@ -83,24 +83,9 @@ export default function UserDelegationPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   return (
-    <div className="space-y-6">
-      {canManage && (
-        <div className="flex justify-end">
-          <Button onClick={() => { setErrorMsg(null); setCreateOpen(true); }}>
-            <Plus className="h-4 w-4 mr-2" />
-            Yeni Vekâlet
-          </Button>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <div>
-            <CardTitle>Vekâlet Kayıtları</CardTitle>
-            <CardDescription>
-              Aktif/beklemede vekâletler listelenir. Geçmiş kayıtları görmek için aşağıdaki anahtarı aç.
-            </CardDescription>
-          </div>
+    <div className="flex min-h-[calc(100vh-7rem)] flex-col">
+      <Card className="flex flex-1 flex-col">
+        <CardHeader className="flex flex-row items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             <Label htmlFor="include-inactive" className="text-sm">Geçmişi göster</Label>
             <Switch
@@ -109,21 +94,44 @@ export default function UserDelegationPage() {
               onCheckedChange={setIncludeInactive}
             />
           </div>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>Vekâlet kayıtları yüklenemedi.</AlertDescription>
-            </Alert>
+          {canManage && (
+            <Button size="sm" onClick={() => { setErrorMsg(null); setCreateOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Yeni Vekâlet
+            </Button>
           )}
+        </CardHeader>
+        <CardContent className="flex flex-1 flex-col">
           {isLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+            <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Yükleniyor...
             </div>
+          ) : error ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <div className="space-y-1">
+                <p className="font-medium">Vekâlet kayıtları yüklenemedi</p>
+                <p className="text-sm text-muted-foreground">
+                  Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+                Tekrar dene
+              </Button>
+            </div>
           ) : !rows || rows.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12 text-sm">
-              Kayıt bulunamadı.
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <Inbox className="h-8 w-8 opacity-40" />
+              <p className="text-sm">
+                {includeInactive ? 'Hiç vekâlet kaydı yok.' : 'Aktif veya beklemede vekâlet yok.'}
+              </p>
+              {canManage && (
+                <p className="text-xs">
+                  Yeni bir vekâlet oluşturmak için sağ üstteki “Yeni Vekâlet” butonunu kullan.
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -304,11 +312,11 @@ function CreateDelegationDialog({
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
             <Label>Yetkiyi Veren</Label>
-            <UserSearchCombobox value={delegatorId} onChange={setDelegatorId} />
+            <UserSearchCombobox value={delegatorId} onChange={setDelegatorId} endpoint="/admin/delegations/users" />
           </div>
           <div className="space-y-2">
             <Label>Vekil</Label>
-            <UserSearchCombobox value={delegateeId} onChange={setDelegateeId} />
+            <UserSearchCombobox value={delegateeId} onChange={setDelegateeId} endpoint="/admin/delegations/users" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -341,7 +349,9 @@ function CreateDelegationDialog({
               placeholder="Örn: Yıllık izin (12-19 Mayıs) süresince tüm dekanlık işleri için Prof. Y vekâlet edecek."
               required
               rows={3}
+              maxLength={500}
             />
+            <p className="text-xs text-muted-foreground text-right">{reason.length}/500</p>
           </div>
           {errorMsg && (
             <Alert variant="destructive">
@@ -410,6 +420,7 @@ function RevokeDialog({
             onChange={(e) => setReason(e.target.value)}
             rows={2}
             placeholder="Örn: İzin erken sonlandı."
+            maxLength={500}
           />
         </div>
         {errorMsg && (

@@ -8,7 +8,8 @@ import {
   useDepartmentClassLists,
 } from '@/hooks/useAcademicOperations';
 import { useActiveTerm } from '@/hooks/useActiveTerm';
-import { useAdminFaculties, useAdminDepartmentsByStructure } from '@/hooks/useAdminAcademicStructure';
+import { useAdminDepartmentsByStructure } from '@/hooks/useAdminAcademicStructure';
+import { useFacultyLookup } from '@/hooks/useAdminLookup';
 import {
   useUpdateOpenedSection,
   useBulkAssignInstructor,
@@ -45,7 +46,7 @@ type ConfirmAction =
 export default function SectioningPage() {
   const contextQuery = useAcademicOperationsContext();
   const { data: activeTerm } = useActiveTerm();
-  const { data: faculties } = useAdminFaculties();
+  const { data: faculties } = useFacultyLookup();
   const { data: structureDepartments } = useAdminDepartmentsByStructure();
 
   const accessibleDepartments = contextQuery.data?.accessibleDepartments;

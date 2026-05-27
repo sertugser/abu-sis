@@ -115,6 +115,7 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             Name = "2025-2026 Fall",
             Year = 2025,
             TermType = TermType.Fall,
+            IsActivated = true,
             TermStart = DateTime.UtcNow.AddDays(-10),
             TermEnd = termEnd,
             AcademicCalendar = new SIS.Domain.Entities.TermAcademicCalendar

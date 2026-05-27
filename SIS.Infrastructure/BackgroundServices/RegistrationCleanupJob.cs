@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SIS.Application.Common.Time;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
@@ -58,7 +59,7 @@ public class RegistrationCleanupJob : BackgroundService
 
         var terms = await ctx.AcademicTerms
             .Include(t => t.AcademicCalendar)
-            .Where(t => !t.IsCancelled && t.IsActivated && t.TermStart <= now && t.TermEnd >= now)
+            .ActiveTerm()
             .Select(t => new { t.Id, t.AcademicCalendar })
             .ToListAsync(ct);
 
