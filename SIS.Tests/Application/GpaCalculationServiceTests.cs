@@ -4,6 +4,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Tests.TestDoubles;
 
 namespace SIS.Tests.Application;
 
@@ -28,7 +29,7 @@ public class GpaCalculationServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        _service = new GpaCalculationService(_context);
+        _service = new GpaCalculationService(_context, new AllVisibleGradeVisibility());
 
         SeedBaseData();
     }
@@ -224,7 +225,7 @@ public class GpaCalculationServiceTests : IDisposable
     [Fact]
     public async Task GetTermGpaHistory_Emre_ReturnsChronologicalAnoAndAgno()
     {
-        var history = await _service.GetTermGpaHistoryAsync(EmreId);
+        var history = (await _service.GetTermGpaHistoryAsync(EmreId)).Terms;
 
         history.Should().HaveCount(4);
         history.Select(item => item.TermId).Should().ContainInOrder(Term3Id, Term4Id, Term1Id, Term2Id);
@@ -262,7 +263,7 @@ public class GpaCalculationServiceTests : IDisposable
 
         _context.SaveChanges();
 
-        var history = await _service.GetTermGpaHistoryAsync(studentId);
+        var history = (await _service.GetTermGpaHistoryAsync(studentId)).Terms;
 
         history.Should().HaveCount(2);
         history[0].TermId.Should().Be(Term3Id);

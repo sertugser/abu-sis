@@ -11,9 +11,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { formatGpa } from '@/lib/gpaFormat';
+import { getTermTypeLabel } from '@/lib/termTypes';
 import { AlertCircle, BarChart3, TrendingUp } from 'lucide-react';
-import { useStudentInfo } from '../hooks/useStudentInfo';
-import { useStudentTranscript } from '../hooks/useStudentTranscript';
 import { useTermGpaHistory } from '../hooks/useTermGpaHistory';
 import type { StudentTermGpaDto } from '../types/student';
 
@@ -48,11 +48,9 @@ const REPORT_COLORS = {
 };
 
 export default function TermGpaPage() {
-  const studentQuery = useStudentInfo();
-  const transcriptQuery = useStudentTranscript();
   const historyQuery = useTermGpaHistory();
 
-  if (studentQuery.isLoading || transcriptQuery.isLoading || historyQuery.isLoading) {
+  if (historyQuery.isLoading) {
     return (
       <div className="space-y-5">
         <Skeleton className="h-[340px] rounded-xl" />
@@ -62,7 +60,7 @@ export default function TermGpaPage() {
     );
   }
 
-  if (studentQuery.isError || transcriptQuery.isError || historyQuery.isError || !studentQuery.data || !transcriptQuery.data) {
+  if (historyQuery.isError || !historyQuery.data) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -74,9 +72,8 @@ export default function TermGpaPage() {
     );
   }
 
-  const student = studentQuery.data;
-  const transcript = transcriptQuery.data;
-  const history = historyQuery.data ?? [];
+  const data = historyQuery.data;
+  const history = data.terms;
 
   if (history.length === 0) {
     return (
@@ -85,7 +82,7 @@ export default function TermGpaPage() {
           <BarChart3 className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
           <h3 className="font-heading text-lg font-semibold text-foreground">Henüz dönem verisi yok</h3>
           <p className="mt-1 text-muted-foreground">
-            {student.firstName} {student.lastName} için harf notu oluşmuş dönem verisi bulunmuyor.
+            Henüz harf notu oluşmuş dönem veriniz bulunmuyor.
           </p>
         </CardContent>
       </Card>
@@ -125,8 +122,8 @@ export default function TermGpaPage() {
                     <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.courseCount}</TableCell>
                     <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.totalCredits}</TableCell>
                     <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{term.totalEcts}</TableCell>
-                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{formatDecimal(term.sgpa)}</TableCell>
-                    <TableCell className="py-2 pr-2 text-center text-[16px] font-medium text-slate-700">{formatDecimal(term.cgpa)}</TableCell>
+                    <TableCell className="py-2 text-center text-[16px] font-medium text-slate-700">{formatGpa(term.sgpa)}</TableCell>
+                    <TableCell className="py-2 pr-2 text-center text-[16px] font-medium text-slate-700">{formatGpa(term.cgpa)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -137,12 +134,12 @@ export default function TermGpaPage() {
             <SummaryFootRow
               description="Dersin Başarı ve Sonuçlanma Durumuna Bakılmaksızın (Ders tekrarlarında son alınan ders, kredi toplamına dahildir)"
               valueLabel="Toplam Kredi"
-              value={transcript.totalAttemptedCredits}
+              value={data.totalAttemptedCredits}
             />
             <SummaryFootRow
               description="Dersin Başarı ve Sonuçlanma Durumuna Bakılmaksızın (Ders tekrarlarında son alınan ders, AKTS toplamına dahildir)"
               valueLabel="Toplam AKTS"
-              value={transcript.totalAttemptedEcts}
+              value={data.totalAttemptedEcts}
               bordered
             />
           </div>
@@ -202,8 +199,9 @@ function ReportChartSection({
   history: StudentTermGpaDto[];
   metric: 'sgpa' | 'cgpa';
 }) {
-  const latestValue = history[history.length - 1]?.[metric] ?? 0;
-  const peakValue = Math.max(...history.map(item => item[metric]));
+  const values = history.map(item => item[metric]).filter((value): value is number => value != null);
+  const peakValue = values.length > 0 ? Math.max(...values) : null;
+  const latestValue = history[history.length - 1]?.[metric] ?? null;
   const palette = REPORT_COLORS[legendTone];
 
   return (
@@ -226,11 +224,11 @@ function ReportChartSection({
           <div className="flex flex-wrap gap-2">
             <LegendBadge label={legendLabel} tone={legendTone} />
             <Badge variant="secondary" className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20">
-              Zirve: {peakValue.toFixed(2)}
+              Zirve: {formatGpa(peakValue)}
             </Badge>
             <Badge variant="secondary" className="gap-1.5 border-white/20 bg-white/10 text-white hover:bg-white/20">
               <TrendingUp className="h-3.5 w-3.5" />
-              Son değer: {latestValue.toFixed(2)}
+              Son değer: {formatGpa(latestValue)}
             </Badge>
           </div>
         </div>
@@ -354,11 +352,10 @@ function TermGpaBarChart({
         const value = metric === 'sgpa' ? term.sgpa : term.cgpa;
         const cx = CHART_PADDING.left + index * columnWidth + columnWidth / 2;
         const x = cx - barWidth / 2;
-        const y = getY(value);
-        const barHeight = innerHeight - ((4 - value) / 4) * innerHeight;
+        const hasBar = value != null && value > 0;
+        const y = getY(value ?? 0);
+        const barHeight = innerHeight - ((4 - (value ?? 0)) / 4) * innerHeight;
         const isLast = index === history.length - 1;
-        const valueLabel = value > 0 ? formatDecimal(value) : '0,00';
-        const hasBar = value > 0;
         const pillWidth = 46;
         const pillHeight = 22;
         const pillY = Math.max(CHART_PADDING.top + 6, y - 30);
@@ -395,7 +392,7 @@ function TermGpaBarChart({
                   stroke={palette.border}
                 />
                 <text x={cx} y={pillY + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill={palette.chipText}>
-                  {valueLabel}
+                  {formatGpa(value)}
                 </text>
               </>
             ) : (
@@ -409,7 +406,7 @@ function TermGpaBarChart({
               {String(term.year).slice(-2)}-{String(term.year + 1).slice(-2)}
             </text>
             <text x={cx} y={labelY + 14} textAnchor="middle" fontSize="10" fill="#94a3b8">
-              {formatSemester(term.semester)}
+              {getTermTypeLabel(term.semester)}
             </text>
           </g>
         );
@@ -418,14 +415,6 @@ function TermGpaBarChart({
   );
 }
 
-function formatSemester(semester: string) {
-  return semester === 'Fall' ? 'Güz' : semester === 'Spring' ? 'Bahar' : 'Yaz';
-}
-
 function formatTermName(termName: string) {
   return termName.endsWith('Dönemi') ? termName : `${termName} Dönemi`;
-}
-
-function formatDecimal(value: number) {
-  return value.toFixed(2).replace('.', ',');
 }

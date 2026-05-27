@@ -6,7 +6,7 @@ public interface IGpaCalculationService
 {
     Task<decimal> CalculateSgpaAsync(int studentId, int termId);
     Task<decimal> CalculateCgpaAsync(int studentId);
-    Task<List<TermGpaHistoryItemDto>> GetTermGpaHistoryAsync(int studentId);
+    Task<TermGpaHistoryDto> GetTermGpaHistoryAsync(int studentId);
     Task<GpaResultDto> RecalculateAndUpdateAsync(int studentId);
     Task<Dictionary<int, decimal>> BatchCalculateCgpaAsync(List<int> studentIds);
 }

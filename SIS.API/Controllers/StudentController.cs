@@ -181,14 +181,6 @@ public class StudentController : ControllerBase
         if (student == null)
             return NotFound(new { error = "Ogrenci bilgisi bulunamadi." });
 
-        var evaluationEnabled = await _systemConfig.GetBoolAsync("Application.SocialTranscriptApplicationEvaluationEnabled", true);
-        if (!evaluationEnabled)
-            return BadRequest(new { error = "Sosyal transkript değerlendirme akışı sistem konfigürasyonunda kapalı." });
-
-        var evaluationAccess = await ResolveStudentModuleAccessAsync(student.Id, "social-transcript-application-evaluation");
-        if (!evaluationAccess.IsOpen)
-            return BadRequest(new { error = evaluationAccess.Message ?? "Sosyal transkript değerlendirme akışı şu anda kapalı." });
-
         var history = await _gpaCalculationService.GetTermGpaHistoryAsync(student.Id);
         return Ok(history);
     }
@@ -489,30 +481,6 @@ public class StudentController : ControllerBase
 
         var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
         return makeupAccess.IsOpen;
-    }
-
-    private async Task<WebModuleAccessResult> ResolveStudentModuleAccessAsync(int studentId, string controlCode)
-    {
-        var activeTermId = await _context.CourseRegistrations
-            .AsNoTracking()
-            .Where(registration => registration.StudentId == studentId
-                && registration.CourseSection.TermId == registration.CourseSection.Term.Id
-                && registration.Status != RegistrationStatus.Draft
-                && registration.Status != RegistrationStatus.Dropped)
-            .OrderByDescending(registration => registration.CourseSection.Term.TermStart)
-            .Select(registration => (int?)registration.CourseSection.TermId)
-            .FirstOrDefaultAsync();
-
-        if (!activeTermId.HasValue)
-        {
-            activeTermId = await _context.AcademicTerms
-                .AsNoTracking()
-                .ActiveTerm()
-                .Select(term => (int?)term.Id)
-                .FirstOrDefaultAsync();
-        }
-
-        return await _webModuleControls.EvaluateAsync(controlCode, activeTermId);
     }
 
     private static string ResolvePublicationControlCode(string componentName)

@@ -9,6 +9,13 @@ public class TermGpaHistoryItemDto
     public int CourseCount { get; set; }
     public int TotalCredits { get; set; }
     public int TotalEcts { get; set; }
-    public decimal Sgpa { get; set; }
-    public decimal Cgpa { get; set; }
+
+    /// <summary>
+    /// Dönem ortalaması (ANO). GPA'ya giren ders yoksa (yalnızca S/U/W vb.) <c>null</c> —
+    /// gerçek 0 ile "veri yok" ayrımı için. Frontend null'ı "—" olarak gösterir.
+    /// </summary>
+    public decimal? Sgpa { get; set; }
+
+    /// <summary>Genel not ortalaması (AGNO). GPA'ya giren ders yoksa <c>null</c>.</summary>
+    public decimal? Cgpa { get; set; }
 }

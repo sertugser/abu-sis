@@ -175,18 +175,23 @@ public class StudentCardControllerTests
         await using var context = CreateContext();
         SeedStudentInDepartment(context, studentId: 5, programId: 10, departmentId: 1);
 
-        var expected = new List<TermGpaHistoryItemDto>
+        var expected = new TermGpaHistoryDto
         {
-            new()
+            Terms = new List<TermGpaHistoryItemDto>
             {
-                TermId = 3,
-                TermName = "2024-2025 Güz",
-                Year = 2024,
-                Semester = "Fall",
-                CourseCount = 5,
-                Sgpa = 3.10m,
-                Cgpa = 2.95m
-            }
+                new()
+                {
+                    TermId = 3,
+                    TermName = "2024-2025 Güz",
+                    Year = 2024,
+                    Semester = "Fall",
+                    CourseCount = 5,
+                    Sgpa = 3.10m,
+                    Cgpa = 2.95m
+                }
+            },
+            TotalAttemptedCredits = 30,
+            TotalAttemptedEcts = 30
         };
 
         var registrationMock = new Mock<ICourseRegistrationService>();

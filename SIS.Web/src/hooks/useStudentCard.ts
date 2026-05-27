@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/axios';
 import type { StudentRegistrationDto, CourseHistoryTermDto, StudentAttendanceStatusDto } from '../types/registration';
-import type { StudentTermGpaDto } from '../types/student';
+import type { TermGpaHistoryDto } from '../types/student';
 import type { StudentTranscriptDto } from '../types/transcript';
 import type { CurriculumStatusDto } from '../types/curriculum';
 
@@ -398,7 +398,7 @@ export function useStudentCardTermGpa(studentId: number | null) {
   return useQuery({
     queryKey: ['admin', 'student-card', 'term-gpa', studentId],
     queryFn: async () => {
-      const { data } = await apiClient.get<StudentTermGpaDto[]>(`${BASE}/${studentId}/term-gpa`);
+      const { data } = await apiClient.get<TermGpaHistoryDto>(`${BASE}/${studentId}/term-gpa`);
       return data;
     },
     enabled: studentId != null,

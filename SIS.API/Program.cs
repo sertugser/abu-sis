@@ -243,7 +243,8 @@ builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
 builder.Services.AddHostedService<AcademicTermActivationReminderJob>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
-// Register GPA Calculation service
+// Register GPA Calculation service (+ shared grade-visibility used by GPA & transcript)
+builder.Services.AddScoped<SIS.Application.Common.Services.IGradeVisibilityService, SIS.Infrastructure.Services.GradeVisibilityService>();
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<SIS.Application.Grading.IExamRegulationResolver, SIS.Infrastructure.Services.ExamRegulationResolver>();
 builder.Services.AddScoped<EnrollmentForecastService>();

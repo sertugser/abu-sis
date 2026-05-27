@@ -6,6 +6,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Gpa;
 
 namespace SIS.Infrastructure.Services;
 
@@ -17,14 +18,15 @@ namespace SIS.Infrastructure.Services;
 public class StudentTranscriptService : IStudentTranscriptService
 {
     private readonly AppDbContext _context;
-    private readonly IWebModuleControlService _webModuleControls;
+    private readonly IGradeVisibilityService _gradeVisibility;
 
     public StudentTranscriptService(
         AppDbContext context,
-        IWebModuleControlService? webModuleControls = null)
+        IGradeVisibilityService? gradeVisibility = null)
     {
         _context = context;
-        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _gradeVisibility = gradeVisibility
+            ?? new GradeVisibilityService(context, new NullWebModuleControlService());
     }
 
     public async Task<StudentTranscriptDto?> GetTranscriptAsync(int studentId, CancellationToken ct = default)
@@ -57,13 +59,15 @@ public class StudentTranscriptService : IStudentTranscriptService
                 .ThenInclude(cs => cs.Course)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+            .Include(cr => cr.OpeningReasonSnapshot) // Faz 4 — IsExcludedFromGpa flag için
             .Where(cr => cr.StudentId == student.Id
                 && cr.Grade != null
                 && cr.Status != RegistrationStatus.Draft
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync(ct);
 
-        var transcriptGradeVisibility = await BuildGradeVisibilityMapAsync(registrations.Select(r => r.CourseSection.TermId));
+        var transcriptGradeVisibility = await _gradeVisibility.BuildTermGradeVisibilityAsync(
+            registrations.Select(r => r.CourseSection.TermId), ct);
         registrations = registrations
             .Where(registration => transcriptGradeVisibility.GetValueOrDefault(registration.CourseSection.TermId, true))
             .ToList();
@@ -77,17 +81,23 @@ public class StudentTranscriptService : IStudentTranscriptService
             .Select(registration => registration.CourseSection.TermId)
             .Distinct()
             .ToList();
-        var equivalentCourseIdsByCourseId = courseIds.Count == 0
-            ? new Dictionary<int, HashSet<int>>()
-            : (await _context.CourseEquivalencies
+        // Eşdeğerlikleri tek seferde (çift yönlü) yükle: hem zincir haritası hem de
+        // ders-satırında gösterilen eşdeğer ders id'leri için kullanılır.
+        var equivalencies = courseIds.Count == 0
+            ? new List<CourseEquivalency>()
+            : await _context.CourseEquivalencies
                 .AsNoTracking()
-                .Where(equivalency => courseIds.Contains(equivalency.CourseId))
-                .ToListAsync(ct))
-                .GroupBy(equivalency => equivalency.CourseId)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group.Select(equivalency => equivalency.EquivalentCourseId).ToHashSet());
-        var courseChainIdByCourseId = BuildCourseChainIdMap(courseIds, equivalentCourseIdsByCourseId);
+                .Where(equivalency =>
+                    courseIds.Contains(equivalency.CourseId)
+                    || courseIds.Contains(equivalency.EquivalentCourseId))
+                .ToListAsync(ct);
+        var equivalentCourseIdsByCourseId = equivalencies
+            .Where(equivalency => courseIds.Contains(equivalency.CourseId))
+            .GroupBy(equivalency => equivalency.CourseId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(equivalency => equivalency.EquivalentCourseId).ToHashSet());
+        var courseChainIdByCourseId = GpaMath.BuildCourseChainIdMap(courseIds, equivalencies);
         var registrationMetadataById = registrations.ToDictionary(
             registration => registration.Id,
             registration => (registration.CourseSection.CourseId, registration.CourseSection.TermId));
@@ -193,12 +203,12 @@ public class StudentTranscriptService : IStudentTranscriptService
                 {
                     var course = registration.CourseSection.Course;
                     var chainId = courseChainIdByCourseId.GetValueOrDefault(course.Id, course.Id);
-                    var credits = course.TheoryHours + course.LabHours;
                     var grade = registration.Grade!.Value;
                     var gradePoint = GradePointMap.GetPoint(grade);
-                    var weightedEcts = gradePoint.HasValue
-                        ? Math.Round(course.Ects * gradePoint.Value, 2, MidpointRounding.AwayFromZero)
-                        : (decimal?)null;
+                    var countsTowardsGpa = GpaMath.CountsTowardsGpa(registration);
+                    var weightedEcts = countsTowardsGpa
+                        ? (decimal?)GpaMath.GetWeightedEcts(registration)
+                        : null;
 
                     return new StudentTranscriptCourseDto
                     {
@@ -206,8 +216,8 @@ public class StudentTranscriptService : IStudentTranscriptService
                         CourseId = course.Id,
                         CourseCode = course.Code,
                         CourseName = course.Name,
-                        Credits = credits,
-                        Ects = course.Ects,
+                        Credits = GpaMath.GetCredit(registration),
+                        Ects = GpaMath.GetEcts(registration),
                         EquivalentCourseIds = equivalentCourseIdsByCourseId.TryGetValue(course.Id, out var equivalentIds)
                             ? equivalentIds.OrderBy(id => id).ToList()
                             : new List<int>(),
@@ -215,8 +225,8 @@ public class StudentTranscriptService : IStudentTranscriptService
                         Grade = grade.ToString(),
                         Status = registration.Status.ToString(),
                         IsRepeated = registration.IsRepeated || repeatedChainCounts.GetValueOrDefault(chainId) > 1,
-                        IsPassed = IsPassedGrade(grade),
-                        CountsTowardsGpa = gradePoint.HasValue,
+                        IsPassed = GpaMath.IsPassedGrade(grade),
+                        CountsTowardsGpa = countsTowardsGpa,
                         GradePoint = gradePoint,
                         WeightedEcts = weightedEcts
                     };
@@ -231,8 +241,8 @@ public class StudentTranscriptService : IStudentTranscriptService
             var gpaPoints = courseDtos.Sum(course => course.WeightedEcts ?? 0m);
 
             var cumulativeRegistrations = latestGradesByCourse.Values.ToList();
-            var cumulativeGpaEcts = cumulativeRegistrations.Sum(GetGpaEcts);
-            var cumulativeGpaPoints = cumulativeRegistrations.Sum(GetWeightedEcts);
+            var cumulativeGpaEcts = cumulativeRegistrations.Sum(GpaMath.GetGpaEcts);
+            var cumulativeGpaPoints = cumulativeRegistrations.Sum(GpaMath.GetWeightedEcts);
 
             transcriptTerms.Add(new StudentTranscriptTermDto
             {
@@ -248,15 +258,15 @@ public class StudentTranscriptService : IStudentTranscriptService
                 GpaPoints = Math.Round(gpaPoints, 2, MidpointRounding.AwayFromZero),
                 CumulativeGpaEcts = cumulativeGpaEcts,
                 CumulativeGpaPoints = Math.Round(cumulativeGpaPoints, 2, MidpointRounding.AwayFromZero),
-                Sgpa = CalculateAverage(termGroup.Registrations),
-                Cgpa = CalculateAverage(cumulativeRegistrations),
+                Sgpa = GpaMath.CalculateAverage(termGroup.Registrations),
+                Cgpa = GpaMath.CalculateAverage(cumulativeRegistrations),
                 Courses = courseDtos
             });
         }
 
         var latestRegistrations = latestGradesByCourse.Values.ToList();
-        var totalGpaEcts = latestRegistrations.Sum(GetGpaEcts);
-        var totalGpaPoints = latestRegistrations.Sum(GetWeightedEcts);
+        var totalGpaEcts = latestRegistrations.Sum(GpaMath.GetGpaEcts);
+        var totalGpaPoints = latestRegistrations.Sum(GpaMath.GetWeightedEcts);
 
         var transcript = new StudentTranscriptDto
         {
@@ -270,136 +280,15 @@ public class StudentTranscriptService : IStudentTranscriptService
             EnrollmentDate = activeProgram.EnrollmentDate,
             GeneratedAt = DateTime.UtcNow,
             CurrentCgpa = transcriptTerms.Count > 0 ? transcriptTerms[^1].Cgpa : student.Cgpa,
-            TotalAttemptedCredits = latestRegistrations.Sum(reg => reg.CourseSection.Course.TheoryHours + reg.CourseSection.Course.LabHours),
-            TotalAttemptedEcts = latestRegistrations.Sum(reg => reg.CourseSection.Course.Ects),
-            TotalEarnedCredits = latestRegistrations.Where(reg => IsPassedGrade(reg.Grade!.Value)).Sum(reg => reg.CourseSection.Course.TheoryHours + reg.CourseSection.Course.LabHours),
-            TotalEarnedEcts = latestRegistrations.Where(reg => IsPassedGrade(reg.Grade!.Value)).Sum(reg => reg.CourseSection.Course.Ects),
+            TotalAttemptedCredits = latestRegistrations.Sum(GpaMath.GetCredit),
+            TotalAttemptedEcts = latestRegistrations.Sum(GpaMath.GetEcts),
+            TotalEarnedCredits = latestRegistrations.Where(reg => GpaMath.IsPassedGrade(reg.Grade!.Value)).Sum(GpaMath.GetCredit),
+            TotalEarnedEcts = latestRegistrations.Where(reg => GpaMath.IsPassedGrade(reg.Grade!.Value)).Sum(GpaMath.GetEcts),
             TotalGpaEcts = totalGpaEcts,
             TotalGpaPoints = Math.Round(totalGpaPoints, 2, MidpointRounding.AwayFromZero),
             Terms = transcriptTerms
         };
 
         return transcript;
-    }
-
-    private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
-    {
-        // Yalnızca AKTİF dönemin notları "ilan" durumuna bağlıdır: aktif dönemde
-        // kayıtlı olunan, henüz ilan edilmemiş dersler gizlenir. Geçmiş (sonuçlanmış)
-        // dönemlerin notları transkriptte her zaman görünür — hem öğrenci hem yönetici.
-        var activeTermId = await _context.AcademicTerms
-            .AsNoTracking()
-            .ActiveTerm()
-            .Select(t => (int?)t.Id)
-            .FirstOrDefaultAsync();
-
-        var result = new Dictionary<int, bool>();
-        foreach (var termId in termIds.Distinct())
-        {
-            result[termId] = termId != activeTermId
-                || await CanStudentSeeLetterGradeAsync(termId);
-        }
-
-        return result;
-    }
-
-    private async Task<bool> CanStudentSeeLetterGradeAsync(int termId)
-    {
-        var finalAccess = await _webModuleControls.EvaluateAsync("letter-grade-publication", termId);
-        if (finalAccess.IsOpen)
-            return true;
-
-        var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
-        return makeupAccess.IsOpen;
-    }
-
-    private static bool IsPassedGrade(GradeCode grade) =>
-        grade != GradeCode.FF
-        && grade != GradeCode.NA
-        && grade != GradeCode.U
-        && grade != GradeCode.W
-        && grade != GradeCode.I;
-
-    private static int GetGpaEcts(CourseRegistration registration) =>
-        GradePointMap.IsGpaIncluded(registration.Grade!.Value)
-            ? registration.CourseSection.Course.Ects
-            : 0;
-
-    private static decimal GetWeightedEcts(CourseRegistration registration)
-    {
-        var point = GradePointMap.GetPoint(registration.Grade!.Value);
-        return point.HasValue
-            ? Math.Round(registration.CourseSection.Course.Ects * point.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
-    }
-
-    private static decimal CalculateAverage(IEnumerable<CourseRegistration> registrations)
-    {
-        var totalEcts = 0;
-        decimal totalPoints = 0;
-
-        foreach (var registration in registrations)
-        {
-            var point = GradePointMap.GetPoint(registration.Grade!.Value);
-            if (!point.HasValue)
-                continue;
-
-            var ects = registration.CourseSection.Course.Ects;
-            if (ects == 0)
-                continue;
-
-            totalEcts += ects;
-            totalPoints += ects * point.Value;
-        }
-
-        if (totalEcts == 0)
-            return 0m;
-
-        return Math.Round(totalPoints / totalEcts, 2, MidpointRounding.AwayFromZero);
-    }
-
-    private static Dictionary<int, int> BuildCourseChainIdMap(
-        IEnumerable<int> courseIds,
-        IReadOnlyDictionary<int, HashSet<int>> equivalentCourseIdsByCourseId)
-    {
-        var distinctCourseIds = courseIds.Distinct().ToList();
-        var map = distinctCourseIds.ToDictionary(courseId => courseId, courseId => courseId);
-        var relevantCourseIds = distinctCourseIds.ToHashSet();
-        var visited = new HashSet<int>();
-
-        foreach (var courseId in distinctCourseIds)
-        {
-            if (!visited.Add(courseId))
-                continue;
-
-            var queue = new Queue<int>();
-            var component = new List<int>();
-            queue.Enqueue(courseId);
-
-            while (queue.Count > 0)
-            {
-                var currentCourseId = queue.Dequeue();
-                component.Add(currentCourseId);
-
-                if (!equivalentCourseIdsByCourseId.TryGetValue(currentCourseId, out var equivalentIds))
-                    continue;
-
-                foreach (var equivalentCourseId in equivalentIds)
-                {
-                    if (!relevantCourseIds.Contains(equivalentCourseId) || !visited.Add(equivalentCourseId))
-                        continue;
-
-                    queue.Enqueue(equivalentCourseId);
-                }
-            }
-
-            var chainId = component.Min();
-            foreach (var componentCourseId in component)
-            {
-                map[componentCourseId] = chainId;
-            }
-        }
-
-        return map;
     }
 }

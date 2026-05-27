@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { StudentGradeStatisticsDto, StudentInfoDto, StudentTermGpaDto } from '../types/student';
+import type { StudentGradeStatisticsDto, StudentInfoDto, TermGpaHistoryDto } from '../types/student';
 import type { CurriculumStatusDto } from '../types/curriculum';
 import type { StudentTranscriptDto } from '../types/transcript';
 
@@ -13,8 +13,8 @@ export async function getCurriculumStatus(): Promise<CurriculumStatusDto> {
   return response.data;
 }
 
-export async function getTermGpaHistory(): Promise<StudentTermGpaDto[]> {
-  const response = await apiClient.get<StudentTermGpaDto[]>('/student/term-gpa-history');
+export async function getTermGpaHistory(): Promise<TermGpaHistoryDto> {
+  const response = await apiClient.get<TermGpaHistoryDto>('/student/term-gpa-history');
   return response.data;
 }
 

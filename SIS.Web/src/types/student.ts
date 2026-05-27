@@ -28,8 +28,15 @@ export interface StudentTermGpaDto {
   courseCount: number;
   totalCredits: number;
   totalEcts: number;
-  sgpa: number;
-  cgpa: number;
+  // GPA'ya giren ders yoksa (yalnızca S/U/W vb.) null — gerçek 0 ile "veri yok" ayrımı.
+  sgpa: number | null;
+  cgpa: number | null;
+}
+
+export interface TermGpaHistoryDto {
+  terms: StudentTermGpaDto[];
+  totalAttemptedCredits: number;
+  totalAttemptedEcts: number;
 }
 
 export interface StudentGradeStatisticsDto {
