@@ -151,7 +151,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AdministrativeStaff — 109 permission (18 view + 91 action)
+            // AdministrativeStaff — 110 permission (19 view + 91 action)
             // ═══════════════════════════════════════════════════════════════════════════
             ["AdministrativeStaff"] = new[]
             {
@@ -293,12 +293,13 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
+                "menu.akilli-planlama.view",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // DepartmentManager — 124 permission (24 view + 100 action)
+            // DepartmentManager — 125 permission (25 view + 100 action)
             // AdministrativeStaff'ın yetkileri + onay ekleri (publish/archive, swap/lock/unlock,
             // exception approve, dönem kapatma, sınıf atlatma)
             // ═══════════════════════════════════════════════════════════════════════════
@@ -452,6 +453,7 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
+                "menu.akilli-planlama.view",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
             },
@@ -616,6 +618,7 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-view",
 
                 // ── Cross-cutting (broad role list) ──
+                "menu.akilli-planlama.view",
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
             },
