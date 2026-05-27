@@ -37,7 +37,7 @@ export default function MyReportsPage() {
   }, [data, filter]);
 
   return (
-    <div className="flex min-h-[calc(100vh-7rem)] flex-col p-6">
+    <div className="flex flex-1 flex-col min-h-0">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
         {/* Başlık şeridi: bağlam + arama */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
