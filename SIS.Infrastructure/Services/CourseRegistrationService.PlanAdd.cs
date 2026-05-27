@@ -53,37 +53,23 @@ public partial class CourseRegistrationService
         if (toAdd.Count == 0)
             return response;
 
-        // Yayın kapısı: fakültesi onaylı dersler eklenebilir (ortak dersler muaf).
-        var approvedFacultyIds = (await _context.FacultyScheduleApprovals
-            .AsNoTracking()
-            .Where(a => a.TermId == activeTerm.Id)
-            .Select(a => a.FacultyId)
-            .ToListAsync())
-            .ToHashSet();
-
         foreach (var courseId in toAdd)
         {
             var sections = await _context.CourseSections
                 .Include(cs => cs.Course)
                 .Where(cs => cs.TermId == activeTerm.Id
                     && cs.CourseId == courseId
-                    && cs.Status == CourseSectionStatus.Active
-                    && !cs.IsEnrollmentSuspended)
+                    && cs.Status == CourseSectionStatus.Active)
                 .OrderBy(cs => cs.SectionNumber)
                 .ToListAsync();
 
             foreach (var section in sections)
             {
-                // Yayın kapısı — bölüme bağlı dersin fakültesi onaylı olmalı.
-                if (section.Course.DepartmentId.HasValue)
-                {
-                    var facId = await _context.Departments
-                        .Where(d => d.Id == section.Course.DepartmentId.Value)
-                        .Select(d => d.FacultyId)
-                        .FirstOrDefaultAsync();
-                    if (!approvedFacultyIds.Contains(facId))
-                        continue;
-                }
+                // Yayın kapısı: IRegistrationGate Active + not-suspended + fakülte onayını tek kaynaktan kontrol eder.
+                var gate = await _registrationGate.EvaluateSectionAsync(section);
+                if (!gate.IsOpen)
+                    continue;
+
                 if (section.EnrolledCount >= section.Capacity)
                     continue;
 
