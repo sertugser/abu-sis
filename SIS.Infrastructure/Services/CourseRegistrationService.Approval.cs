@@ -145,11 +145,25 @@ public partial class CourseRegistrationService
                     IsScholarshipStudent = student.IsScholarshipStudent,
                     Registrations = regItems,
                     TotalEcts = regItems.Sum(r => r.Ects),
-                    EctsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa),
+                    EctsLimit = 0, // resolved async in post-loop below
                     SubmittedAt = g.Max(r => r.UpdatedAt ?? r.CreatedAt)
                 };
             })
             .ToList();
+
+        // Preload curricula for ECTS limit resolution (avoids N+1)
+        var curriculumIds = students
+            .Select(s => s.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive)?.CurriculumId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var curriculaById = curriculumIds.Count > 0
+            ? await _context.Curricula
+                .AsNoTracking()
+                .Where(c => curriculumIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id)
+            : new Dictionary<int, Domain.Entities.Curriculum>();
 
         // Alttan dersler, müfredat özeti ve plan durumu ekle
         foreach (var dto in result)
@@ -184,8 +198,14 @@ public partial class CourseRegistrationService
                     IsSelectedInPlan = selectedCourseIds.Contains(r.CourseSection.CourseId)
                 }).ToList();
 
-            // Müfredat özeti
+            // AKTS limiti — SystemConfig + müfredat override
             var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+            var studentCurriculum = mainProgram != null && curriculaById.TryGetValue(mainProgram.CurriculumId, out var curr)
+                ? curr
+                : null;
+            dto.EctsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, studentCurriculum);
+
+            // Müfredat özeti
             if (mainProgram != null)
             {
                 var curriculumCourses = await _context.CurriculumCourses

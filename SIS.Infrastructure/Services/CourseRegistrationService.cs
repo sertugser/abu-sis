@@ -31,6 +31,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     private readonly IWebModuleControlService _webModuleControls;
     private readonly bool _useCalendarFallbackForWebModuleControls;
     private readonly INotificationService? _notifications;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
@@ -41,7 +42,8 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         IAdvisorConstraintService? advisorConstraintService = null,
         IWebModuleSettingsProvider? webSettings = null,
         IWebModuleControlService? webModuleControls = null,
-        INotificationService? notifications = null)
+        INotificationService? notifications = null,
+        IEctsLimitResolver? ectsLimitResolver = null)
     {
         _context = context;
         _validationService = validationService;
@@ -52,6 +54,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
         _useCalendarFallbackForWebModuleControls = webModuleControls is null;
         _notifications = notifications;
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
     }
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
