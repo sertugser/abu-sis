@@ -96,8 +96,8 @@ public class StudentController : ControllerBase
 
         var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
         CurriculumEntity? ectsCurriculum = mainProgram == null ? null
-            : await _context.Curricula.AsNoTracking().FirstOrDefaultAsync(c => c.Id == mainProgram.CurriculumId);
-        var ectsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, ectsCurriculum);
+            : await _context.Curricula.AsNoTracking().FirstOrDefaultAsync(c => c.Id == mainProgram.CurriculumId, HttpContext.RequestAborted);
+        var ectsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, ectsCurriculum, HttpContext.RequestAborted);
 
         // Advisor info
         string? advisorName = null;
