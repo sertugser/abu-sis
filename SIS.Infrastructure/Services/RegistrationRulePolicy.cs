@@ -42,10 +42,6 @@ internal static class RegistrationRulePolicy
     internal static IEnumerable<CourseRegistration> WherePassedGrade(this IEnumerable<CourseRegistration> source) =>
         source.Where(registration => IsPassedGrade(registration.Grade));
 
-    internal static int GetEctsLimit(decimal cgpa, int limitBelow200 = 30, int limit200To249 = 42, int limitAbove250 = 48) =>
-        cgpa >= 2.50m ? limitAbove250 :
-        cgpa >= 2.00m ? limit200To249 : limitBelow200;
-
     internal static bool HasLowCgpaRestriction(decimal cgpa, int completedSemesters, decimal retentionThreshold = 1.70m) =>
         cgpa < retentionThreshold && completedSemesters > 1;
 
