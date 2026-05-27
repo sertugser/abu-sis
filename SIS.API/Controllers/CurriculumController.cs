@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Application.Curriculum.Services;
 using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Enums;
@@ -16,7 +17,8 @@ namespace SIS.API.Controllers;
 public class CurriculumController(
     AppDbContext context,
     IElectiveGroupScopeValidator scopeValidator,
-    ICourseStatisticsService courseStatistics) : ControllerBase
+    ICourseStatisticsService courseStatistics,
+    IElectivePoolProgressCalculator poolProgressCalculator) : ControllerBase
 {
     // ── DTOs ────────────────────────────────────────────────────────
     public record CurriculumListDto(
@@ -1291,25 +1293,15 @@ public class CurriculumController(
             .Where(p => p.CurriculumId == studentProgram.CurriculumId)
             .ToListAsync(ct);
 
-        // Öğrencinin AppliedElectivePoolId üzerinden havuzlara sayılan kayıtları
-        var poolRegs = await context.CourseRegistrations
-            .AsNoTracking()
-            .Include(cr => cr.CourseSection).ThenInclude(cs => cs.Course)
-            .Where(cr => cr.StudentId == studentId
-                && cr.AppliedElectivePoolId != null
-                && (cr.Status == RegistrationStatus.Active
-                    || cr.Status == RegistrationStatus.PendingAdvisorApproval
-                    || cr.Status == RegistrationStatus.Draft
-                    || cr.Grade != null))
-            .ToListAsync(ct);
+        var poolIds = pools.Select(p => p.Id).ToList();
+        var poolEctsPerCourse = pools.ToDictionary(p => p.Id, p => p.EctsPerCourse);
+        var progress = await poolProgressCalculator.CalculateAsync(studentId, poolIds, poolEctsPerCourse, ct);
 
         var result = pools.Select(p =>
         {
-            var regs = poolRegs.Where(r => r.AppliedElectivePoolId == p.Id).ToList();
-            var completedCount = regs.Count;
-            var earnedEcts = regs.Sum(r => r.EctsSnapshot ?? r.CourseSection.Course.Ects);
-            var isFulfilled = (p.RequiredCourseCount == 0 || completedCount >= p.RequiredCourseCount)
-                           && (p.RequiredEcts == 0 || earnedEcts >= p.RequiredEcts);
+            var pr = progress[p.Id];
+            var isFulfilled = (p.RequiredCourseCount == 0 || pr.CompletedCourseCount >= p.RequiredCourseCount)
+                           && (p.RequiredEcts == 0 || pr.EarnedEcts >= p.RequiredEcts);
             return new PoolProgressDto(
                 p.Id,
                 p.ElectiveGroup.Code,
@@ -1318,9 +1310,9 @@ public class CurriculumController(
                 p.SuggestedSemesterStart,
                 p.SuggestedSemesterEnd,
                 p.RequiredCourseCount,
-                completedCount,
+                pr.CompletedCourseCount,
                 p.RequiredEcts,
-                earnedEcts,
+                pr.EarnedEcts,
                 p.EctsPerCourse,
                 isFulfilled);
         }).ToList();
