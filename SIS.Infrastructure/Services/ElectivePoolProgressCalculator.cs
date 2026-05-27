@@ -9,14 +9,15 @@ namespace SIS.Infrastructure.Services;
 public sealed class ElectivePoolProgressCalculator : IElectivePoolProgressCalculator
 {
     private readonly AppDbContext _context;
-    private readonly IWebModuleControlService _webModuleControls;
+    private readonly IGradeVisibilityResolver _gradeVisibilityResolver;
 
     public ElectivePoolProgressCalculator(
         AppDbContext context,
-        IWebModuleControlService? webModuleControls = null)
+        IGradeVisibilityResolver? gradeVisibilityResolver = null)
     {
         _context = context;
-        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _gradeVisibilityResolver = gradeVisibilityResolver
+            ?? new GradeVisibilityResolver(new NullWebModuleControlService());
     }
 
     public async Task<IReadOnlyDictionary<int, PoolProgress>> CalculateAsync(
@@ -35,9 +36,10 @@ public sealed class ElectivePoolProgressCalculator : IElectivePoolProgressCalcul
                 && poolIds.Contains(cr.AppliedElectivePoolId.Value))
             .ToListAsync(ct);
 
-        // Fix 2: Grade-visibility gate — mirrors CurriculumStatusService BuildGradeVisibilityMapAsync + HasVisibleLetterGrade
-        // Default when TermId is absent from map = true (visible), matching GetValueOrDefault(..., true) in CurriculumStatusService line 73
-        var gradeVisibilityByTerm = await BuildGradeVisibilityMapAsync(regs.Select(r => r.CourseSection.TermId));
+        // Grade-visibility gate — IGradeVisibilityResolver is the single source of truth.
+        // Default when TermId is absent from map = true (visible), matching GetValueOrDefault(..., true) in CurriculumStatusService.
+        var gradeVisibilityByTerm = await _gradeVisibilityResolver.BuildMapAsync(
+            regs.Select(r => r.CourseSection.TermId).Distinct().ToList(), ct);
 
         bool IsPassedWithVisibleGrade(SIS.Domain.Entities.CourseRegistration r) =>
             RegistrationRulePolicy.IsPassedGrade(r.Grade)
@@ -66,25 +68,4 @@ public sealed class ElectivePoolProgressCalculator : IElectivePoolProgressCalcul
         return result;
     }
 
-    // Mirrors CurriculumStatusService.BuildGradeVisibilityMapAsync + CanStudentSeeLetterGradeAsync exactly
-    private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
-    {
-        var result = new Dictionary<int, bool>();
-        foreach (var termId in termIds.Distinct())
-        {
-            result[termId] = await CanStudentSeeLetterGradeAsync(termId);
-        }
-
-        return result;
-    }
-
-    private async Task<bool> CanStudentSeeLetterGradeAsync(int termId)
-    {
-        var finalAccess = await _webModuleControls.EvaluateAsync("letter-grade-publication", termId);
-        if (finalAccess.IsOpen)
-            return true;
-
-        var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
-        return makeupAccess.IsOpen;
-    }
 }

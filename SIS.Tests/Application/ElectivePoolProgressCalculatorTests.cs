@@ -5,6 +5,7 @@ using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using System.Collections.Generic;
 
 namespace SIS.Tests.Application;
 
@@ -229,7 +230,8 @@ public class ElectivePoolProgressCalculatorTests
 
         // Fake service: term 10 → not visible; term 11 → visible
         var fakeWebModule = new FakeWebModuleControlService(visibleTermIds: new HashSet<int> { 11 });
-        var calc = new ElectivePoolProgressCalculator(ctx, fakeWebModule);
+        var resolver = new GradeVisibilityResolver(fakeWebModule);
+        var calc = new ElectivePoolProgressCalculator(ctx, resolver);
 
         var result = await calc.CalculateAsync(5, new[] { 900 }, EmptyOverrides);
 
@@ -245,25 +247,60 @@ public class ElectivePoolProgressCalculatorTests
         using var ctx = CreateContext();
         AddReg(ctx, 1, 5, 950, 1, RegistrationStatus.Active, GradeCode.CC, 6, termId: 999);
         await ctx.SaveChangesAsync();
-        var calc = new ElectivePoolProgressCalculator(ctx); // no IWebModuleControlService → Null impl
+        var calc = new ElectivePoolProgressCalculator(ctx); // no resolver → NullWebModuleControlService fallback
 
         var result = await calc.CalculateAsync(5, new[] { 950 }, EmptyOverrides);
 
         result[950].CompletedCourseCount.Should().Be(1, "Unknown terms default to visible (same as CurriculumStatusService)");
     }
+
+    // ─── Makeup OR branch: letter-grade-publication closed, makeup open → grade IS visible ───
+
+    [Fact]
+    public async Task Calculate_CountsGrade_WhenLetterGradeClosedButMakeupOpen()
+    {
+        // letter-grade-publication closed, makeup-letter-grade-publication open for term 20
+        // → grade must be visible and counted
+        using var ctx = CreateContext();
+        AddReg(ctx, 1, 5, 980, 1, RegistrationStatus.Active, GradeCode.BB, 6, termId: 20);
+        await ctx.SaveChangesAsync();
+
+        var fakeWebModule = new FakeWebModuleControlService(
+            letterGradeVisibleTermIds: new HashSet<int>(),
+            makeupVisibleTermIds: new HashSet<int> { 20 });
+        var resolver = new GradeVisibilityResolver(fakeWebModule);
+        var calc = new ElectivePoolProgressCalculator(ctx, resolver);
+
+        var result = await calc.CalculateAsync(5, new[] { 980 }, EmptyOverrides);
+
+        result[980].CompletedCourseCount.Should().Be(1,
+            "makeup-letter-grade-publication open must make the grade visible");
+        result[980].EarnedEcts.Should().Be(6);
+    }
 }
 
 /// <summary>
-/// Test double for IWebModuleControlService: only terms in <see cref="visibleTermIds"/> have
-/// letter-grade publication open. All other modules/terms default to closed.
-/// Mirrors how CurriculumStatusService tests could fake visibility.
+/// Test double for IWebModuleControlService: supports per-code, per-term visibility responses.
+/// Use the two-parameter ctor to control letter-grade and makeup visibility independently.
+/// Single-parameter ctor keeps backward compatibility for existing tests.
 /// </summary>
 file sealed class FakeWebModuleControlService : IWebModuleControlService
 {
-    private readonly HashSet<int> _visibleTermIds;
+    private readonly HashSet<int> _letterGradeVisibleTermIds;
+    private readonly HashSet<int> _makeupVisibleTermIds;
 
+    /// <summary>Only terms in <paramref name="visibleTermIds"/> have letter-grade publication open.</summary>
     public FakeWebModuleControlService(HashSet<int> visibleTermIds)
-        => _visibleTermIds = visibleTermIds;
+        : this(visibleTermIds, new HashSet<int>()) { }
+
+    /// <summary>Control letter-grade and makeup publication independently per term.</summary>
+    public FakeWebModuleControlService(
+        HashSet<int> letterGradeVisibleTermIds,
+        HashSet<int> makeupVisibleTermIds)
+    {
+        _letterGradeVisibleTermIds = letterGradeVisibleTermIds;
+        _makeupVisibleTermIds = makeupVisibleTermIds;
+    }
 
     public WebModuleControlDefinition? GetDefinition(string code) => null;
 
@@ -272,7 +309,12 @@ file sealed class FakeWebModuleControlService : IWebModuleControlService
 
     public Task<WebModuleAccessResult> EvaluateAsync(string code, int? termId = null, CancellationToken ct = default)
     {
-        var isOpen = code == "letter-grade-publication" && termId.HasValue && _visibleTermIds.Contains(termId.Value);
+        var isOpen = code switch
+        {
+            "letter-grade-publication" => termId.HasValue && _letterGradeVisibleTermIds.Contains(termId.Value),
+            "makeup-letter-grade-publication" => termId.HasValue && _makeupVisibleTermIds.Contains(termId.Value),
+            _ => false
+        };
         return Task.FromResult(new WebModuleAccessResult(
             IsEnabled: true,
             IsOpen: isOpen,

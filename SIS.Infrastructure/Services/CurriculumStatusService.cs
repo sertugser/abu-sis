@@ -17,14 +17,15 @@ namespace SIS.Infrastructure.Services;
 public class CurriculumStatusService : ICurriculumStatusService
 {
     private readonly AppDbContext _context;
-    private readonly IWebModuleControlService _webModuleControls;
+    private readonly IGradeVisibilityResolver _gradeVisibilityResolver;
 
     public CurriculumStatusService(
         AppDbContext context,
-        IWebModuleControlService? webModuleControls = null)
+        IGradeVisibilityResolver? gradeVisibilityResolver = null)
     {
         _context = context;
-        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _gradeVisibilityResolver = gradeVisibilityResolver
+            ?? new GradeVisibilityResolver(new NullWebModuleControlService());
     }
 
     public async Task<CurriculumStatusDto?> GetCurriculumStatusAsync(int studentId, CancellationToken ct = default)
@@ -68,7 +69,8 @@ public class CurriculumStatusService : ICurriculumStatusService
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync(ct);
 
-        var gradeVisibilityByTerm = await BuildGradeVisibilityMapAsync(allRegistrations.Select(r => r.CourseSection.TermId));
+        var gradeVisibilityByTerm = await _gradeVisibilityResolver.BuildMapAsync(
+            allRegistrations.Select(r => r.CourseSection.TermId).Distinct().ToList());
         bool HasVisibleLetterGrade(CourseRegistration registration) =>
             registration.Grade != null && gradeVisibilityByTerm.GetValueOrDefault(registration.CourseSection.TermId, true);
 
@@ -407,24 +409,4 @@ public class CurriculumStatusService : ICurriculumStatusService
         return dto;
     }
 
-    private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
-    {
-        var result = new Dictionary<int, bool>();
-        foreach (var termId in termIds.Distinct())
-        {
-            result[termId] = await CanStudentSeeLetterGradeAsync(termId);
-        }
-
-        return result;
-    }
-
-    private async Task<bool> CanStudentSeeLetterGradeAsync(int termId)
-    {
-        var finalAccess = await _webModuleControls.EvaluateAsync("letter-grade-publication", termId);
-        if (finalAccess.IsOpen)
-            return true;
-
-        var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
-        return makeupAccess.IsOpen;
-    }
 }
