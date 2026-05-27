@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using SIS.Application.EnrollmentForecast.DTOs;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
@@ -28,14 +29,16 @@ public partial class EnrollmentForecastService : IEnrollmentForecastService, IEn
     private readonly IMemoryCache _cache;
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
 
-    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, IDateTimeProvider clock, ISystemConfigProvider? config = null)
+    public EnrollmentForecastService(AppDbContext context, IGpaCalculationService gpaCalculationService, IMemoryCache cache, IDateTimeProvider clock, ISystemConfigProvider? config = null, IEctsLimitResolver? ectsLimitResolver = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _cache = cache;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
     }
 
     public async Task<CourseDemandForecastDto?> GetCourseDemandForecastAsync(int courseId)
