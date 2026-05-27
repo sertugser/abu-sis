@@ -341,18 +341,21 @@ public partial class CourseRegistrationService
         }
 
         // Bug #15 fix: gate check before approval. Onay anında section artık kapalı/suspend/onaysız
-        // olabilir (program geri çekilmiş vb.). İlk başarısız section'da early-return.
+        // olabilir (program geri çekilmiş vb.). Tüm başarısız section'lar toplanıp birlikte döner.
+        var approvalGateErrors = new List<string>();
         foreach (var reg in registrations)
         {
             var gate = await _registrationGate.EvaluateSectionAsync(reg.CourseSection);
             if (!gate.IsOpen)
-                return new ApprovalResponseDto
-                {
-                    Success = false,
-                    Message = $"'{reg.CourseSection.Course.Code}' {gate.Message}",
-                    AffectedRegistrations = 0
-                };
+                approvalGateErrors.Add($"'{reg.CourseSection.Course.Code}' {gate.Message}");
         }
+        if (approvalGateErrors.Count > 0)
+            return new ApprovalResponseDto
+            {
+                Success = false,
+                Message = string.Join("; ", approvalGateErrors),
+                AffectedRegistrations = 0
+            };
 
         foreach (var reg in registrations)
         {
