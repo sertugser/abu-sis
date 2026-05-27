@@ -15,18 +15,21 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
     private readonly bool _useCalendarFallbackForRegistrationWindow;
 
     public RegistrationValidationService(
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
-        IWebModuleControlService? webModuleControls = null)
+        IWebModuleControlService? webModuleControls = null,
+        IEctsLimitResolver? ectsLimitResolver = null)
     {
         _context = context;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
         _useCalendarFallbackForRegistrationWindow = webModuleControls is null;
     }
 
@@ -387,21 +390,10 @@ public class RegistrationValidationService : IRegistrationValidationService
         // Müfredat-özel override'ları önce dene, null ise global SystemConfig default'una düş.
         // Öğrencinin aktif ana müfredatı override sağlıyorsa onu kullanır (Proliz "Müfredat Sınıf Dönem Tanımları" muadili).
         var mainProgramForEcts = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
-        Curriculum? curriculumForEcts = null;
-        if (mainProgramForEcts != null)
-        {
-            curriculumForEcts = await _context.Curricula
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
-        }
+        Curriculum? curriculumForEcts = mainProgramForEcts == null ? null
+            : await _context.Curricula.AsNoTracking().FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
 
-        var ectsLimitBelow200 = curriculumForEcts?.EctsLimitBelow200
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
-        var ectsLimit200To249 = curriculumForEcts?.EctsLimit200To249
-            ?? await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
-        var ectsLimitAbove250 = curriculumForEcts?.EctsLimitAbove250
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
+        var ectsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, curriculumForEcts);
 
         if (totalEcts > ectsLimit)
         {
