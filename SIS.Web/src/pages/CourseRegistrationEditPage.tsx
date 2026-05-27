@@ -6,7 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Search, ChevronRight, AlertTriangle, Loader2, Users } from 'lucide-react';
 import { useAdvisorStudents } from '../hooks/useAdvisor';
 import type { AdvisorStudent } from '../api/advisor.api';
-import AdvisorStudentDetailModal, { PLAN_STATUS_LABELS, PLAN_STATUS_VARIANTS } from '../components/advisor/AdvisorStudentDetailModal';
+import AdvisorStudentDetailModal from '../components/advisor/AdvisorStudentDetailModal';
+import { PLAN_STATUS_LABELS, PLAN_STATUS_VARIANTS } from '../components/advisor/planStatus';
 
 type TabKey = 'pending' | 'approved' | 'all';
 
