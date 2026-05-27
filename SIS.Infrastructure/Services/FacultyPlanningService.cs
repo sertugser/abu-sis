@@ -351,6 +351,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                     LabHours = s.Course.LabHours,
                     SectionIndex = index,
                     IsPinned = s.IsPinned,
+                    IsEnrollmentSuspended = s.IsEnrollmentSuspended,
                     SuggestedSemester = semesterMap.GetValueOrDefault(s.CourseId, 0),
                     TeachingMethod = s.Course.TeachingMethod,
                 });

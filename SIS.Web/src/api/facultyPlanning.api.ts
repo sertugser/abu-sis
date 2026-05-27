@@ -29,6 +29,17 @@ export async function assignSection(request: AssignSectionRequest): Promise<Assi
   return data;
 }
 
+/** Faz 3b: onaylı programda tek section'ı düzenlemek için yeni kayda durdurur. */
+export async function suspendEnrollment(sectionId: number): Promise<void> {
+  await apiClient.post(`/scheduling/suspend-enrollment/${sectionId}`);
+}
+
+/** Faz 3b: düzenlemeyi bitirir, section'ı kayda açar; kayıtlı öğrencilere bildirim gider. */
+export async function resumeEnrollment(sectionId: number): Promise<{ notifiedStudents: number }> {
+  const { data } = await apiClient.post<{ notifiedStudents: number }>(`/scheduling/resume-enrollment/${sectionId}`);
+  return data;
+}
+
 export async function unassignSection(sectionId: number): Promise<void> {
   await apiClient.delete(`/faculty-planning/unassign/${sectionId}`);
 }

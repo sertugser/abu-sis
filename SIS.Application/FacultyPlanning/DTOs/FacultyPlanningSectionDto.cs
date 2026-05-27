@@ -23,6 +23,8 @@ public class FacultyPlanningSectionDto
     public int LabHours { get; set; }
     public int SectionIndex { get; set; }
     public bool IsPinned { get; set; }
+    /// <summary>Faz 3b: yayın sonrası düzenleme için "yeni kayda durduruldu".</summary>
+    public bool IsEnrollmentSuspended { get; set; }
     public int SuggestedSemester { get; set; }
     public TeachingMethod TeachingMethod { get; set; } = TeachingMethod.FaceToFace;
 }

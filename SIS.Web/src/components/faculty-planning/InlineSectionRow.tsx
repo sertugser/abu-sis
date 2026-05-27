@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertTriangle, Check, Loader2, Lock, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Lock, Pause, Send, X } from 'lucide-react';
 import { useAvailableClassrooms, useValidateSectionSchedule } from '../../hooks/useFacultyPlanning';
 import { useDepartmentInstructors } from '../../hooks/useCourseOpening';
 import type { FacultyPlanningSection, FacultyPlanningTimeSlot } from '../../types/facultyPlanning';
@@ -23,14 +23,23 @@ interface Props {
   isUnassigning: boolean;
   readOnly: boolean;
   even: boolean;
+  /** Faz 3b: onaylı (yayında) programda section-bazı durdur/bitir aksiyonlarını gösterir. */
+  publishedEditMode?: boolean;
+  onSuspend?: () => void;
+  onResume?: () => void;
+  isSuspending?: boolean;
+  isResuming?: boolean;
 }
 
 export function InlineSectionRow({
   section: s, termId, timeSlots, timeSlotsLoaded,
   onAssign, onUnassign, isAssigning, isUnassigning, readOnly, even,
+  publishedEditMode = false, onSuspend, onResume, isSuspending = false, isResuming = false,
 }: Props) {
   const isUnscheduled = s.status === 'Unscheduled';
-  const editable = !readOnly && isUnscheduled;
+  // Yayın düzenleme modunda yalnızca "durdurulmuş" (suspended) section düzenlenebilir;
+  // diğer onaylı section'lar kilitli kalır.
+  const editable = isUnscheduled && (!readOnly || (publishedEditMode && s.isEnrollmentSuspended));
 
   const [classroomId, setClassroomId] = useState<string>(s.classroomId?.toString() ?? '');
   const [instructorId, setInstructorId] = useState<string>(s.instructorId?.toString() ?? '');
@@ -190,9 +199,9 @@ export function InlineSectionRow({
         </TableCell>
 
         {/* Aksiyon */}
-        <TableCell className="py-2 px-1 w-10 text-center">
-          {!readOnly && (
-            isUnscheduled ? (
+        <TableCell className={`py-2 px-1 text-center ${publishedEditMode ? 'min-w-[92px]' : 'w-10'}`}>
+          {(() => {
+            const assignBtn = (
               <Button
                 size="icon" variant="ghost"
                 className="h-7 w-7 rounded-full hover:bg-emerald-100"
@@ -204,7 +213,8 @@ export function InlineSectionRow({
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <Check className="h-3.5 w-3.5 text-emerald-600" />}
               </Button>
-            ) : !s.isPinned ? (
+            );
+            const unassignBtn = !s.isPinned ? (
               <Button
                 size="icon" variant="ghost"
                 className="h-7 w-7 rounded-full hover:bg-red-100"
@@ -216,8 +226,45 @@ export function InlineSectionRow({
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <X className="h-3.5 w-3.5 text-red-500" />}
               </Button>
-            ) : null
-          )}
+            ) : null;
+
+            // Normal düzenleme modu (dönem Active, program onaysız)
+            if (!readOnly) return isUnscheduled ? assignBtn : unassignBtn;
+
+            // Yayın düzenleme modu (program onaylı): section-bazı durdur/bitir
+            if (!publishedEditMode) return null;
+            if (s.isEnrollmentSuspended) {
+              return (
+                <div className="flex items-center justify-center gap-0.5">
+                  {isUnscheduled ? assignBtn : unassignBtn}
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 rounded-full hover:bg-emerald-100"
+                    disabled={isResuming}
+                    onClick={onResume}
+                    title="Bitir & öğrencilere bildir"
+                  >
+                    {isResuming
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Send className="h-3.5 w-3.5 text-emerald-600" />}
+                  </Button>
+                </div>
+              );
+            }
+            return (
+              <Button
+                size="icon" variant="ghost"
+                className="h-7 w-7 rounded-full hover:bg-amber-100"
+                disabled={isSuspending}
+                onClick={onSuspend}
+                title="Düzenlemek için durdur (yeni kayda kapat)"
+              >
+                {isSuspending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Pause className="h-3.5 w-3.5 text-amber-600" />}
+              </Button>
+            );
+          })()}
         </TableCell>
       </TableRow>
 

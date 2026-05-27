@@ -84,6 +84,8 @@ export default function FacultyPlanningPage() {
   const termStatus = activeTerm?.status;
   const isApproved = approvalStatus?.isApproved ?? false;
   const canApprove = hasPermission('menu.program-onayi.approve');
+  // Faz 3b: onaylı programda section-bazı durdur/bitir yetkisi (program yapan + dekan).
+  const canEditPublished = hasPermission('menu.ders-programi-olusturma.assign');
   // Yayın kilidi: dönem Active DEĞİLSE veya program onaylı (yayında) ise düzenleme kapalı.
   const isTermEditable = termStatus === 'Active' && !isApproved;
 
@@ -363,6 +365,7 @@ export default function FacultyPlanningPage() {
               filterStatus={filterStatus}
               searchText={searchText}
               pageSize={pageSize}
+              publishedEditMode={isApproved && canEditPublished}
             />
           </div>
         )}
