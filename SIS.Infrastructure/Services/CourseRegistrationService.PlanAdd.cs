@@ -124,11 +124,10 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        // Yayın kapısı (draft/publish): section Active değilse VEYA fakültesi o dönem için
-        // onaysızsa plana eklenemez. Catalog görünürlük kapısının yazma-tarafı karşılığı —
-        // frontend'i atlayan istekleri de engeller. Ortak dersler (DepartmentId == null)
-        // bir fakülteye bağlı olmadığından onaydan muaf; yalnızca Active şartı geçerlidir.
-        if (section.Status != CourseSectionStatus.Active)
+        // Yayın kapısı (draft/publish): section Active değilse VEYA enrollment suspend ise VEYA
+        // fakültesi o dönem için onaysızsa plana eklenemez. Tek kaynak: IRegistrationGate.
+        var gate = await _registrationGate.EvaluateSectionAsync(section);
+        if (!gate.IsOpen)
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -136,49 +135,10 @@ public partial class CourseRegistrationService
                 IsValid = false,
                 Errors = new List<ValidationError>
                 {
-                    new() { Rule = "SectionNotActive", Message = "Bu ders şubesi henüz seçime açık değil.", CourseSectionId = courseSectionId }
+                    new() { Rule = gate.Rule!, Message = gate.Message!, CourseSectionId = courseSectionId }
                 }
             };
             return response;
-        }
-
-        // Faz 3b: "Düzenlemek için durdurulmuş" section geçici olarak yeni kayda kapalıdır
-        // (mevcut kayıtlılar korunur). Yeni öğrenci plana ekleyemez.
-        if (section.IsEnrollmentSuspended)
-        {
-            response.Success = false;
-            response.ValidationResult = new ValidationResultDto
-            {
-                IsValid = false,
-                Errors = new List<ValidationError>
-                {
-                    new() { Rule = "EnrollmentSuspended", Message = "Bu ders şubesi şu anda düzenlemede — geçici olarak yeni kayda kapalı.", CourseSectionId = courseSectionId }
-                }
-            };
-            return response;
-        }
-
-        if (section.Course.DepartmentId.HasValue)
-        {
-            var sectionFacultyId = await _context.Departments
-                .Where(d => d.Id == section.Course.DepartmentId.Value)
-                .Select(d => d.FacultyId)
-                .FirstOrDefaultAsync();
-            var facultyApproved = await _context.FacultyScheduleApprovals
-                .AnyAsync(a => a.FacultyId == sectionFacultyId && a.TermId == section.TermId);
-            if (!facultyApproved)
-            {
-                response.Success = false;
-                response.ValidationResult = new ValidationResultDto
-                {
-                    IsValid = false,
-                    Errors = new List<ValidationError>
-                    {
-                        new() { Rule = "FacultyScheduleNotApproved", Message = "Bu dersin programı henüz yayınlanmadı.", CourseSectionId = courseSectionId }
-                    }
-                };
-                return response;
-            }
         }
 
         var registrationControlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, section.TermId);

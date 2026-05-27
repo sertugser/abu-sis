@@ -301,9 +301,11 @@ public partial class CourseRegistrationService
             };
         }
 
-        // Find PendingAdvisorApproval registrations for this student in active term
+        // Find PendingAdvisorApproval registrations for this student in active term.
+        // CourseSection.Course eager-loaded: gate reads DepartmentId for faculty approval check.
         var registrations = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
             .Where(cr => cr.StudentId == dto.StudentId
                 && cr.CourseSection.TermId == activeTerm.Id
                 && cr.Status == RegistrationStatus.PendingAdvisorApproval)
@@ -336,6 +338,20 @@ public partial class CourseRegistrationService
                     ValidationResult = validation
                 };
             }
+        }
+
+        // Bug #15 fix: gate check before approval. Onay anında section artık kapalı/suspend/onaysız
+        // olabilir (program geri çekilmiş vb.). İlk başarısız section'da early-return.
+        foreach (var reg in registrations)
+        {
+            var gate = await _registrationGate.EvaluateSectionAsync(reg.CourseSection);
+            if (!gate.IsOpen)
+                return new ApprovalResponseDto
+                {
+                    Success = false,
+                    Message = $"'{reg.CourseSection.Course.Code}' {gate.Message}",
+                    AffectedRegistrations = 0
+                };
         }
 
         foreach (var reg in registrations)

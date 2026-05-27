@@ -189,6 +189,15 @@ public class AdvisorApprovalServiceTests : IDisposable
             IsActive = true
         });
 
+        // Faculty schedule approval: gate passes for courses belonging to this faculty.
+        _context.FacultyScheduleApprovals.Add(new FacultyScheduleApproval
+        {
+            FacultyId = FacultyId,
+            TermId = TermId,
+            ApprovedByUserId = AdvisorUserId,
+            ApprovedAt = DateTime.UtcNow
+        });
+
         _context.SaveChanges();
     }
 
