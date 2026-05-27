@@ -106,7 +106,6 @@ import TimeSlotManagementPage from './pages/TimeSlotManagementPage';
 import SectioningPage from './pages/SectioningPage';
 import CourseQuotaPage from './pages/CourseQuotaPage';
 import AdvisorCourseConstraintsPage from './pages/AdvisorCourseConstraintsPage';
-import AdvisorDashboardPage from './pages/AdvisorDashboardPage';
 import RoleDashboard from './components/RoleDashboard';
 import NotFoundPage from './pages/NotFoundPage';
 import ForbiddenPage from './pages/ForbiddenPage';
@@ -136,8 +135,10 @@ export default function App() {
                   <Route path="forbidden" element={<ForbiddenPage />} />
 
                   <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
-                    <Route path="danisman-paneli" element={<AdvisorDashboardPage />} />
-                    <Route path="danismanpaneli" element={<Navigate to="/danisman-paneli" replace />} />
+                    {/* Onay/düzenleme işlevi Ders Kayıt Düzenleme sayfasına taşındı;
+                        eski danışman paneli rotaları oraya yönlenir. */}
+                    <Route path="danisman-paneli" element={<Navigate to="/ders-kayit-duzenleme" replace />} />
+                    <Route path="danismanpaneli" element={<Navigate to="/ders-kayit-duzenleme" replace />} />
                   </Route>
 
                   {/* Herkesin erişebildiği sayfalar */}

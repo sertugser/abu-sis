@@ -166,6 +166,48 @@ public class CourseController : ControllerBase
         if (activeProgram == null)
             return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
+        return await BuildStudentCatalogAsync(student, activeProgram);
+    }
+
+    /// <summary>
+    /// GET api/course/student-catalog/{studentId} — danışmanın, danışmanı olduğu öğrenci
+    /// adına ders ekleme yaparken kullanacağı aday ders kataloğu. Öğrenci akışıyla aynı
+    /// veri (BuildStudentCatalogAsync); sadece sahiplik kontrolü farklı.
+    /// </summary>
+    [HttpGet("student-catalog/{studentId:int}")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetStudentCatalogForAdvisor(int studentId)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
+
+        var instructor = await _context.Instructors.FirstOrDefaultAsync(i => i.UserId == userId);
+        if (instructor == null)
+            return StatusCode(403, new ApiErrorResponse("Bu islem icin ogretim uyesi profili gerekli.", "InstructorRequired"));
+
+        var student = await _context.Students
+            .Include(s => s.StudentPrograms)
+            .FirstOrDefaultAsync(s => s.Id == studentId);
+        if (student == null)
+            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+
+        if (student.AdvisorId != instructor.Id)
+            return StatusCode(403, new ApiErrorResponse("Bu ogrencinin danismani degilsiniz.", "NotAdvisee"));
+
+        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        if (activeProgram == null)
+            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
+
+        return await BuildStudentCatalogAsync(student, activeProgram);
+    }
+
+    /// <summary>
+    /// Verilen öğrenci + aktif programı için aday ders kataloğunu üretir
+    /// (öğrenci kendi akışı ve danışman öğrenci-adına akışı bu metodu paylaşır).
+    /// </summary>
+    private async Task<IActionResult> BuildStudentCatalogAsync(Student student, StudentProgram activeProgram)
+    {
         // 2. Active term
         var nowCatalog = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();

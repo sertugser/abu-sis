@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Authorization;
@@ -9,13 +10,17 @@ public sealed record AcademicActorScope(
     bool IsForbidden,
     int? FacultyId,
     int? DepartmentId,
-    IReadOnlyList<int> DepartmentIds);
+    IReadOnlyList<int> DepartmentIds,
+    // Danışman scope'u departman değil, "kendi danışmanlık öğrencileri" bazlıdır.
+    // Set ise: erişim s.AdvisorId == AdvisorInstructorId ile sınırlanır.
+    int? AdvisorInstructorId = null);
 
 public interface IAcademicScopeGuard
 {
     Task<AcademicActorScope> ResolveAsync(ClaimsPrincipal user, int userId, CancellationToken ct = default);
     Task<bool> CanAccessFacultyAsync(ClaimsPrincipal user, int userId, int facultyId, CancellationToken ct = default);
     Task<bool> CanAccessDepartmentAsync(ClaimsPrincipal user, int userId, int departmentId, CancellationToken ct = default);
+    Task<bool> CanAccessStudentAsync(ClaimsPrincipal user, int userId, int studentId, CancellationToken ct = default);
 }
 
 public sealed class AcademicScopeGuard : IAcademicScopeGuard
@@ -24,6 +29,7 @@ public sealed class AcademicScopeGuard : IAcademicScopeGuard
     private const string AdministrativeStaffRole = "AdministrativeStaff";
     private const string DeanRole = "Dean";
     private const string DepartmentManagerRole = "DepartmentManager";
+    private const string AcademicAdvisorRole = "AcademicAdvisor";
 
     private readonly AppDbContext _context;
 
@@ -82,7 +88,44 @@ public sealed class AcademicScopeGuard : IAcademicScopeGuard
                 DepartmentIds: [instructor.DepartmentId]);
         }
 
+        // Danışman: departman değil, kendi danışmanlık öğrencileriyle sınırlı erişim.
+        if (roles.Contains(AcademicAdvisorRole))
+        {
+            return new AcademicActorScope(
+                IsGlobal: false,
+                IsForbidden: false,
+                FacultyId: instructor.Department.FacultyId,
+                DepartmentId: instructor.DepartmentId,
+                DepartmentIds: [],
+                AdvisorInstructorId: instructor.Id);
+        }
+
         return Forbidden();
+    }
+
+    public async Task<bool> CanAccessStudentAsync(ClaimsPrincipal user, int userId, int studentId, CancellationToken ct = default)
+    {
+        var scope = await ResolveAsync(user, userId, ct);
+        if (scope.IsForbidden) return false;
+        if (scope.IsGlobal) return true;
+
+        // Danışman: yalnızca kendi danışmanlık öğrencisi.
+        if (scope.AdvisorInstructorId.HasValue)
+        {
+            return await _context.Students
+                .AsNoTracking()
+                .AnyAsync(s => s.Id == studentId && s.AdvisorId == scope.AdvisorInstructorId.Value, ct);
+        }
+
+        // Dean/DepartmentManager: öğrencinin ana program departmanı scope içinde mi?
+        var studentDeptId = await _context.StudentPrograms
+            .AsNoTracking()
+            .Include(sp => sp.Program)
+            .Where(sp => sp.StudentId == studentId && sp.IsActive && sp.Type == StudentProgramType.Main)
+            .Select(sp => (int?)sp.Program.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+
+        return studentDeptId.HasValue && scope.DepartmentIds.Contains(studentDeptId.Value);
     }
 
     public async Task<bool> CanAccessFacultyAsync(ClaimsPrincipal user, int userId, int facultyId, CancellationToken ct = default)

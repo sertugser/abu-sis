@@ -43,9 +43,13 @@ public partial class CourseRegistrationService
         if (!registrations.Any())
             return new List<PendingApprovalDto>();
 
-        // Load student user names
+        // Load student user names.
+        // StudentPrograms Include zorunlu: müfredat ilerlemesi (CurriculumTotal*/Completed*)
+        // mainProgram üzerinden hesaplanıyor; Include yoksa StudentPrograms boş gelir ve
+        // müfredat ilerlemesi yanlışlıkla 0/0 görünür.
         var studentIds = registrations.Select(r => r.StudentId).Distinct().ToList();
         var students = await _context.Students
+            .Include(s => s.StudentPrograms)
             .Where(s => studentIds.Contains(s.Id))
             .ToListAsync();
 

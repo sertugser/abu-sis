@@ -138,15 +138,26 @@ public class StudentManagementController : ControllerBase
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
 
-        // Dean/DepartmentManager: departmentId filtresi zorunlu kıl
         var scope = await _scopeGuard.ResolveAsync(User, userId);
         if (scope.IsForbidden) return Forbid();
-        if (filter.DepartmentId.HasValue && !scope.IsGlobal && !scope.DepartmentIds.Contains(filter.DepartmentId.Value))
-            return Forbid();
 
-        var appliedFilter = scope.IsGlobal
-            ? filter
-            : filter with { DepartmentIds = scope.DepartmentIds };
+        AdminStudentFilterDto appliedFilter;
+        if (scope.IsGlobal)
+        {
+            appliedFilter = filter;
+        }
+        else if (scope.AdvisorInstructorId.HasValue)
+        {
+            // Danışman: yalnızca kendi danışmanlık öğrencileri.
+            appliedFilter = filter with { AdvisorId = scope.AdvisorInstructorId.Value };
+        }
+        else
+        {
+            // Dean/DepartmentManager: departman scope'u zorunlu kıl.
+            if (filter.DepartmentId.HasValue && !scope.DepartmentIds.Contains(filter.DepartmentId.Value))
+                return Forbid();
+            appliedFilter = filter with { DepartmentIds = scope.DepartmentIds };
+        }
 
         var result = await _service.GetStudentsAsync(appliedFilter);
         if (!await ShouldMaskTranscriptSummaryAsync())
@@ -187,19 +198,12 @@ public class StudentManagementController : ControllerBase
         var result = await _service.GetStudentByIdAsync(id);
         if (result == null) return NotFound(new { message = "Öğrenci bulunamadı." });
 
-        // Dean/DepartmentManager erişim kontrolü
+        // Erişim kontrolü: SystemAdmin/AdministrativeStaff global; Dean/DepartmentManager
+        // departman scope'u; danışman ise yalnızca kendi danışmanlık öğrencisi.
         var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
         if (!roles.Contains("SystemAdministrator") && !roles.Contains("AdministrativeStaff"))
         {
-            var studentDeptId = await _context.StudentPrograms
-                .AsNoTracking()
-                .Include(sp => sp.Program)
-                .Where(sp => sp.StudentId == id && sp.IsActive && sp.Type == Domain.Enums.StudentProgramType.Main)
-                .Select(sp => (int?)sp.Program.DepartmentId)
-                .FirstOrDefaultAsync();
-
-            if (studentDeptId == null) return NotFound(new { message = "Öğrenci bulunamadı." });
-            if (!await _scopeGuard.CanAccessDepartmentAsync(User, userId, studentDeptId.Value)) return Forbid();
+            if (!await _scopeGuard.CanAccessStudentAsync(User, userId, id)) return Forbid();
         }
 
         if (!await ShouldMaskTranscriptSummaryAsync())

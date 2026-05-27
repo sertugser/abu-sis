@@ -1,4 +1,5 @@
 import { Check, ChevronDown, UserCog } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,15 @@ import { cn } from '@/lib/utils';
 
 export default function RoleSwitcher() {
   const { activeRole, availableRoles, isMultiRole, isDelegated, setActiveRole } = useActiveRole();
+  const navigate = useNavigate();
+
+  // Rol değişince seçili role ait ana sayfaya dön. Aksi halde kullanıcı eski
+  // rolün rotasında (örn. /danisman-paneli) takılı kalır ve içerik değişmez —
+  // RoleDashboard yalnızca "/" üzerinde çalışır.
+  const handleSelectRole = (role: AppRole) => {
+    setActiveRole(role);
+    navigate('/');
+  };
 
   if (!activeRole) return null;
 
@@ -68,7 +78,7 @@ export default function RoleSwitcher() {
             <DropdownMenuItem
               key={role}
               onSelect={() => {
-                if (!isActive) setActiveRole(role);
+                if (!isActive) handleSelectRole(role);
               }}
               className={cn(
                 'flex items-center justify-between gap-3 cursor-pointer',

@@ -119,20 +119,21 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // AcademicAdvisor — 31 permission (10 view + 21 action)
+            // AcademicAdvisor — sadece danışmanlık sayfaları.
             // C2 sign-off: not-girisi.* YOK — sidebar'dan kaldırıldı.
+            // Hoca/ders-verme sayfaları (derslerim, ders-programim, yoklama-girisi,
+            // degerlendirme-sonuclari) bilinçli olarak çıkarıldı: bunlar Instructor
+            // rolüne aittir, saf danışman ders vermez. Aynı kişi hem hoca hem danışman
+            // ise bu sayfaları Öğretim Üyesi rolüyle görür.
             // ═══════════════════════════════════════════════════════════════════════════
             ["AcademicAdvisor"] = new[]
             {
-                // ── View permissions (10) ──
+                // ── View permissions ──
                 "menu.ana-sayfa.view",
                 "menu.akademik-takvim.view",
                 "menu.raporlarim.view",
                 "menu.duyurular.view",
                 "menu.danisman-ders-kisitlari.view",
-                "menu.derslerim.view",
-                "menu.yoklama-girisi.view",
-                "menu.ders-programim.view",
                 "menu.ders-kayit-duzenleme.view",
                 "menu.ogrenci-rehberi.view",
                 "menu.sifre-degistir.view",
@@ -143,7 +144,6 @@ public static class RolePermissionSeed
                 "menu.danisman-ders-kisitlari.create",
                 "menu.danisman-ders-kisitlari.edit",
                 "menu.danisman-ders-kisitlari.delete",
-                "menu.degerlendirme-sonuclari.view",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
