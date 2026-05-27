@@ -25,13 +25,12 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { formatDate, cn } from '../lib/utils';
-import { ROUTES } from '../lib/constants';
 import { classYearOptions } from '../lib/academicYear';
 import { ApiError } from '../lib/apiError';
 import type { ValidationError } from '../types/registration';
 import {
   AlertCircle, AlertTriangle, BookX, Trash2, Send, CheckCircle2, ChevronRight,
-  CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Sparkles, Calendar, Clock,
+  CircleAlert, Layers, Loader2, RotateCcw, GraduationCap, Calendar, Clock,
 } from 'lucide-react';
 
 function getEctsExplanation(cgpa: number, ectsLimit: number): string {
@@ -497,7 +496,7 @@ export default function CourseCatalogPage() {
         </Card>
       )}
 
-      {/* ── Açık dersler (müfredat slotları + akıllı planlama dahil) ── */}
+      {/* ── Açık dersler (müfredat slotları dahil) ── */}
       <Card className="overflow-hidden border-border/70 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -584,13 +583,6 @@ export default function CourseCatalogPage() {
                 )}
               </div>
             </div>
-
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link to={ROUTES.SMART_PLANNING}>
-                <Sparkles className="h-3.5 w-3.5" />
-                Akıllı Planlamaya Git
-              </Link>
-            </Button>
           </div>
         </CardHeader>
 

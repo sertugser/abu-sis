@@ -19,7 +19,6 @@ using SIS.Application.AdvisorConstraints.Services;
 using SIS.Application.UserPreferences.Services;
 using SIS.Application.EnrollmentForecast.Services;
 using SIS.Application.GpaCalculation.Services;
-using SIS.Application.Recommendation.Services;
 using SIS.Application.Scheduling.Services;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.CalendarGenerator.Services;
@@ -260,9 +259,6 @@ builder.Services.AddScoped<IAcademicOperationsService, AcademicOperationsService
 builder.Services.AddScoped<SIS.Application.AdvisorInfo.Services.IAdvisorInfoService, SIS.Infrastructure.Services.AdvisorInfoService>();
 builder.Services.AddScoped<SIS.Application.OpenedDepartmentCourses.Services.IOpenedDepartmentCourseService, SIS.Infrastructure.Services.OpenedDepartmentCourseService>();
 builder.Services.AddScoped<IStudentEligibilityService, StudentEligibilityService>();
-builder.Services.AddScoped<ICourseDifficultyService, CourseDifficultyService>();
-builder.Services.AddScoped<ICriticalPathService, CriticalPathService>();
-builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<IAcademicLevelService, AcademicLevelService>();
 builder.Services.AddScoped<IAcademicProgressionService, AcademicProgressionService>();
 // Faz 3.C: Eski monolitik CourseOpeningService 4 ayrı servise + 1 helper'a bölündü

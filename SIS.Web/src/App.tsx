@@ -11,7 +11,6 @@ import RoleProtectedRoute from './components/RoleProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
 import CourseCatalogPage from './pages/CourseCatalogPage';
-import SmartPlanningPage from './pages/SmartPlanningPage';
 import RegistrationPlanPage from './pages/RegistrationPlanPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import AdvisorInfoPage from './pages/AdvisorInfoPage';
@@ -147,9 +146,6 @@ export default function App() {
 
                   <Route element={<RoleProtectedRoute permission="menu.ders-kayit.view" />}>
                     <Route path="ders-kayit" element={<CourseCatalogPage />} />
-                  </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.akilli-planlama.view" />}>
-                    <Route path="akilli-planlama" element={<SmartPlanningPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.plan.view" />}>
                     <Route path="plan" element={<RegistrationPlanPage />} />

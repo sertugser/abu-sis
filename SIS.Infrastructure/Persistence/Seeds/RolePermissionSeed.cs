@@ -30,7 +30,7 @@ public static class RolePermissionSeed
         new Dictionary<string, IReadOnlyList<string>>
         {
             // ═══════════════════════════════════════════════════════════════════════════
-            // Student — 29 permission (17 view + 12 action)
+            // Student — 26 permission (17 view + 9 action)
             // Sidebar: Sık Kullanılanlar + Ders ve Dönem İşlemleri + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Student"] = new[]
@@ -44,7 +44,6 @@ public static class RolePermissionSeed
                 "menu.danisman-bilgileri.view",
                 "menu.acilan-bolum-dersleri.view",
                 "menu.ders-kayit.view",
-                "menu.akilli-planlama.view",
                 "menu.plan.view",
                 "menu.not-listesi.view",
                 "menu.devamsizlik-durumu.view",
@@ -55,23 +54,20 @@ public static class RolePermissionSeed
                 "menu.ders-degerlendirme.view",
                 "menu.sifre-degistir.view",
 
-                // ── Action permissions (14) ──
+                // ── Action permissions (9) ──
                 "menu.ders-kayit.plan",
                 "menu.ders-kayit.submit",
                 "menu.ders-kayit.drop",
                 "menu.ders-kayit.withdraw",
                 "menu.alinan-dersler.statistics",
                 "menu.ders-degerlendirme.submit",
-                "menu.akilli-planlama.recommendation",
-                "menu.akilli-planlama.difficulty",
-                "menu.akilli-planlama.critical-path",
                 "menu.ders-programi-kisitlamalari.exception-request",
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // Instructor — 26 permission (9 view + 17 action)
+            // Instructor — 25 permission (9 view + 16 action)
             // Sidebar: Sık Kullanılanlar + Ders İşlemleri (subset) + Anketler + Hesabım
             // ═══════════════════════════════════════════════════════════════════════════
             ["Instructor"] = new[]
@@ -111,7 +107,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
-                "menu.akilli-planlama.difficulty",
                 // Hiyerarşik duyuru CRUD
                 "menu.duyuru-yonetimi.create",
                 "menu.duyuru-yonetimi.edit",
@@ -138,7 +133,7 @@ public static class RolePermissionSeed
                 "menu.ogrenci-rehberi.view",
                 "menu.sifre-degistir.view",
 
-                // ── Action permissions (22) ──
+                // ── Action permissions (21) ──
                 "menu.ders-kayit-duzenleme.approve",
                 "menu.ders-kayit-duzenleme.reject",
                 "menu.danisman-ders-kisitlari.create",
@@ -148,7 +143,6 @@ public static class RolePermissionSeed
                 "menu.ders-programi-kisitlamalari.exception-my",
                 "menu.ders-programi-kisitlamalari.exception-view",
                 // Patch 2A: ders-kayit.view + mufredat-durum.view kaldırıldı.
-                "menu.akilli-planlama.difficulty",
                 // Hiyerarşik duyuru: danışman öğrencilere duyuru yayınlayabilir
                 "menu.duyuru-yonetimi.view",
                 "menu.duyuru-yonetimi.create",
@@ -304,7 +298,7 @@ public static class RolePermissionSeed
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
-            // DepartmentManager — 125 permission (24 view + 101 action)
+            // DepartmentManager — 124 permission (24 view + 100 action)
             // AdministrativeStaff'ın yetkileri + onay ekleri (publish/archive, swap/lock/unlock,
             // exception approve, dönem kapatma, sınıf atlatma)
             // ═══════════════════════════════════════════════════════════════════════════
@@ -460,7 +454,6 @@ public static class RolePermissionSeed
                 // ── Cross-cutting (broad role list) ──
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
-                "menu.akilli-planlama.difficulty",
             },
 
             // ═══════════════════════════════════════════════════════════════════════════
@@ -625,7 +618,6 @@ public static class RolePermissionSeed
                 // ── Cross-cutting (broad role list) ──
                 "menu.akilli-planlama.forecast",
                 "menu.akilli-planlama.simulate",
-                "menu.akilli-planlama.difficulty",
             },
 
             // SystemAdministrator YOK — Karar 4: locked role, kod düzeyinde

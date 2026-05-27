@@ -90,11 +90,8 @@ public static class PermissionSeed
         ("menu.ders-kayit.drop",                         PermissionCategory.Menu, "Ders bırakma (drop)"),
         ("menu.ders-kayit.withdraw",                     PermissionCategory.Menu, "Ders çekilme (withdraw)"),
 
-        // Akıllı Planlama
-        ("menu.akilli-planlama.view",                    PermissionCategory.Menu, "Akıllı ders önerileri sayfası"),
-        ("menu.akilli-planlama.recommendation",          PermissionCategory.Menu, "Kişisel ders önerisi"),
-        ("menu.akilli-planlama.difficulty",              PermissionCategory.Menu, "Ders zorluk metriği"),
-        ("menu.akilli-planlama.critical-path",           PermissionCategory.Menu, "Kritik yol grafiği"),
+        // Akıllı Planlama (bölüm planlama özeti + talep tahmini/simülasyonu)
+        ("menu.akilli-planlama.view",                    PermissionCategory.Menu, "Bölüm planlama özeti erişimi"),
         ("menu.akilli-planlama.forecast",                PermissionCategory.Menu, "Ders talep tahmini"),
         ("menu.akilli-planlama.simulate",                PermissionCategory.Menu, "Talep simülasyonu"),
 
