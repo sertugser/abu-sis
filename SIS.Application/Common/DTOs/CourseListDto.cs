@@ -24,6 +24,13 @@ public class SectionDto
     public string Schedule { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public bool QuotaVisible { get; set; } = true;
+
+    /// <summary>
+    /// Faz 3b: Section yayın sonrası "düzenlemek için durduruldu" — geçici olarak yeni kayda
+    /// kapalı (mevcut kayıtlılar korunur). Frontend "kayda kapalı" rozeti gösterir ve plana
+    /// ekleme butonunu pasifleştirir.
+    /// </summary>
+    public bool IsEnrollmentSuspended { get; set; }
 }
 
 public class StudentCourseDto

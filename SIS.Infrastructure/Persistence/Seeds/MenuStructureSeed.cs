@@ -149,7 +149,9 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Müfredat Ders İntibak İşlemleri","/mufredat-ders-intibak",               "mufredat-ders-intibak",          13, "menu.mufredat-ders-intibak.view"),
             BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Sınav Müfredatı",                "/sinav-mufredati",                     "sinav-mufredati",                15, "menu.sinav-mufredati.view"),
-            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  16, "menu.program-onayi.view"),
+            // "Program Onayı" ayrı menü item olmaktan çıktı → Ders Programı Oluşturma sayfasındaki
+            // "Programı Onayla" butonuna taşındı. Permission key'leri (menu.program-onayi.*) korunur
+            // (buton görünürlüğü + onay/geri-al uçları için).
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────

@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.AcademicOperations.Services;
+using SIS.Application.Notifications.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
+using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -19,15 +21,18 @@ public class SchedulingController : ControllerBase
     private readonly ISchedulingService _schedulingService;
     private readonly IAcademicOperationsService _academicOperationsService;
     private readonly AppDbContext _context;
+    private readonly INotificationService? _notifications;
 
     public SchedulingController(
         ISchedulingService schedulingService,
         IAcademicOperationsService academicOperationsService,
-        AppDbContext context)
+        AppDbContext context,
+        INotificationService? notifications = null)
     {
         _schedulingService = schedulingService;
         _academicOperationsService = academicOperationsService;
         _context = context;
+        _notifications = notifications;
     }
 
     [HttpGet("conflicts")]
@@ -207,6 +212,19 @@ public class SchedulingController : ControllerBase
         if (section1.TermId != section2.TermId)
             return BadRequest(new { error = "Farkli donemlerdeki section'lar takas edilemez." });
 
+        // Yayın kilidi: section'lardan birinin fakültesi o dönem için onaylanmış (yayında) ise
+        // takas yapılamaz. Önce Program Onayı geri alınmalı. Ortak ders (DepartmentId null) muaf.
+        var swapDeptIds = new[] { section1.Course.DepartmentId, section2.Course.DepartmentId }
+            .Where(d => d.HasValue).Select(d => d!.Value).Distinct().ToList();
+        var swapFacultyIds = await _context.Departments
+            .Where(d => swapDeptIds.Contains(d.Id))
+            .Select(d => d.FacultyId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (await _context.FacultyScheduleApprovals
+            .AnyAsync(a => swapFacultyIds.Contains(a.FacultyId) && a.TermId == section1.TermId, cancellationToken))
+            return BadRequest(new { error = "Bu fakültenin programı onaylanmış (yayında). Takas için önce Program Onayını geri alın." });
+
         // Load SectionSchedule records for both sections
         var swapSchedules1 = await _context.SectionSchedules
             .Include(ss => ss.TimeSlot)
@@ -366,6 +384,91 @@ public class SchedulingController : ControllerBase
             message = "Section kilidi basariyla kaldirildi.",
             section = BuildSectionState(section)
         });
+    }
+
+    // ── Faz 3b: Yayın sonrası tek-section düzenleme (Stop / Resume Enrollment) ──────
+
+    /// <summary>
+    /// Onaylı (yayında) bir programda tek section'ı düzenlemek için "yeni kayda durdur".
+    /// Section yeni öğrenci kaydına kapanır (mevcut kayıtlılar korunur) ve yayın kilidi
+    /// yalnızca bu section için gevşer → assign/unassign yapılabilir.
+    /// </summary>
+    [HttpPost("suspend-enrollment/{sectionId}")]
+    [RequirePermission("menu.ders-programi-olusturma.assign")]
+    public async Task<IActionResult> SuspendEnrollment(int sectionId, CancellationToken cancellationToken)
+    {
+        if (sectionId <= 0)
+            return BadRequest(new { error = "Gecerli bir sectionId gonderilmelidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out _))
+            return Unauthorized();
+        var accessCheck = await CheckSectionAccessAsync(sectionId, userId, cancellationToken);
+        if (accessCheck != null) return accessCheck;
+
+        var section = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, cancellationToken);
+        if (section == null)
+            return NotFound(new { error = "Section bulunamadi." });
+
+        section.IsEnrollmentSuspended = true;
+        section.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { message = "Şube düzenleme için durduruldu (yeni kayda kapalı, mevcut kayıtlılar korunuyor).", sectionId, isEnrollmentSuspended = true });
+    }
+
+    /// <summary>
+    /// Düzenlemeyi bitirir: section yeniden kayda açılır ve o section'a kayıtlı öğrencilere
+    /// "ders programı güncellendi" bildirimi gönderilir.
+    /// </summary>
+    [HttpPost("resume-enrollment/{sectionId}")]
+    [RequirePermission("menu.ders-programi-olusturma.assign")]
+    public async Task<IActionResult> ResumeEnrollment(int sectionId, CancellationToken cancellationToken)
+    {
+        if (sectionId <= 0)
+            return BadRequest(new { error = "Gecerli bir sectionId gonderilmelidir." });
+
+        if (!TryGetAuthenticatedUser(out var userId, out _))
+            return Unauthorized();
+        var accessCheck = await CheckSectionAccessAsync(sectionId, userId, cancellationToken);
+        if (accessCheck != null) return accessCheck;
+
+        var section = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, cancellationToken);
+        if (section == null)
+            return NotFound(new { error = "Section bulunamadi." });
+
+        section.IsEnrollmentSuspended = false;
+        section.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // Kayıtlı öğrencilere "programın güncellendi" bildirimi (yalnızca aktif/onay-bekleyen kayıtlar).
+        var notified = 0;
+        if (_notifications != null)
+        {
+            var studentUserIds = await _context.CourseRegistrations
+                .Where(cr => cr.CourseSectionId == sectionId
+                    && (cr.Status == RegistrationStatus.Active
+                        || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+                .Join(_context.Students, cr => cr.StudentId, s => s.Id, (cr, s) => s.UserId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            if (studentUserIds.Count > 0)
+            {
+                await _notifications.NotifyManyAsync(
+                    studentUserIds,
+                    NotificationType.ScheduleChanged,
+                    "Ders programı güncellendi",
+                    $"{section.Course.Code} {section.Course.Name} dersinin programı güncellendi. Lütfen yeni gün/saat/derslik bilgisini kontrol edin.",
+                    link: "/ders-programim",
+                    severity: NotificationSeverity.Info,
+                    ct: cancellationToken);
+                notified = studentUserIds.Count;
+            }
+        }
+
+        return Ok(new { message = "Şube yeniden kayda açıldı.", sectionId, isEnrollmentSuspended = false, notifiedStudents = notified });
     }
 
     // ── Timetable Endpoints ──────────────────────────────────────────────

@@ -1391,6 +1391,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("InternalQuota")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsEnrollmentSuspended")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 

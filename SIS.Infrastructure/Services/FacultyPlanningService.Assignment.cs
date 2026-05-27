@@ -37,6 +37,9 @@ public partial class FacultyPlanningService
             if (section.IsFinalized)
                 throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
 
+            // Yayın kilidi: fakülte programı onaylı (yayında) ise değişiklik yapılamaz.
+            await EnsureScheduleNotPublishedAsync(section, ct);
+
             var userDeptId = await ResolveDepartmentForUserAsync(userId, ct);
             if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
                 throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerine atama yapabilirsiniz.");
@@ -237,6 +240,9 @@ public partial class FacultyPlanningService
         if (section.IsFinalized)
             throw new InvalidOperationException("Bu sube kesinlesmis, degisiklik yapilamaz.");
 
+        // Yayın kilidi: fakülte programı onaylı (yayında) ise değişiklik yapılamaz.
+        await EnsureScheduleNotPublishedAsync(section, ct);
+
         var userDeptId = await ResolveDepartmentForUserAsync(userId, ct);
         if (userDeptId.HasValue && section.Course.DepartmentId != userDeptId.Value)
             throw new UnauthorizedAccessException("Sadece kendi bolumunuzun subelerinin atamasini kaldirabilirsiniz.");
@@ -284,6 +290,10 @@ public partial class FacultyPlanningService
 
     public async Task<int> ResetAllSchedulesAsync(int facultyId, int termId, string userId, CancellationToken ct = default)
     {
+        // Yayın kilidi: fakülte programı onaylı (yayında) ise toplu sıfırlama yapılamaz.
+        if (await _context.FacultyScheduleApprovals.AnyAsync(a => a.FacultyId == facultyId && a.TermId == termId, ct))
+            throw new InvalidOperationException("Bu fakültenin programı onaylanmış (yayında). Sıfırlamak için önce Program Onayını geri alın.");
+
         var departmentIds = await _context.Departments
             .AsNoTracking()
             .Where(d => d.FacultyId == facultyId)
@@ -395,5 +405,26 @@ public partial class FacultyPlanningService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Yayın kilidi: section'ın fakültesi o dönem için onaylanmış (yayında) ise
+    /// InvalidOperationException fırlatır. Onaylı programda değişiklik için önce Program
+    /// Onayı geri alınmalıdır. Ortak dersler (Course.DepartmentId == null) onaya tabi değildir.
+    /// </summary>
+    private async Task EnsureScheduleNotPublishedAsync(CourseSection section, CancellationToken ct)
+    {
+        // Faz 3b: "Düzenlemek için durdurulmuş" (suspended) section yayın sonrası düzenlemeye
+        // açıktır — kilit yalnızca bu section için gevşer. Diğer onaylı section'lar kilitli kalır.
+        if (section.IsEnrollmentSuspended) return;
+        if (section.Course?.DepartmentId == null) return;
+        var facultyId = await _context.Departments
+            .Where(d => d.Id == section.Course.DepartmentId.Value)
+            .Select(d => d.FacultyId)
+            .FirstOrDefaultAsync(ct);
+        var approved = await _context.FacultyScheduleApprovals
+            .AnyAsync(a => a.FacultyId == facultyId && a.TermId == section.TermId, ct);
+        if (approved)
+            throw new InvalidOperationException("Bu fakültenin programı onaylanmış (yayında). Bu şubeyi değiştirmek için önce \"Düzenlemek için durdur\" yapın, ya da tüm programı düzenlemek için Program Onayını geri alın.");
     }
 }

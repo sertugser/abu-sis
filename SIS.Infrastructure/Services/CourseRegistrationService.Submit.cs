@@ -38,6 +38,81 @@ public partial class CourseRegistrationService
             return response;
         }
 
+        // Yayın kapısı (draft/publish): kesinleştirilen her şube Active + fakültesi onaylı olmalı.
+        // Plana ekledikten sonra onay geri alınmış (program yayından çekilmiş) olabilir; bu durumda
+        // kesinleştirme de engellenir. Ortak dersler (DepartmentId null) onaydan muaf, yalnızca Active.
+        var notActiveSections = submittedSections.Where(s => s.Status != CourseSectionStatus.Active).ToList();
+        if (notActiveSections.Count > 0)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = notActiveSections.Select(s => new ValidationError
+                {
+                    Rule = "SectionNotActive",
+                    Message = $"'{s.Course.Code} {s.Course.Name}' şubesi seçime açık değil.",
+                    CourseSectionId = s.Id
+                }).ToList()
+            };
+            return response;
+        }
+
+        // Faz 3b: düzenleme için durdurulmuş (suspended) şube kesinleştirilemez.
+        var suspendedSections = submittedSections.Where(s => s.IsEnrollmentSuspended).ToList();
+        if (suspendedSections.Count > 0)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = suspendedSections.Select(s => new ValidationError
+                {
+                    Rule = "EnrollmentSuspended",
+                    Message = $"'{s.Course.Code} {s.Course.Name}' şubesi düzenlemede — geçici olarak kayda kapalı, birazdan tekrar deneyin.",
+                    CourseSectionId = s.Id
+                }).ToList()
+            };
+            return response;
+        }
+
+        var submitDeptIds = submittedSections
+            .Where(s => s.Course.DepartmentId.HasValue)
+            .Select(s => s.Course.DepartmentId!.Value)
+            .Distinct()
+            .ToList();
+        if (submitDeptIds.Count > 0)
+        {
+            var submitDeptToFacultyId = await _context.Departments
+                .Where(d => submitDeptIds.Contains(d.Id))
+                .ToDictionaryAsync(d => d.Id, d => d.FacultyId);
+            var submitApprovedFacultyIds = (await _context.FacultyScheduleApprovals
+                .Where(a => a.TermId == activeTermId)
+                .Select(a => a.FacultyId)
+                .ToListAsync())
+                .ToHashSet();
+            var notApprovedSections = submittedSections
+                .Where(s => s.Course.DepartmentId.HasValue
+                    && submitDeptToFacultyId.TryGetValue(s.Course.DepartmentId.Value, out var fid)
+                    && !submitApprovedFacultyIds.Contains(fid))
+                .ToList();
+            if (notApprovedSections.Count > 0)
+            {
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = notApprovedSections.Select(s => new ValidationError
+                    {
+                        Rule = "FacultyScheduleNotApproved",
+                        Message = $"'{s.Course.Code} {s.Course.Name}' dersinin programı yayından kaldırılmış; kesinleştirilemez.",
+                        CourseSectionId = s.Id
+                    }).ToList()
+                };
+                return response;
+            }
+        }
+
         var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(
             studentId,
             submittedSections.Select(section => new AdvisorConstraintSectionInfo

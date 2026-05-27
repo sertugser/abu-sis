@@ -344,12 +344,42 @@ public class CourseController : ControllerBase
             visibleCourseIds.UnionWith(sharedCourseIds);
         }
 
+        // Yayın kapısı (draft/publish): öğrenci yalnızca (a) Active section'ları ve
+        // (b) fakültesi o dönem için onaylanmış (FacultyScheduleApproval) dersleri görür.
+        // Ortak dersler (Course.DepartmentId == null) bir fakülteye bağlı olmadığından
+        // onaydan muaftır; Active olmaları yeterli.
+        var approvedFacultyIds = (await _context.FacultyScheduleApprovals
+            .AsNoTracking()
+            .Where(a => a.TermId == activeTerm.Id)
+            .Select(a => a.FacultyId)
+            .ToListAsync())
+            .ToHashSet();
+
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == activeTerm.Id && visibleCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == activeTerm.Id
+                && cs.Status == CourseSectionStatus.Active
+                && visibleCourseIds.Contains(cs.CourseId))
             .ToListAsync();
+
+        // Fakülte onay kapısı: bölüme bağlı section'ın fakültesi onaylı olmalı.
+        var sectionDeptIds = sections
+            .Where(s => s.Course.DepartmentId.HasValue)
+            .Select(s => s.Course.DepartmentId!.Value)
+            .Distinct()
+            .ToList();
+        var deptToFacultyId = await _context.Departments
+            .AsNoTracking()
+            .Where(d => sectionDeptIds.Contains(d.Id))
+            .ToDictionaryAsync(d => d.Id, d => d.FacultyId);
+
+        sections = sections
+            .Where(s => !s.Course.DepartmentId.HasValue
+                || (deptToFacultyId.TryGetValue(s.Course.DepartmentId.Value, out var facId)
+                    && approvedFacultyIds.Contains(facId)))
+            .ToList();
 
         // Instructor names
         var instructorUserIds = sections
@@ -449,6 +479,7 @@ public class CourseController : ControllerBase
                         ClassroomName = s.Classroom?.Name ?? string.Empty,
                         Schedule = catalogScheduleMap.GetValueOrDefault(s.Id, string.Empty),
                         IsActive = s.IsActive,
+                        IsEnrollmentSuspended = s.IsEnrollmentSuspended,
                         QuotaVisible = !hideQuotaInCatalog
                     }).ToList()
                 };

@@ -130,19 +130,21 @@ public class ScheduleApprovalController : ControllerBase
             .FirstOrDefaultAsync(t => t.Id == resolvedTermId.Value, cancellationToken);
 
         // Resolve section counts
+        // Toplam = iptal olmayan tüm şube (Draft + Active). Programlanan = Active
+        // (= hoca+derslik+slot dolu, öğrenciye gidecek olan). Tek tanım: FacultyPlanning
+        // overview ile aynı (ikibaşlı sayım yok).
         var totalSections = await _context.CourseSections
             .CountAsync(cs => cs.TermId == resolvedTermId.Value
-                && cs.IsActive
+                && cs.Status != CourseSectionStatus.Cancelled
                 && cs.Course!.DepartmentId.HasValue
                 && _context.Departments.Any(d => d.Id == cs.Course!.DepartmentId && d.FacultyId == facultyId),
                 cancellationToken);
 
         var scheduledSections = await _context.CourseSections
             .CountAsync(cs => cs.TermId == resolvedTermId.Value
-                && cs.IsActive
+                && cs.Status == CourseSectionStatus.Active
                 && cs.Course!.DepartmentId.HasValue
-                && _context.Departments.Any(d => d.Id == cs.Course!.DepartmentId && d.FacultyId == facultyId)
-                && cs.SectionSchedules.Any(),
+                && _context.Departments.Any(d => d.Id == cs.Course!.DepartmentId && d.FacultyId == facultyId),
                 cancellationToken);
 
         var approval = await _context.FacultyScheduleApprovals

@@ -22,6 +22,8 @@ public enum NotificationType
     AcademicCalendarMissing = 300,
     TermPhaseChanged = 301,
     ScheduleApprovalRequested = 400,
+    /// <summary>Onaylı (yayında) bir programda section yeniden düzenlenip kayda açıldı → kayıtlı öğrencilere.</summary>
+    ScheduleChanged = 410,
 
     /// <summary>Eşlenmeyen/diğer.</summary>
     Other = 999,

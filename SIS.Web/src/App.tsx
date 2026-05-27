@@ -86,7 +86,6 @@ import PasswordChangePage from './pages/PasswordChangePage';
 import DocumentRestrictionsPage from './pages/DocumentRestrictionsPage';
 import WebModuleSettingsPage from './pages/WebModuleSettingsPage';
 import MenuManagementPage from './pages/MenuManagementPage';
-import ScheduleApprovalPage from './pages/ScheduleApprovalPage';
 import ClassroomManagementAdminPage from './pages/ClassroomManagementAdminPage';
 import ConstraintManagementPage from './pages/ConstraintManagementPage';
 import CurriculumManagementPage from './pages/CurriculumManagementPage';
@@ -383,8 +382,10 @@ export default function App() {
                     <Route path="ders-kontenjan-islemleri" element={<CourseQuotaPage />} />
                   </Route>
 
+                  {/* Program Onayı ayrı sayfa olmaktan çıktı → Ders Programı Oluşturma sayfasındaki
+                      "Programı Onayla" butonuna taşındı. Eski link yönlendirilir. */}
                   <Route element={<RoleProtectedRoute permission="menu.program-onayi.view" />}>
-                    <Route path="program-onayi" element={<ScheduleApprovalPage />} />
+                    <Route path="program-onayi" element={<Navigate to="/ders-programi-olusturma" replace />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />
