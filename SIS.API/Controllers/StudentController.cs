@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.CalendarGenerator.Services;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.DTOs;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.StudentCard.Services;
 using SIS.Domain.Entities;
@@ -13,6 +14,7 @@ using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using CurriculumEntity = SIS.Domain.Entities.Curriculum;
 
 namespace SIS.API.Controllers;
 
@@ -28,6 +30,7 @@ public class StudentController : ControllerBase
     private readonly ISystemConfigProvider _systemConfig;
     private readonly ICurriculumStatusService _curriculumStatusService;
     private readonly IStudentTranscriptService _transcriptService;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
 
     public StudentController(
         AppDbContext context,
@@ -36,6 +39,7 @@ public class StudentController : ControllerBase
         ISystemConfigProvider systemConfig,
         ICurriculumStatusService curriculumStatusService,
         IStudentTranscriptService transcriptService,
+        IEctsLimitResolver ectsLimitResolver,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
@@ -44,6 +48,7 @@ public class StudentController : ControllerBase
         _systemConfig = systemConfig;
         _curriculumStatusService = curriculumStatusService;
         _transcriptService = transcriptService;
+        _ectsLimitResolver = ectsLimitResolver;
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -89,14 +94,10 @@ public class StudentController : ControllerBase
             classYear = Math.Clamp(elapsedYears - frozenYears, 1, maxYears);
         }
 
-        var ectsLimitBelow200 = await _systemConfig.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
-        var ectsLimit200To249 = await _systemConfig.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
-        var ectsLimitAbove250 = await _systemConfig.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
-        var ectsLimit = student.Cgpa >= 2.50m
-            ? ectsLimitAbove250
-            : student.Cgpa >= 2.00m
-                ? ectsLimit200To249
-                : ectsLimitBelow200;
+        var mainProgram = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
+        CurriculumEntity? ectsCurriculum = mainProgram == null ? null
+            : await _context.Curricula.AsNoTracking().FirstOrDefaultAsync(c => c.Id == mainProgram.CurriculumId);
+        var ectsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, ectsCurriculum);
 
         // Advisor info
         string? advisorName = null;
