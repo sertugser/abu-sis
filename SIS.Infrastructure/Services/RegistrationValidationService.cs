@@ -30,7 +30,7 @@ public class RegistrationValidationService : IRegistrationValidationService
         _useCalendarFallbackForRegistrationWindow = webModuleControls is null;
     }
 
-    public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
+    public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds, bool skipGateChecks = false)
     {
         var result = new ValidationResultDto { IsValid = true };
         var errors = new List<ValidationError>();
@@ -81,9 +81,11 @@ public class RegistrationValidationService : IRegistrationValidationService
                         || cr.Status == RegistrationStatus.PendingAdvisorApproval
                         || cr.Status == RegistrationStatus.Draft))
                 .ToListAsync();
+        // Talep edilen section'lar "requested" tarafında sayılır; aynı kayıtların mevcut tarafta
+        // tekrar toplanması (çift sayım) önlenir. Onay akışında talep = onaylanan PendingAdvisorApproval
+        // kayıtları olduğundan bu, AKTS toplamının iki kez sayılmasını engeller.
         var existingRegistrationsOutsideRequest = existingRegistrations
-            .Where(registration => registration.Status != RegistrationStatus.Draft
-                || !requestedSectionIds.Contains(registration.CourseSectionId))
+            .Where(registration => !requestedSectionIds.Contains(registration.CourseSectionId))
             .ToList();
 
         // Load student's all past registrations (for prerequisite and grade checks)
@@ -93,48 +95,53 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Where(cr => cr.StudentId == studentId && cr.Grade != null)
             .ToListAsync();
 
-        // === CHECK 1: Student Status (FR-13/FR-14) ===
-        if (student.Status != StudentStatus.Active)
+        // "Kapı" kontrolleri (durum / finansal / kayıt dönemi). Danışman onayında (skipGateChecks)
+        // atlanır — bunlar onay akışında ayrıca uygulanır; burada amaç akademik seçim kontrolü.
+        if (!skipGateChecks)
         {
-            errors.Add(new ValidationError
+            // === CHECK 1: Student Status (FR-13/FR-14) ===
+            if (student.Status != StudentStatus.Active)
             {
-                Rule = "StudentStatus",
-                Message = $"Ogrenci durumu '{student.Status}' oldugu icin kayit yapilamaz. Sadece 'Active' durumundaki ogrenciler kayit yapabilir."
-            });
-        }
+                errors.Add(new ValidationError
+                {
+                    Rule = "StudentStatus",
+                    Message = $"Ogrenci durumu '{student.Status}' oldugu icin kayit yapilamaz. Sadece 'Active' durumundaki ogrenciler kayit yapabilir."
+                });
+            }
 
-        // === CHECK 2: Financial Eligibility (FR-49) ===
-        if (student.HasFinancialBlock)
-        {
-            errors.Add(new ValidationError
+            // === CHECK 2: Financial Eligibility (FR-49) ===
+            if (student.HasFinancialBlock)
             {
-                Rule = "FinancialEligibility",
-                Message = "Ogrencinin odenmemis borcu bulunmaktadir. Borc temizlenene kadar kayit yapilamaz."
-            });
-        }
+                errors.Add(new ValidationError
+                {
+                    Rule = "FinancialEligibility",
+                    Message = "Ogrencinin odenmemis borcu bulunmaktadir. Borc temizlenene kadar kayit yapilamaz."
+                });
+            }
 
-        // === CHECK 3: Registration Period (FR-47) ===
-        if (activeTerm == null)
-        {
-            errors.Add(new ValidationError
-            {
-                Rule = "RegistrationPeriod",
-                Message = "Aktif akademik donem bulunamadi."
-            });
-        }
-        else
-        {
-            var registrationControlCode = ResolveStudentRegistrationControlCode(student);
-            var registrationAccess = _useCalendarFallbackForRegistrationWindow
-                ? BuildFallbackRegistrationAccess(activeTerm)
-                : await _webModuleControls.EvaluateAsync(registrationControlCode, activeTerm.Id);
-            if (!registrationAccess.IsOpen)
+            // === CHECK 3: Registration Period (FR-47) ===
+            if (activeTerm == null)
             {
                 errors.Add(new ValidationError
                 {
                     Rule = "RegistrationPeriod",
-                    Message = registrationAccess.Message ?? $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
+                    Message = "Aktif akademik donem bulunamadi."
                 });
+            }
+            else
+            {
+                var registrationControlCode = ResolveStudentRegistrationControlCode(student);
+                var registrationAccess = _useCalendarFallbackForRegistrationWindow
+                    ? BuildFallbackRegistrationAccess(activeTerm)
+                    : await _webModuleControls.EvaluateAsync(registrationControlCode, activeTerm.Id);
+                if (!registrationAccess.IsOpen)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Rule = "RegistrationPeriod",
+                        Message = registrationAccess.Message ?? $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
+                    });
+                }
             }
         }
 

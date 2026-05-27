@@ -456,6 +456,7 @@ public class CourseController : ControllerBase
                     Code = course.Code,
                     Name = course.Name,
                     Ects = course.Ects,
+                    NationalCredit = course.NationalCredit,
                     TheoryHours = course.TheoryHours,
                     LabHours = course.LabHours,
                     IsCompulsory = compulsoryMap.TryGetValue(cid, out var ic2) && ic2,

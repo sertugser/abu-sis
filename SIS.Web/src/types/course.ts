@@ -27,6 +27,8 @@ export interface StudentCourseDto {
   code: string;
   name: string;
   ects: number;
+  /** Ulusal/yerel kredi (Proliz aday grid "KRD"). */
+  nationalCredit: number;
   theoryHours: number;
   labHours: number;
   isCompulsory: boolean;

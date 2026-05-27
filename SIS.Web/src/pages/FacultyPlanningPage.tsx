@@ -18,7 +18,6 @@ import { ConflictBar } from '../components/faculty-planning/ConflictBar';
 import { SectionListTab } from '../components/faculty-planning/SectionListTab';
 import { AutoScheduleTab } from '../components/faculty-planning/AutoScheduleTab';
 import { ExcelImportModal } from '../components/faculty-planning/ExcelImportModal';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,

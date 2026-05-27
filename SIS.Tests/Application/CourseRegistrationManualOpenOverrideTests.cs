@@ -253,6 +253,16 @@ public class CourseRegistrationManualOpenOverrideTests : IDisposable
             }
         });
 
+        // Yayın kapısı (draft/publish): fakülte programı onaylı olmalı, yoksa AddToPlan bloke olur.
+        _context.FacultyScheduleApprovals.Add(new FacultyScheduleApproval
+        {
+            Id = 1,
+            FacultyId = FacultyId,
+            TermId = TermId,
+            ApprovedByUserId = 100,
+            ApprovedAt = DateTime.UtcNow
+        });
+
         _context.AcademicPrograms.Add(new AcademicProgram
         {
             Id = ProgramId,

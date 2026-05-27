@@ -9,6 +9,10 @@ import {
   getAdvisorStudentCatalog,
   advisorAddCourse,
   advisorDropCourse,
+  getAdvisorStudentCourseHistory,
+  getAdvisorStudentCurriculumStatus,
+  getAdvisorStudentTranscript,
+  getAdvisorStudentTermGpa,
 } from '../api/advisor.api';
 
 export function usePendingApprovals() {
@@ -46,6 +50,40 @@ export function useAdvisorStudentCatalog(studentId: number | null) {
     queryKey: ['advisor', 'student-catalog', studentId],
     queryFn: () => getAdvisorStudentCatalog(studentId!),
     enabled: studentId != null,
+  });
+}
+
+// ── Danışan bilgi görünümleri (Ek/Diğer İşlemler) — yalnızca ilgili görünüm açıkken çek ──
+
+export function useAdvisorStudentCourseHistory(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'student-course-history', studentId],
+    queryFn: () => getAdvisorStudentCourseHistory(studentId!),
+    enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentCurriculumStatus(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'student-curriculum-status', studentId],
+    queryFn: () => getAdvisorStudentCurriculumStatus(studentId!),
+    enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentTranscript(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'student-transcript', studentId],
+    queryFn: () => getAdvisorStudentTranscript(studentId!),
+    enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentTermGpa(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'student-term-gpa', studentId],
+    queryFn: () => getAdvisorStudentTermGpa(studentId!),
+    enabled: studentId != null && enabled,
   });
 }
 

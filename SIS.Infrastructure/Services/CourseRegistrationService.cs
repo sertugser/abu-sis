@@ -128,6 +128,32 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             .GroupBy(ss => ss.CourseSectionId)
             .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
 
+        // Açma Nedeni adı (Proliz "Açma Nedeni") — kayıttaki OpeningReasonIdSnapshot çözümlenir.
+        var openingReasonIds = registrations
+            .Where(r => r.OpeningReasonIdSnapshot.HasValue)
+            .Select(r => r.OpeningReasonIdSnapshot!.Value)
+            .Distinct()
+            .ToList();
+        var openingReasonNames = openingReasonIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.CurriculumCourseOpeningReasons.AsNoTracking()
+                .Where(o => openingReasonIds.Contains(o.Id))
+                .ToDictionaryAsync(o => o.Id, o => o.Name);
+
+        // Seçmeli havuz slotu (Proliz "Grup Kod") — kayıttaki AppliedElectivePoolId çözümlenir.
+        var appliedPoolIds = registrations
+            .Where(r => r.AppliedElectivePoolId.HasValue)
+            .Select(r => r.AppliedElectivePoolId!.Value)
+            .Distinct()
+            .ToList();
+        var poolRows = appliedPoolIds.Count == 0
+            ? new List<PoolInfoRow>()
+            : await _context.CurriculumElectivePools.AsNoTracking()
+                .Where(p => appliedPoolIds.Contains(p.Id))
+                .Select(p => new PoolInfoRow { Id = p.Id, SlotName = p.SlotName, GroupCode = p.ElectiveGroup.Code })
+                .ToListAsync();
+        var poolInfo = poolRows.ToDictionary(p => p.Id, p => (SlotName: p.SlotName, GroupCode: p.GroupCode));
+
         return registrations.Select(r =>
         {
             var courseId = r.CourseSection.CourseId;
@@ -151,11 +177,15 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             {
                 RegistrationId = r.Id,
                 CourseSectionId = r.CourseSectionId,
+                CourseId = r.CourseSection.CourseId,
+                SectionNumber = r.CourseSection.SectionNumber,
                 CourseCode = r.CourseSection.Course.Code,
                 CourseName = r.CourseSection.Course.Name,
                 Ects = r.CourseSection.Course.Ects,
+                NationalCredit = r.CreditSnapshot ?? r.CourseSection.Course.NationalCredit,
                 TheoryHours = r.CourseSection.Course.TheoryHours,
                 LabHours = r.CourseSection.Course.LabHours,
+                ApplicationHours = r.CourseSection.Course.ApplicationHours,
                 InstructorName = r.CourseSection.Instructor != null
                     && userNames.TryGetValue(r.CourseSection.Instructor.UserId, out var name)
                         ? $"{r.CourseSection.Instructor.Title} {name}".Trim()
@@ -166,7 +196,19 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 IsCompulsory = isCompulsory,
                 SuggestedSemester = semester,
                 IsRepeated = r.IsRepeated,
-                TakeType = takeType
+                TakeType = takeType,
+                OpeningReasonName = r.OpeningReasonIdSnapshot.HasValue
+                    && openingReasonNames.TryGetValue(r.OpeningReasonIdSnapshot.Value, out var orName)
+                        ? orName
+                        : null,
+                ElectivePoolSlotName = r.AppliedElectivePoolId.HasValue
+                    && poolInfo.TryGetValue(r.AppliedElectivePoolId.Value, out var pi)
+                        ? pi.SlotName
+                        : null,
+                ElectiveGroupCode = r.AppliedElectivePoolId.HasValue
+                    && poolInfo.TryGetValue(r.AppliedElectivePoolId.Value, out var pi2)
+                        ? pi2.GroupCode
+                        : null,
             };
         }).ToList();
     }
@@ -649,6 +691,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         public int CourseId { get; set; }
         public bool IsCompulsory { get; set; }
         public int SuggestedSemester { get; set; }
+    }
+
+    private sealed class PoolInfoRow
+    {
+        public int Id { get; set; }
+        public string SlotName { get; set; } = string.Empty;
+        public string GroupCode { get; set; } = string.Empty;
     }
 
 

@@ -1,5 +1,9 @@
 import apiClient from './axios';
 import type { StudentCourseDto } from '../types/course';
+import type { CourseHistoryTermDto } from '../types/registration';
+import type { CurriculumStatusDto } from '../types/curriculum';
+import type { StudentTranscriptDto } from '../types/transcript';
+import type { TermGpaHistoryDto } from '../types/student';
 
 export interface PendingApproval {
   studentId: number;
@@ -77,25 +81,56 @@ export interface AdvisorStudent {
   studentNumber: string;
   studentName: string;
   programName: string;
+  /** Fakülte adı (program → bölüm → fakülte). */
+  facultyName: string;
+  /** Bağlı olunan müfredat sürümü/versiyonu. */
+  curriculumVersion: string;
+  /** Programa kayıt tarihi. */
+  enrollmentDate: string;
   completedSemesters: number;
+  /** Sınıf = (tamamlanan yarıyıl / 2) + 1. */
+  classYear: number;
+  /** "Normal Süresi İçinde" / "Normal Süre Aşıldı". */
+  studyDurationStatus: string;
   cgpa: number;
   /** Aktif dönem plan durumu: Submitted | Approved | Rejected | None */
   planStatus: string;
+  /** Öğrencinin planı kesinleştirme (submit) anı; yoksa null. */
+  planSubmittedAt: string | null;
+  /** Danışman onay/red anı (Approved/Rejected planda); yoksa null. */
+  planDecidedAt: string | null;
   isAtRisk: boolean;
 }
 
 export interface StudentRegistrationItem {
   registrationId: number;
   courseSectionId: number;
+  /** Ders kimliği — "Diğer Bilgiler" detayı için. */
+  courseId: number;
+  /** Şube no (Proliz "Şb"). */
+  sectionNumber: number;
   courseCode: string;
   courseName: string;
   ects: number;
+  /** Ulusal kredi (Proliz "Krd"). */
+  nationalCredit: number;
+  theoryHours: number;
+  labHours: number;
+  applicationHours: number | null;
   schedule: string;
   instructorName: string;
   status: string;
   isCompulsory: boolean;
+  /** Müfredattaki önerilen yarıyıl → sınıf hesabı için. */
+  suggestedSemester: number;
   isRepeated: boolean;
   takeType: string;
+  /** Açma Nedeni adı; yoksa null. */
+  openingReasonName: string | null;
+  /** Seçmeli havuz slot adı (Proliz "Grup Kod"); yoksa null. */
+  electivePoolSlotName: string | null;
+  /** Seçmeli grup kodu; yoksa null. */
+  electiveGroupCode: string | null;
 }
 
 export const getAdvisorStudents = () =>
@@ -112,3 +147,17 @@ export const advisorAddCourse = (studentId: number, courseSectionId: number) =>
 
 export const advisorDropCourse = (studentId: number, registrationId: number) =>
   apiClient.delete(`/advisor/students/${studentId}/registrations/${registrationId}`);
+
+// ── Danışan bilgi görünümleri (Ek/Diğer İşlemler — Proliz paritesi) ────────────
+
+export const getAdvisorStudentCourseHistory = (studentId: number) =>
+  apiClient.get<CourseHistoryTermDto[]>(`/advisor/students/${studentId}/course-history`).then(r => r.data);
+
+export const getAdvisorStudentCurriculumStatus = (studentId: number) =>
+  apiClient.get<CurriculumStatusDto>(`/advisor/students/${studentId}/curriculum-status`).then(r => r.data);
+
+export const getAdvisorStudentTranscript = (studentId: number) =>
+  apiClient.get<StudentTranscriptDto>(`/advisor/students/${studentId}/transcript`).then(r => r.data);
+
+export const getAdvisorStudentTermGpa = (studentId: number) =>
+  apiClient.get<TermGpaHistoryDto>(`/advisor/students/${studentId}/term-gpa`).then(r => r.data);

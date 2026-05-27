@@ -48,6 +48,22 @@ public class RegistrationController : ControllerBase
     }
 
     /// <summary>
+    /// POST api/registration/ensure-failed-courses — başarısız (alttan) dersleri uygun şubeyle
+    /// öğrencinin planına otomatik ekler. Ders kayıt ekranı açılırken çağrılır. Idempotent.
+    /// </summary>
+    [HttpPost("ensure-failed-courses")]
+    [RequirePermission("menu.ders-kayit.plan")]
+    public async Task<IActionResult> EnsureFailedCourses()
+    {
+        var studentId = await GetStudentIdAsync();
+        if (studentId == null)
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+
+        var result = await _registrationService.EnsureFailedCoursesInPlanAsync(studentId.Value);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// POST api/registration/submit — submit the registration (validate and finalize).
     /// </summary>
     [HttpPost("submit")]

@@ -16,6 +16,19 @@ export async function addToPlan(courseSectionId: number): Promise<RegistrationRe
   }
 }
 
+/**
+ * Başarısız (alttan) dersleri uygun şubeyle plana otomatik ekler (idempotent).
+ * Ders kayıt ekranı açılırken çağrılır.
+ */
+export async function ensureFailedCourses(): Promise<RegistrationResponseDto> {
+  try {
+    const response = await apiClient.post<RegistrationResponseDto>('/registrations/ensure-failed-courses');
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Alttan dersler plana eklenirken hata olustu.');
+  }
+}
+
 export async function submitRegistration(courseSectionIds: number[]): Promise<RegistrationResponseDto> {
   try {
     const response = await apiClient.post<RegistrationResponseDto>('/registrations/submit', { courseSectionIds });

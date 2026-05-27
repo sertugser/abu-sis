@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,8 @@ import {
 } from '@/components/ui/dialog';
 import { formatDate, cn } from '../lib/utils';
 import { classYearOptions } from '../lib/academicYear';
+import { QUERY_KEYS } from '../lib/constants';
+import { ensureFailedCourses } from '../api/registration.api';
 import { ApiError } from '../lib/apiError';
 import type { ValidationError } from '../types/registration';
 import {
@@ -59,6 +62,23 @@ export default function CourseCatalogPage() {
   const addToPlan = useAddToPlan();
   const dropCourse = useDropCourse();
   const submitRegistration = useSubmitRegistration();
+  const queryClient = useQueryClient();
+
+  // Ders kayıt ekranı açılınca: başarısız (alttan) dersleri uygun şubeyle plana otomatik ekle.
+  // Idempotent + kayıt penceresi kapalıysa backend sessizce atlar. Bir kez çalışır.
+  const ensuredFailedRef = useRef(false);
+  useEffect(() => {
+    if (ensuredFailedRef.current) return;
+    ensuredFailedRef.current = true;
+    ensureFailedCourses()
+      .then(res => {
+        if ((res.registrations?.length ?? 0) > 0) {
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.myRegistrations });
+        }
+      })
+      .catch(() => { /* sessiz — kayıt kapalıysa veya uygun şube yoksa eklemez */ });
+  }, [queryClient]);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [validationWarnings, setValidationWarnings] = useState<ValidationError[]>([]);
   const [submitSuccess, setSubmitSuccess] = useState(false);

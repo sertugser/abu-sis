@@ -9,10 +9,21 @@ import type { AdvisorStudent } from '../api/advisor.api';
 import AdvisorStudentDetailModal from '../components/advisor/AdvisorStudentDetailModal';
 import { PLAN_STATUS_LABELS, PLAN_STATUS_VARIANTS } from '../components/advisor/planStatus';
 
-type TabKey = 'pending' | 'approved' | 'all';
+type TabKey = 'pending' | 'approved' | 'draft' | 'none' | 'all';
 
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]?.toLocaleUpperCase('tr')).join('');
+}
+
+// Proliz renk kodu: kırmızı = kesinleştirdi/onaysız (Submitted), yeşil = onaylı (Approved),
+// gri = reddedildi, renksiz = kayıt yok / taslak.
+function statusAccent(planStatus: string): string {
+  switch (planStatus) {
+    case 'Submitted': return 'border-l-4 border-l-red-500';
+    case 'Approved': return 'border-l-4 border-l-emerald-500';
+    case 'Rejected': return 'border-l-4 border-l-muted-foreground/40';
+    default: return 'border-l-4 border-l-transparent';
+  }
 }
 
 function StudentRow({ student, onClick }: { student: AdvisorStudent; onClick: () => void }) {
@@ -20,7 +31,7 @@ function StudentRow({ student, onClick }: { student: AdvisorStudent; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={`flex w-full items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${statusAccent(student.planStatus)}`}
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
         {initials(student.studentName)}
@@ -55,6 +66,10 @@ export default function CourseRegistrationEditPage() {
   const counts = useMemo(() => ({
     pending: students.filter(s => s.planStatus === 'Submitted').length,
     approved: students.filter(s => s.planStatus === 'Approved').length,
+    // Kesinleştirmeyen = plana başlamış ama göndermemiş (Draft).
+    draft: students.filter(s => s.planStatus === 'Draft').length,
+    // Kayıt yapmayan = hiç planı yok (None) veya reddedilmiş (Rejected).
+    none: students.filter(s => s.planStatus === 'None' || s.planStatus === 'Rejected').length,
     all: students.length,
   }), [students]);
 
@@ -62,6 +77,8 @@ export default function CourseRegistrationEditPage() {
     let list = students;
     if (tab === 'pending') list = list.filter(s => s.planStatus === 'Submitted');
     else if (tab === 'approved') list = list.filter(s => s.planStatus === 'Approved');
+    else if (tab === 'draft') list = list.filter(s => s.planStatus === 'Draft');
+    else if (tab === 'none') list = list.filter(s => s.planStatus === 'None' || s.planStatus === 'Rejected');
     const q = search.trim().toLocaleLowerCase('tr');
     if (q) list = list.filter(s =>
       s.studentName.toLocaleLowerCase('tr').includes(q) || s.studentNumber.includes(q),
@@ -73,7 +90,11 @@ export default function CourseRegistrationEditPage() {
     ? 'Onay bekleyen öğrenci yok.'
     : tab === 'approved'
       ? 'Onaylanmış plan yok.'
-      : search ? 'Eşleşen öğrenci yok.' : 'Danışmanlık öğrenciniz bulunmuyor.';
+      : tab === 'draft'
+        ? 'Kaydını kesinleştirmeyen öğrenci yok.'
+        : tab === 'none'
+          ? 'Ders kaydı yapmayan öğrenci yok.'
+          : search ? 'Eşleşen öğrenci yok.' : 'Danışmanlık öğrenciniz bulunmuyor.';
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -83,10 +104,21 @@ export default function CourseRegistrationEditPage() {
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
             <TabsList>
               <TabsTrigger value="pending" className="gap-1.5">
-                Bekleyen
+                Onay Bekleyen
                 {counts.pending > 0 && <Badge variant="warning" className="px-1 py-0 text-[10px]">{counts.pending}</Badge>}
               </TabsTrigger>
-              <TabsTrigger value="approved">Onaylanan</TabsTrigger>
+              <TabsTrigger value="approved" className="gap-1.5">
+                Onaylanan
+                {counts.approved > 0 && <Badge variant="success" className="px-1 py-0 text-[10px]">{counts.approved}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="draft" className="gap-1.5">
+                Kesinleştirmeyen
+                {counts.draft > 0 && <Badge variant="secondary" className="px-1 py-0 text-[10px]">{counts.draft}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="none" className="gap-1.5">
+                Kayıt Yapmayan
+                {counts.none > 0 && <Badge variant="secondary" className="px-1 py-0 text-[10px]">{counts.none}</Badge>}
+              </TabsTrigger>
               <TabsTrigger value="all" className="gap-1.5">
                 Tümü
                 <Badge variant="secondary" className="px-1 py-0 text-[10px]">{counts.all}</Badge>

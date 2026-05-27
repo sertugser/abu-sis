@@ -19,3 +19,15 @@ export function formatDate(dateStr: string): string {
     year: 'numeric',
   });
 }
+
+/** Tarih + saat (Proliz "30.09.2020 00:18:03" formatına yakın). */
+export function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

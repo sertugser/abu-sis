@@ -289,6 +289,35 @@ public partial class CourseRegistrationService
                 && cr.Status == RegistrationStatus.PendingAdvisorApproval)
             .ToListAsync();
 
+        // "Kontrol Et ve Onayla": onaydan önce akademik kontrol (önkoşul, ECTS limiti, çakışma,
+        // alttan ders vb.). Hata varsa onay YAPILMAZ — danışman önce dersi düzeltir.
+        // Kapı kontrolleri (durum/finansal/dönem) onay akışında ayrıca yapıldığı için atlanır.
+        ValidationResultDto? validation = null;
+        if (registrations.Count > 0)
+        {
+            var sectionIdsToValidate = await _context.CourseRegistrations
+                .Where(cr => cr.StudentId == dto.StudentId
+                    && cr.CourseSection.TermId == activeTerm.Id
+                    && (cr.Status == RegistrationStatus.Active
+                        || cr.Status == RegistrationStatus.PendingAdvisorApproval))
+                .Select(cr => cr.CourseSectionId)
+                .ToListAsync();
+
+            validation = await _validationService.ValidateRegistrationAsync(
+                dto.StudentId, sectionIdsToValidate, skipGateChecks: true);
+
+            if (!validation.IsValid)
+            {
+                return new ApprovalResponseDto
+                {
+                    Success = false,
+                    Message = "Kontrol başarısız — önce işaretli sorunları giderin, sonra tekrar onaylayın.",
+                    AffectedRegistrations = 0,
+                    ValidationResult = validation
+                };
+            }
+        }
+
         foreach (var reg in registrations)
         {
             reg.Status = RegistrationStatus.Active;
@@ -323,7 +352,8 @@ public partial class CourseRegistrationService
         {
             Success = true,
             Message = $"{registrations.Count} kayit onaylandi.",
-            AffectedRegistrations = registrations.Count
+            AffectedRegistrations = registrations.Count,
+            ValidationResult = validation // uyarılar (varsa) bilgilendirme amaçlı taşınır
         };
     }
 

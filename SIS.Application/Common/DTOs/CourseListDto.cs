@@ -39,6 +39,8 @@ public class StudentCourseDto
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int Ects { get; set; }
+    /// <summary>Ulusal/yerel kredi (Proliz aday grid "KRD" kolonu).</summary>
+    public int NationalCredit { get; set; }
     public int TheoryHours { get; set; }
     public int LabHours { get; set; }
     public bool IsCompulsory { get; set; }
