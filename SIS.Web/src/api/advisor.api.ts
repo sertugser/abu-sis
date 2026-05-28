@@ -4,6 +4,8 @@ import type { CourseHistoryTermDto } from '../types/registration';
 import type { CurriculumStatusDto } from '../types/curriculum';
 import type { StudentTranscriptDto } from '../types/transcript';
 import type { TermGpaHistoryDto } from '../types/student';
+import type { StudentRegistrationCatalog } from '../types/registrationCatalog';
+import { toApiError } from '../lib/apiError';
 
 export interface PendingApproval {
   studentId: number;
@@ -161,3 +163,14 @@ export const getAdvisorStudentTranscript = (studentId: number) =>
 
 export const getAdvisorStudentTermGpa = (studentId: number) =>
   apiClient.get<TermGpaHistoryDto>(`/advisor/students/${studentId}/term-gpa`).then(r => r.data);
+
+// ── Danışman → öğrenci adına kayıt kataloğu (Faz 2 B6) ───────────────────────
+
+export async function getAdvisorRegistrationCatalog(studentId: number): Promise<StudentRegistrationCatalog> {
+  try {
+    const r = await apiClient.get<StudentRegistrationCatalog>(`/course/registration-catalog/${studentId}`);
+    return r.data;
+  } catch (error) {
+    throw toApiError(error, 'Öğrenci kataloğu yüklenemedi.');
+  }
+}
