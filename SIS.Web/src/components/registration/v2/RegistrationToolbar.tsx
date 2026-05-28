@@ -10,9 +10,9 @@ interface RegistrationToolbarProps {
 
 export function RegistrationToolbar({ onDownloadPdf, pdfLoading }: RegistrationToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 py-2">
+    <div className="border-b border-border/40 bg-muted/20 px-3 py-1.5 flex flex-wrap items-center gap-1">
       {IMPLEMENTED_ROUTES.has(ROUTES.INSTRUCTOR_SCHEDULING) && (
-        <Button asChild size="sm" variant="secondary">
+        <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1.5">
           <Link to={ROUTES.INSTRUCTOR_SCHEDULING}>
             <CalendarDays className="h-3.5 w-3.5" />
             Ders Programı
@@ -21,7 +21,7 @@ export function RegistrationToolbar({ onDownloadPdf, pdfLoading }: RegistrationT
       )}
 
       {IMPLEMENTED_ROUTES.has(ROUTES.MUFREDAT_DURUM) && (
-        <Button asChild size="sm" variant="secondary">
+        <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1.5">
           <Link to={ROUTES.MUFREDAT_DURUM}>
             <BookOpen className="h-3.5 w-3.5" />
             Müfredat Durumu
@@ -30,7 +30,7 @@ export function RegistrationToolbar({ onDownloadPdf, pdfLoading }: RegistrationT
       )}
 
       {IMPLEMENTED_ROUTES.has(ROUTES.ALINAN_DERSLER) && (
-        <Button asChild size="sm" variant="secondary">
+        <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1.5">
           <Link to={ROUTES.ALINAN_DERSLER}>
             <History className="h-3.5 w-3.5" />
             Ders Kaydı Geçmişi
@@ -40,9 +40,10 @@ export function RegistrationToolbar({ onDownloadPdf, pdfLoading }: RegistrationT
 
       <Button
         size="sm"
-        variant="secondary"
+        variant="ghost"
         onClick={onDownloadPdf}
         disabled={pdfLoading}
+        className="h-7 text-xs gap-1.5"
       >
         {pdfLoading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

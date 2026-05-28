@@ -20,44 +20,42 @@ export function RegistrationSummaryBar({
   const progressValue = Math.min(100, (totalEcts / Math.max(1, ectsLimit)) * 100);
 
   return (
-    <div className="border-t bg-muted/30 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <span className="text-sm">
-          <span className="text-muted-foreground">Toplam Kredi: </span>
-          <strong className="tabular-nums">{totalCredit}</strong>
-        </span>
+    <div className="bg-muted/40 border-t border-border/40 px-4 py-2 flex flex-wrap items-center gap-6 text-sm">
+      <span>
+        <span className="text-muted-foreground text-xs">Toplam Kredi: </span>
+        <strong className="tabular-nums text-xs">{totalCredit}</strong>
+      </span>
 
-        <span className="text-sm">
-          <span className="text-muted-foreground">AKTS: </span>
-          <strong
-            className={cn(
-              'tabular-nums',
-              isOver && 'text-destructive font-bold',
-            )}
-          >
-            {totalEcts} / {ectsLimit}
-          </strong>
-        </span>
-
-        <span className="text-sm">
-          <span className="text-muted-foreground">Saat: </span>
-          <strong className="tabular-nums">{totalHours}</strong>
-        </span>
-
-        <span className="text-sm">
-          <span className="text-muted-foreground">Ders Sayısı: </span>
-          <strong className="tabular-nums">{courseCount}</strong>
-        </span>
-
-        <Progress
-          value={progressValue}
-          className="h-1.5 w-32"
-          indicatorClassName={cn(
-            'bg-primary',
-            isOver && 'bg-destructive',
+      <span>
+        <span className="text-muted-foreground text-xs">AKTS: </span>
+        <strong
+          className={cn(
+            'tabular-nums text-xs',
+            isOver && 'text-destructive font-bold',
           )}
-        />
-      </div>
+        >
+          {totalEcts} / {ectsLimit}
+        </strong>
+      </span>
+
+      <span>
+        <span className="text-muted-foreground text-xs">Saat: </span>
+        <strong className="tabular-nums text-xs">{totalHours}</strong>
+      </span>
+
+      <span>
+        <span className="text-muted-foreground text-xs">Ders Sayısı: </span>
+        <strong className="tabular-nums text-xs">{courseCount}</strong>
+      </span>
+
+      <Progress
+        value={progressValue}
+        className="h-1.5 w-24"
+        indicatorClassName={cn(
+          'bg-primary',
+          isOver && 'bg-destructive',
+        )}
+      />
     </div>
   );
 }

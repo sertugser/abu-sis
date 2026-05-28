@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table, TableBody, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -50,11 +49,9 @@ export function CurriculumCourseGrid({
 }: Props) {
   if (classYearData == null) {
     return (
-      <Card className="border-border/70 shadow-none">
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Sınıf seçin.
-        </CardContent>
-      </Card>
+      <div className="px-4 py-8 text-center text-xs text-muted-foreground border-b border-border/40">
+        Sınıf seçin.
+      </div>
     );
   }
 
@@ -62,11 +59,9 @@ export function CurriculumCourseGrid({
 
   if (visibleSemesters.length === 0) {
     return (
-      <Card className="border-border/70 shadow-none">
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Bu dönemde ders bulunmuyor.
-        </CardContent>
-      </Card>
+      <div className="px-4 py-8 text-center text-xs text-muted-foreground border-b border-border/40">
+        Bu dönemde ders bulunmuyor.
+      </div>
     );
   }
 
@@ -74,37 +69,35 @@ export function CurriculumCourseGrid({
   const sorted = [...visibleSemesters].sort((a, b) => a.semesterNumber - b.semesterNumber);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div>
       {sorted.map(semester => {
         const courses = sortCourses(semester.courses);
 
         return (
-          <Card
+          <div
             key={`${semester.parity}-${semester.semesterNumber}`}
-            className="overflow-hidden border-border/70 shadow-none"
+            className="border-b border-border/40"
           >
-            <CardHeader className="pb-2 px-4 pt-3">
-              <CardTitle className="text-sm font-semibold">
-                {semesterLabel(semester)}
-              </CardTitle>
-            </CardHeader>
+            <h3 className="text-xs font-semibold uppercase tracking-wide bg-muted/40 px-3 py-1.5 text-muted-foreground">
+              {semesterLabel(semester)}
+            </h3>
 
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-10 py-2 px-2 text-xs" />
-                  <TableHead className="w-28 py-2 px-2 text-xs">Ders Kodu</TableHead>
-                  <TableHead className="py-2 px-2 text-xs">Ders Adı</TableHead>
-                  <TableHead className="w-12 py-2 px-2 text-center text-xs">Z/S</TableHead>
-                  <TableHead className="w-12 py-2 px-2 text-center text-xs">KRD</TableHead>
-                  <TableHead className="w-14 py-2 px-2 text-center text-xs">AKTS</TableHead>
-                  <TableHead className="hidden md:table-cell w-14 py-2 px-2 text-center text-xs">
+                <TableRow className="bg-muted/20 hover:bg-muted/20">
+                  <TableHead className="w-10 py-1 px-2 text-xs" />
+                  <TableHead className="w-28 py-1 px-2 text-xs">Ders Kodu</TableHead>
+                  <TableHead className="py-1 px-2 text-xs">Ders Adı</TableHead>
+                  <TableHead className="w-12 py-1 px-2 text-center text-xs">Z/S</TableHead>
+                  <TableHead className="w-12 py-1 px-2 text-center text-xs">KRD</TableHead>
+                  <TableHead className="w-14 py-1 px-2 text-center text-xs">AKTS</TableHead>
+                  <TableHead className="hidden md:table-cell w-14 py-1 px-2 text-center text-xs">
                     Sınıf
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell py-2 px-2 text-xs">
+                  <TableHead className="hidden lg:table-cell py-1 px-2 text-xs">
                     Önceki Tekrar Durumu
                   </TableHead>
-                  <TableHead className="w-32 py-2 px-2 text-center text-xs">
+                  <TableHead className="w-32 py-1 px-2 text-center text-xs">
                     Aktif Kayıt Durumu
                   </TableHead>
                 </TableRow>
@@ -120,7 +113,7 @@ export function CurriculumCourseGrid({
                 ))}
               </TableBody>
             </Table>
-          </Card>
+          </div>
         );
       })}
     </div>

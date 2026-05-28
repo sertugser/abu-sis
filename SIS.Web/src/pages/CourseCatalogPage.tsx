@@ -63,10 +63,11 @@ export default function CourseCatalogPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 w-full rounded-md" />
-        <Skeleton className="h-10 w-full rounded-md" />
-        <Skeleton className="h-64 w-full rounded-md" />
+      <div className="space-y-2">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
@@ -234,8 +235,8 @@ export default function CourseCatalogPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-3">
-      {topBanner}
+    <div className="bg-background">
+      {topBanner && <div className="px-4 py-2">{topBanner}</div>}
 
       <RegistrationHeaderBar student={student} />
 
@@ -243,6 +244,22 @@ export default function CourseCatalogPage() {
         onDownloadPdf={() => pdf.mutate()}
         pdfLoading={pdf.isPending}
       />
+
+      {/* Inline alerts — below toolbar, above curriculum */}
+      {submitSuccess && (
+        <div className="px-4 py-2">
+          <Alert variant="success">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+        <div className="px-4 py-2">
+          <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
+        </div>
+      )}
 
       <SemesterClassTabs
         classYears={classYearList}
@@ -252,74 +269,56 @@ export default function CourseCatalogPage() {
         onParityChange={setParity}
       />
 
-      {/* 2-column responsive layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
-        {/* Left: curriculum grid + retake panel */}
-        <div className="space-y-3">
-          <CurriculumCourseGrid
-            classYearData={selectedYearData}
-            parityFilter={parity}
-            onPickSection={setPickerCourse}
-            registrationActionsOpen={registrationActionsOpen}
-          />
+      <CurriculumCourseGrid
+        classYearData={selectedYearData}
+        parityFilter={parity}
+        onPickSection={setPickerCourse}
+        registrationActionsOpen={registrationActionsOpen}
+      />
 
-          {retakeCourses.length > 0 && (
-            <RetakeCoursesPanel
-              retakeCourses={retakeCourses}
-              onCheck={() =>
-                validate.mutate(selectedCourses.map((s) => s.courseSectionId))
-              }
-              checkLoading={validate.isPending}
-              validationSummary={validationSummary}
-            />
-          )}
-        </div>
-
-        {/* Right sticky panel */}
-        <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-          <RegistrationStatusLine selectedCourses={selectedCourses} />
-
-          <SelectedCoursesGrid
-            selectedCourses={selectedCourses}
-            registrationActionsOpen={registrationActionsOpen}
-          />
-
-          <RegistrationSummaryBar
-            totalCredit={totalCredit}
-            totalEcts={totalEcts}
-            ectsLimit={student.ectsLimit}
-            totalHours={totalHours}
-            courseCount={courseCount}
-          />
-
-          {planItems.length > 0 && (
-            <Button
-              className="w-full gap-2"
-              size="lg"
-              disabled={submit.isPending || !registrationActionsOpen}
-              onClick={handleSubmit}
-            >
-              {submit.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              Kaydı Kesinleştir
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Inline validation result */}
-      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-        <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
+      {retakeCourses.length > 0 && (
+        <RetakeCoursesPanel
+          retakeCourses={retakeCourses}
+          onCheck={() =>
+            validate.mutate(selectedCourses.map((s) => s.courseSectionId))
+          }
+          checkLoading={validate.isPending}
+          validationSummary={validationSummary}
+        />
       )}
 
-      {submitSuccess && (
-        <Alert variant="success">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
-        </Alert>
+      <RegistrationStatusLine selectedCourses={selectedCourses} />
+
+      <SelectedCoursesGrid
+        selectedCourses={selectedCourses}
+        registrationActionsOpen={registrationActionsOpen}
+      />
+
+      <RegistrationSummaryBar
+        totalCredit={totalCredit}
+        totalEcts={totalEcts}
+        ectsLimit={student.ectsLimit}
+        totalHours={totalHours}
+        courseCount={courseCount}
+      />
+
+      {/* Bottom action bar */}
+      {planItems.length > 0 && (
+        <div className="border-t border-border/40 bg-muted/20 px-4 py-2 flex justify-end">
+          <Button
+            onClick={handleSubmit}
+            disabled={submit.isPending || !registrationActionsOpen}
+            className="gap-2"
+            size="sm"
+          >
+            {submit.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            Kaydı Kesinleştir
+          </Button>
+        </div>
       )}
 
       {/* Section picker dialog */}

@@ -1,7 +1,6 @@
-import { Loader2, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CatalogCourseRow } from '../../../types/registrationCatalog';
 
 interface Props {
@@ -26,59 +25,44 @@ export default function RetakeCoursesPanel({
           ? 'warning'
           : 'success';
 
+  const courseList = retakeCourses
+    .map(c => c.code)
+    .join(' · ');
+
   return (
-    <Card className="border-destructive/40 bg-destructive/5">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <RotateCcw className="h-4 w-4 text-destructive" />
-            <CardTitle className="text-sm text-destructive">
-              Tekrar Edilmesi Gereken Dersler
-            </CardTitle>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onCheck}
-            disabled={checkLoading}
-          >
-            {checkLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="h-4 w-4" />
-            )}
-            Kontrol Et
-          </Button>
+    <div>
+      <div className="bg-destructive/5 border-y border-destructive/30 px-3 py-2 flex items-center justify-between gap-4">
+        <div className="text-xs min-w-0">
+          <span className="font-semibold text-destructive">Tekrar Edilmesi Gereken Dersler: </span>
+          {retakeCourses.length === 0 ? (
+            <span className="text-muted-foreground">Yok</span>
+          ) : (
+            <span className="font-mono text-foreground">{courseList}</span>
+          )}
         </div>
-      </CardHeader>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCheck}
+          disabled={checkLoading}
+          className="flex-shrink-0 gap-1"
+        >
+          {checkLoading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ShieldCheck className="h-3.5 w-3.5" />
+          )}
+          Kontrol Et
+        </Button>
+      </div>
 
-      <CardContent className="space-y-3">
-        {retakeCourses.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Tekrar alınması gereken ders yok.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {retakeCourses.map(course => (
-              <li key={course.courseId} className="font-mono text-xs text-foreground">
-                {course.code} {course.name}
-                {' '}
-                <span className="text-muted-foreground">
-                  ({course.previousAttemptInfo ?? '—'})
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {validationSummary != null && alertVariant != null && (
-          <Alert variant={alertVariant}>
-            <AlertDescription>
-              {validationSummary.errorCount} hata · {validationSummary.warningCount} uyarı
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+      {validationSummary != null && alertVariant != null && (
+        <Alert variant={alertVariant} className="rounded-none border-x-0 border-t-0">
+          <AlertDescription>
+            {validationSummary.errorCount} hata · {validationSummary.warningCount} uyarı
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }

@@ -10,14 +10,14 @@ export default function RegistrationStatusLine({ selectedCourses }: Props) {
   const view = computeRegistrationStatus(selectedCourses);
 
   return (
-    <div className="flex flex-wrap items-center gap-4 py-2 text-sm">
+    <div className="bg-muted/30 border-y border-border/40 px-4 py-1.5 flex flex-wrap items-center gap-4 text-xs">
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground">Öğrenci Kesinleştirme Durumu:</span>
-        <Badge variant={view.finalizationVariant}>{view.finalizationLabel}</Badge>
+        <Badge variant={view.finalizationVariant} className="text-[10px] px-1.5 py-0">{view.finalizationLabel}</Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground">Danışman Onay Durumu:</span>
-        <Badge variant={view.advisorVariant}>{view.advisorLabel}</Badge>
+        <Badge variant={view.advisorVariant} className="text-[10px] px-1.5 py-0">{view.advisorLabel}</Badge>
       </div>
     </div>
   );
