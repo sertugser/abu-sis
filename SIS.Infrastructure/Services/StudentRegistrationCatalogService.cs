@@ -257,7 +257,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
     /// Builds the curriculum tree: classYear → semester(Guz/Bahar) → course rows.
     /// Also returns failedCourseIds, compulsoryMap and curriculumPools for reuse in BuildAsync.
     /// Ported from CourseController.BuildStudentCatalogAsync lines 221-492.
-    /// HasOpenSections is always false here (filled in task B5).
+    /// HasOpenSections is computed via IRegistrationGate per-section (single batch load).
     /// </summary>
     private async Task<BuildClassYearsResult> BuildClassYearsAsync(
         StudentEntity student,
@@ -407,6 +407,23 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                     activeRegCourseIds.Add(cid);
         }
 
+        // ── Step 5b: HasOpenSections — load active-term sections once, then gate each ─
+        // Single batch load (no N+1). Gate call per section is acceptable: section count is
+        // bounded by curriculum size within one active term.
+        var curriculumCourseIds = curriculumCourses.Select(cc => cc.CourseId).ToList();
+        var activeSections = await _context.CourseSections
+            .Include(cs => cs.Course)
+            .Where(cs => cs.TermId == term.Id && curriculumCourseIds.Contains(cs.CourseId))
+            .ToListAsync(ct);
+
+        var coursesWithOpenSection = new HashSet<int>();
+        foreach (var section in activeSections)
+        {
+            var gateResult = await _registrationGate.EvaluateSectionAsync(section, ct);
+            if (gateResult.IsOpen)
+                coursesWithOpenSection.Add(section.CourseId);
+        }
+
         // ── Step 6: Build course rows ─────────────────────────────────────
         // Single construction path — rows are shared by the tree AND RetakeCourses.
         var rows = new List<CatalogRowBuild>();
@@ -497,7 +514,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                 PrerequisitesMet:      prereqsMet,
                 PreviousAttemptInfo:   previousAttemptInfo,
                 ActiveRegistrationStatus: activeRegStatus,
-                HasOpenSections:       false, // B5
+                HasOpenSections:       coursesWithOpenSection.Contains(cid),
                 ApplicablePoolSlots:   poolSlots);
 
             rows.Add(new CatalogRowBuild(

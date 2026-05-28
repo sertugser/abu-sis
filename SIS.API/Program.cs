@@ -236,6 +236,7 @@ builder.Services.AddScoped<SIS.Application.Curriculum.Services.ICourseStatistics
 builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IEctsLimitResolver, SIS.Infrastructure.Services.EctsLimitResolver>();
 builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IRegistrationGate, SIS.Infrastructure.Services.RegistrationGate>();
 builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IElectivePoolProgressCalculator, SIS.Infrastructure.Services.ElectivePoolProgressCalculator>();
+builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IStudentRegistrationCatalogService, SIS.Infrastructure.Services.StudentRegistrationCatalogService>();
 builder.Services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
 builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();

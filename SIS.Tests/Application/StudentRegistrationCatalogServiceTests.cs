@@ -460,4 +460,84 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         row.PreviousAttemptInfo.Should().NotBeNullOrEmpty()
             .And.Contain("FF");
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Test: HasOpenSections — true only when gate-open section exists
+    // ────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildAsync_HasOpenSections_TrueOnlyWhenGateOpenSectionExists()
+    {
+        // Arrange
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // Faculty 1 is already seeded (MF, FacultyId=1).
+        // Seed FacultyScheduleApproval so courseA's section passes the gate.
+        _context.Set<FacultyScheduleApproval>().Add(new FacultyScheduleApproval
+        {
+            Id = 1,
+            FacultyId = 1,
+            TermId = 10,
+            ApprovedByUserId = 100,
+            ApprovedAt = now,
+        });
+
+        // courseA: its section will be Active + faculty-approved + not suspended → gate-open
+        var courseA = new Course
+        {
+            Id = 70, Code = "C101", Name = "Course A", Ects = 5, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        // courseB: its section is Draft → gate-closed (Active check fails first)
+        var courseB = new Course
+        {
+            Id = 71, Code = "C201", Name = "Course B", Ects = 5, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        _context.Set<Course>().AddRange(courseA, courseB);
+
+        _context.Set<CurriculumCourse>().AddRange(
+            new CurriculumCourse { CurriculumId = 1, CourseId = 70, IsCompulsory = true, SuggestedSemester = 1 },
+            new CurriculumCourse { CurriculumId = 1, CourseId = 71, IsCompulsory = true, SuggestedSemester = 3 });
+
+        // Section for courseA: Active + not suspended → gate will approve (faculty approval seeded above)
+        var sectionA = new CourseSection
+        {
+            Id = 700, CourseId = 70, TermId = 10,
+            Capacity = 30, EnrolledCount = 0, SectionNumber = 1,
+            Status = CourseSectionStatus.Active,
+            IsEnrollmentSuspended = false,
+            CreatedAt = now,
+        };
+        // Section for courseB: Draft → gate will reject at the first check
+        var sectionB = new CourseSection
+        {
+            Id = 701, CourseId = 71, TermId = 10,
+            Capacity = 30, EnrolledCount = 0, SectionNumber = 1,
+            Status = CourseSectionStatus.Draft,
+            IsEnrollmentSuspended = false,
+            CreatedAt = now,
+        };
+        _context.Set<CourseSection>().AddRange(sectionA, sectionB);
+
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await BuildService().BuildAsync(student, sp);
+
+        // Assert — flatten all rows from the tree to find courseA and courseB
+        var allRows = result.ClassYears
+            .SelectMany(y => y.Semesters)
+            .SelectMany(s => s.Courses)
+            .ToList();
+
+        var rowA = allRows.Should().ContainSingle(r => r.CourseId == 70).Which;
+        var rowB = allRows.Should().ContainSingle(r => r.CourseId == 71).Which;
+
+        rowA.HasOpenSections.Should().BeTrue(
+            because: "courseA has an Active, non-suspended section in the approved faculty → gate-open");
+        rowB.HasOpenSections.Should().BeFalse(
+            because: "courseB's section is Draft → gate-closed");
+    }
 }
