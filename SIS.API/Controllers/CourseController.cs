@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
+using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -24,18 +25,21 @@ public class CourseController : ControllerBase
     private readonly IWebModuleControlService _webModuleControls;
     private readonly ISystemConfigProvider _systemConfig;
     private readonly IStudentRegistrationCatalogService _registrationCatalogService;
+    private readonly ISectionPickerService _sectionPickerService;
 
     public CourseController(
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider systemConfig,
         IStudentRegistrationCatalogService registrationCatalogService,
+        ISectionPickerService sectionPickerService,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _clock = clock;
         _systemConfig = systemConfig;
         _registrationCatalogService = registrationCatalogService;
+        _sectionPickerService = sectionPickerService;
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -564,6 +568,31 @@ public class CourseController : ControllerBase
             .ThenBy(c => c.Code)
             .ToList();
 
+        return Ok(result);
+    }
+
+    /// <summary>GET api/course/{courseId}/sections — "+"a basınca açılan filtreli/sayfalı şube listesi.</summary>
+    [HttpGet("{courseId:int}/sections")]
+    [RequirePermission("menu.ders-kayit.view")]
+    public async Task<IActionResult> GetCourseSections(
+        int courseId,
+        [FromQuery] int? instructorId, [FromQuery] int? facultyId, [FromQuery] int? programId,
+        [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
+
+        var student = await _context.Students
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (student == null)
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+
+        var result = await _sectionPickerService.QueryAsync(
+            student.Id,
+            new SectionPickerQuery(courseId, instructorId, facultyId, programId, q, page, pageSize),
+            ct);
         return Ok(result);
     }
 

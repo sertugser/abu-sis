@@ -223,6 +223,40 @@ public class SectionPickerServiceTests
         result.Items[0].SectionId.Should().Be(1);
     }
 
+    // ── Test: Clamp invalid paging inputs ────────────────────────────────
+
+    [Fact]
+    public async Task QueryAsync_ClampsInvalidPaging()
+    {
+        using var ctx = CreateContext();
+        SeedActiveTerm(ctx);
+        SeedCourse(ctx);
+        SeedFacultyApproval(ctx);
+
+        // Seed one section so Items count is verifiable
+        ctx.CourseSections.Add(new CourseSection
+        {
+            Id = 1, CourseId = 10, TermId = 1, SectionNumber = 1,
+            Status = CourseSectionStatus.Active, IsEnrollmentSuspended = false,
+            InstructorId = null, Capacity = 30, EnrolledCount = 0,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await ctx.SaveChangesAsync();
+
+        var service = new SectionPickerService(ctx, new RegistrationGate(ctx), new FakeSystemConfigProvider());
+
+        // Page=0, PageSize=0 — both invalid; service must not throw and must clamp
+        var result = await service.QueryAsync(
+            studentId: 1,
+            new SectionPickerQuery(10, null, null, null, null, Page: 0, PageSize: 0));
+
+        result.Page.Should().BeGreaterThanOrEqualTo(1);
+        result.PageSize.Should().BeGreaterThanOrEqualTo(1);
+        result.Items.Count.Should().Be(result.TotalCount); // single page covers all items
+        result.TotalCount.Should().Be(1);
+    }
+
     // ── Test 3: Pagination ────────────────────────────────────────────────
 
     [Fact]

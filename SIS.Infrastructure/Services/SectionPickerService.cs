@@ -40,7 +40,11 @@ public sealed class SectionPickerService : ISectionPickerService
         if (activeTerm is null)
             return new SectionPickerResultDto([], 0, query.Page, query.PageSize);
 
-        // 2. Base query: sections for this course in the active term
+        // 2. Clamp paging inputs — prevents negative OFFSET (Page=0) and unbounded Take
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
+        // 3. Base query: sections for this course in the active term
         var baseQuery = _context.CourseSections
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
@@ -108,12 +112,12 @@ public sealed class SectionPickerService : ISectionPickerService
         // 5. Page
         var pagedSections = await baseQuery
             .OrderBy(cs => cs.SectionNumber)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
 
         if (pagedSections.Count == 0)
-            return new SectionPickerResultDto([], totalCount, query.Page, query.PageSize);
+            return new SectionPickerResultDto([], totalCount, page, pageSize);
 
         // 6. Load schedules in one query (no N+1)
         var sectionIds = pagedSections.Select(s => s.Id).ToList();
@@ -190,7 +194,7 @@ public sealed class SectionPickerService : ISectionPickerService
             items.Add(row);
         }
 
-        return new SectionPickerResultDto(items, totalCount, query.Page, query.PageSize);
+        return new SectionPickerResultDto(items, totalCount, page, pageSize);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
