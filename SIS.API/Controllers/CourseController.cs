@@ -723,8 +723,6 @@ public class CourseController : ControllerBase
         var addDropControlCode = await ResolveAddDropControlCodeForCurrentUserAsync();
         var registrationControl = await GetStudentRegistrationControlAsync(term.Id, registrationControlCode);
         var addDropControl = await GetStudentRegistrationControlAsync(term.Id, addDropControlCode);
-        var freezeControl = await GetStudentRegistrationControlAsync(term.Id, "registration-freeze-application");
-        var freezeEnabled = await _systemConfig.GetBoolAsync("Application.RegistrationFreezeApplicationEnabled", true);
 
         var dto = new ActiveTermDto
         {
@@ -740,13 +738,7 @@ public class CourseController : ControllerBase
             IsAddDropOpen = addDropControl.IsOpen,
             Status = term.GetStatus(_clock.UtcNow).ToString(),
             HasAcademicCalendar = term.AcademicCalendar != null,
-            StudentRegistrationEnabled = registrationControl.IsEnabled,
-            StudentRegistrationOpenAt = null,
             StudentRegistrationMessage = registrationControl.Message,
-            IsFreezeApplicationOpen = freezeEnabled && freezeControl.IsOpen,
-            StudentFreezeApplicationMessage = freezeEnabled
-                ? freezeControl.Message
-                : "Kayıt dondurma başvurusu sistem konfigürasyonunda kapalı."
         };
 
         return Ok(dto);
