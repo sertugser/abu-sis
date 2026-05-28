@@ -475,7 +475,7 @@ public partial class CourseRegistrationService
                 NotificationType.RegistrationRejected,
                 "Ders kaydınız reddedildi",
                 $"{registrations.Count} ders kaydınız danışmanınız tarafından reddedildi.{rejectReason}",
-                link: "/plan",
+                link: "/ders-kayit",
                 severity: NotificationSeverity.Warning,
                 entityRef: $"student:{student.Id}");
         }
