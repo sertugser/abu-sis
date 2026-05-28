@@ -170,6 +170,8 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
         // 12. SelectedCourses — current-term registrations (Draft/PendingAdvisorApproval/Active/Rejected).
         //     Dropped and Withdrawn are excluded (rule #24).
         var poolGroupCodeByPoolId = curriculumPools.ToDictionary(p => p.Id, p => p.ElectiveGroup.Code);
+        // SuggestedSemester lookup from already-loaded curriculum courses (no extra DB round-trip).
+        var sugSemesterByCourseId = allCurriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.SuggestedSemester);
 
         var currentTermRegs = await _context.CourseRegistrations
             .Include(cr => cr.CourseSection)
@@ -189,10 +191,8 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             var course = cr.CourseSection.Course;
             var cid = course.Id;
             var isCompulsory = compulsoryMap.TryGetValue(cid, out var comp) && comp;
-            var sugSemester = 0; // not readily available without curriculum lookup
-            // Derive SuggestedSemester from curriculum if present; else 0
-            // (we can reuse the already-loaded curriculum data via the return from BuildClassYearsAsync)
-            var ects = cr.EctsSnapshot ?? course.Ects;
+            var sugSemester = sugSemesterByCourseId.GetValueOrDefault(cid, 0);
+            var ects = cr.EctsSnapshot ?? course.Ects; // snapshot-first (#22)
             string? electiveGroupCode = cr.AppliedElectivePoolId.HasValue
                 && poolGroupCodeByPoolId.TryGetValue(cr.AppliedElectivePoolId.Value, out var egCode)
                 ? egCode
