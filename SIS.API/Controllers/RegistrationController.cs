@@ -17,15 +17,18 @@ public class RegistrationController : ControllerBase
 {
     private readonly ICourseRegistrationService _registrationService;
     private readonly ICourseHistoryPdfService _courseHistoryPdfService;
+    private readonly IRegistrationValidationService _validationService;
     private readonly AppDbContext _context;
 
     public RegistrationController(
         ICourseRegistrationService registrationService,
         ICourseHistoryPdfService courseHistoryPdfService,
+        IRegistrationValidationService validationService,
         AppDbContext context)
     {
         _registrationService = registrationService;
         _courseHistoryPdfService = courseHistoryPdfService;
+        _validationService = validationService;
         _context = context;
     }
 
@@ -79,6 +82,18 @@ public class RegistrationController : ControllerBase
             return BadRequest(result);
 
         return Ok(result);
+    }
+
+    /// <summary>POST api/registrations/validate — read-only "Kontrol Et"; doğrular, mutasyon yapmaz.</summary>
+    [HttpPost("validate")]
+    [RequirePermission("menu.ders-kayit.plan")]
+    public async Task<IActionResult> Validate([FromBody] RegistrationSubmitDto dto)
+    {
+        var studentId = await GetStudentIdAsync();
+        if (studentId == null)
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+        var result = await _validationService.ValidateRegistrationAsync(studentId.Value, dto.CourseSectionIds);
+        return Ok(result); // always 200; IsValid + Errors/Warnings in body; no mutation
     }
 
     /// <summary>
