@@ -7,8 +7,10 @@ export function useSubmitRegistration() {
   return useMutation({
     mutationFn: (courseSectionIds: number[]) => submitRegistration(courseSectionIds),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentRegistrationCatalog });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.studentCatalog });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.myRegistrations });
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      queryClient.invalidateQueries({ queryKey: ['courseHistory'] });
     },
   });
 }
