@@ -1,21 +1,11 @@
 import apiClient from './axios';
-import { toApiError } from '../lib/apiError';
-import type { CourseListDto, StudentCourseDto, ActiveTermDto, SectionDetailDto, CourseDetailDto } from '../types/course';
+import type { CourseListDto, ActiveTermDto, SectionDetailDto, CourseDetailDto } from '../types/course';
 
 export async function getCourses(programId?: number): Promise<CourseListDto[]> {
   const response = await apiClient.get<CourseListDto[]>('/course', {
     params: programId ? { programId } : undefined,
   });
   return response.data;
-}
-
-export async function getStudentCatalog(): Promise<StudentCourseDto[]> {
-  try {
-    const response = await apiClient.get<StudentCourseDto[]>('/course/student-catalog');
-    return response.data;
-  } catch (error) {
-    throw toApiError(error, 'Ders katalogu yuklenemedi.');
-  }
 }
 
 export async function getSectionDetail(sectionId: number): Promise<SectionDetailDto> {

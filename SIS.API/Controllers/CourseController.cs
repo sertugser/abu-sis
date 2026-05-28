@@ -151,33 +151,6 @@ public class CourseController : ControllerBase
     }
 
     /// <summary>
-    /// GET api/course/student-catalog — courses for the authenticated student's active term.
-    /// Each course includes: TakeStatus (IlkDefa/Alttan/OncedenAlindi), PreviousGrade, CurriculumType, PrerequisitesMet.
-    /// </summary>
-    [HttpGet("student-catalog")]
-    [RequirePermission("menu.ders-kayit.view")]
-    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
-    public async Task<IActionResult> GetStudentCatalog()
-    {
-        // 1. Authenticated student
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
-
-        var student = await _context.Students
-            .Include(s => s.StudentPrograms)
-            .FirstOrDefaultAsync(s => s.UserId == userId);
-        if (student == null)
-            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
-
-        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
-        if (activeProgram == null)
-            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
-
-        return await BuildStudentCatalogAsync(student, activeProgram);
-    }
-
-    /// <summary>
     /// GET api/course/student-catalog/{studentId} — danışmanın, danışmanı olduğu öğrenci
     /// adına ders ekleme yaparken kullanacağı aday ders kataloğu. Öğrenci akışıyla aynı
     /// veri (BuildStudentCatalogAsync); sadece sahiplik kontrolü farklı.
