@@ -182,7 +182,6 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/akademik-takvim',
   '/bildirimler',
   '/ders-kayit',
-  '/plan',
   '/alinan-dersler',
   '/danisman-bilgileri',
   '/acilan-bolum-dersleri',

@@ -339,11 +339,13 @@ test.describe('GRUP D — Öğrenci ders kaydı', () => {
     expect(body?.length, 'Sayfa boş olmamalı').toBeGreaterThan(100);
   });
 
-  test('D6: Plan sayfası açılır', async ({ page }) => {
+  test('D6: /plan redirect /ders-kayit yönlendirir', async ({ page }) => {
     await authenticate(page, 'Student');
     await page.goto('/plan');
     await page.waitForLoadState('domcontentloaded');
     console.log(`[D6] plan url=${page.url()}`);
+    // /plan retired; now redirects to /ders-kayit
+    expect(page.url()).toContain('/ders-kayit');
   });
 
   test('D7: Withdraw /registrations/{id}/withdraw authorize', async () => {
