@@ -1,86 +1,140 @@
-import { GraduationCap } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ChevronDown, BookOpen, CalendarDays, History, Loader2, Printer } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { IMPLEMENTED_ROUTES, ROUTES } from '@/lib/constants';
 import type { RegistrationStudentHeader } from '@/types/registrationCatalog';
 
-interface InfoRowProps {
+interface RegistrationHeaderBarProps {
+  student: RegistrationStudentHeader;
+  onDownloadPdf: () => void;
+  pdfLoading: boolean;
+}
+
+interface LabelValueProps {
   label: string;
   value: React.ReactNode;
 }
 
-function InfoRow({ label, value }: InfoRowProps) {
+function LabelValue({ label, value }: LabelValueProps) {
   return (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
+    <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-200 last:border-b-0">
+      <span className="text-[11px] uppercase tracking-wide text-slate-500 leading-none">
         {label}
       </span>
-      <span className="text-xs font-medium text-foreground leading-tight truncate">{value}</span>
+      <span className="text-[13px] text-slate-700 leading-snug">{value}</span>
     </div>
   );
 }
 
-interface RegistrationHeaderBarProps {
-  student: RegistrationStudentHeader;
-}
-
-export function RegistrationHeaderBar({ student }: RegistrationHeaderBarProps) {
+export function RegistrationHeaderBar({
+  student,
+  onDownloadPdf,
+  pdfLoading,
+}: RegistrationHeaderBarProps) {
   const isDebt = student.financialStatus !== 'Uygun';
-  const cgpaHigh = student.cgpa >= 2.0;
 
   return (
-    <section className="bg-muted/30 border-b border-border/40 px-4 py-3">
-      {/* Top row: identity left, CGPA right */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <GraduationCap className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold leading-tight truncate">{student.fullName}</h2>
-            <p className="text-xs text-muted-foreground truncate">
-              {student.studentNumber} &middot; {student.programName}
-            </p>
-          </div>
+    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex gap-6">
+        {/* Left column */}
+        <div className="flex-1 min-w-0">
+          <LabelValue
+            label="Öğrenci No / Adı Soyadı"
+            value={`${student.studentNumber} / ${student.fullName}`}
+          />
+          <LabelValue
+            label="Fakülte - Program / Sınıfı"
+            value={`${student.programName} / ${student.classYear}. Sınıf`}
+          />
+          <LabelValue label="Kayıt Tarihi / Nedeni" value="—" />
+          <LabelValue label="Bağlı Olunan Müfredat" value={student.curriculumName} />
+          <LabelValue label="Öğrenim Süre Durum" value={student.studyDurationStatus} />
+          <LabelValue label="Genel Ortalama" value={student.cgpa.toFixed(2)} />
         </div>
 
-        {/* CGPA */}
-        <div className="flex-shrink-0 text-right">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground block leading-none mb-0.5">
-            GANO
-          </span>
-          <span
-            className={cn(
-              'text-xl font-bold tabular-nums leading-none',
-              cgpaHigh ? 'text-green-600' : 'text-destructive',
-            )}
-          >
-            {student.cgpa.toFixed(2)}
-          </span>
+        {/* Vertical divider */}
+        <div className="w-px bg-slate-200 flex-shrink-0" />
+
+        {/* Right column */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between">
+          <div>
+            <LabelValue label="AKTS Limiti" value={`${student.ectsLimit} AKTS`} />
+            <LabelValue
+              label="Borç Durumu"
+              value={
+                <span
+                  className={cn(
+                    'font-semibold',
+                    isDebt ? 'text-rose-700' : 'text-emerald-700',
+                  )}
+                >
+                  {student.financialStatus}
+                </span>
+              }
+            />
+            <LabelValue label="Önceki Dönem Bakiye" value="—" />
+            <LabelValue label="Dönemlik Ücret" value="—" />
+            <LabelValue label="Ödenmesi Gereken" value="—" />
+            <LabelValue label="Ödenen" value="—" />
+            <LabelValue label="Genel Bakiye" value="—" />
+          </div>
+
+          {/* Ek İşlemler dropdown */}
+          <div className="mt-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="inline-flex items-center gap-1.5 rounded border border-rose-300 bg-white px-3 py-1.5 text-[12px] font-medium text-rose-600 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-300">
+                  Ek İşlemler <ChevronDown className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {IMPLEMENTED_ROUTES.has(ROUTES.INSTRUCTOR_SCHEDULING) && (
+                  <DropdownMenuItem asChild>
+                    <Link to={ROUTES.INSTRUCTOR_SCHEDULING} className="flex items-center gap-2">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      Ders Programı
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {IMPLEMENTED_ROUTES.has(ROUTES.MUFREDAT_DURUM) && (
+                  <DropdownMenuItem asChild>
+                    <Link to={ROUTES.MUFREDAT_DURUM} className="flex items-center gap-2">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      Müfredat Durumu
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {IMPLEMENTED_ROUTES.has(ROUTES.ALINAN_DERSLER) && (
+                  <DropdownMenuItem asChild>
+                    <Link to={ROUTES.ALINAN_DERSLER} className="flex items-center gap-2">
+                      <History className="h-3.5 w-3.5" />
+                      Ders Kaydı Geçmişi
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={onDownloadPdf}
+                  disabled={pdfLoading}
+                  className="flex items-center gap-2"
+                >
+                  {pdfLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Printer className="h-3.5 w-3.5" />
+                  )}
+                  Yazdır
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
-
-      {/* Info grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-1.5 pt-2 mt-2 border-t border-border/30">
-        <InfoRow
-          label="Sınıf / Dönem"
-          value={`${student.classYear}. Sınıf / ${student.completedSemesters}. Dönem`}
-        />
-        <InfoRow label="Müfredat" value={student.curriculumName} />
-        <InfoRow label="Öğrenim Süresi" value={student.studyDurationStatus} />
-        <InfoRow label="AKTS Limiti" value={`${student.ectsLimit} AKTS`} />
-        <InfoRow
-          label="Borç Durumu"
-          value={
-            <Badge
-              variant={isDebt ? 'destructive' : 'success'}
-              aria-label={`Borç durumu: ${student.financialStatus}`}
-              className="mt-0.5 text-[10px] px-1.5 py-0"
-            >
-              {student.financialStatus}
-            </Badge>
-          }
-        />
-      </div>
-    </section>
+    </div>
   );
 }

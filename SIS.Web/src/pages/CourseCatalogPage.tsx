@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import ValidationErrors from '../components/registration/ValidationErrors';
 import { RegistrationHeaderBar } from '../components/registration/v2/RegistrationHeaderBar';
-import { RegistrationToolbar } from '../components/registration/v2/RegistrationToolbar';
 import { SemesterClassTabs } from '../components/registration/v2/SemesterClassTabs';
 import type { ParityFilter } from '../components/registration/v2/SemesterClassTabs';
 import { CurriculumCourseGrid } from '../components/registration/v2/CurriculumCourseGrid';
@@ -34,11 +33,19 @@ import {
   AlertTriangle, Calendar, CheckCircle2, Clock, Loader2, Send,
 } from 'lucide-react';
 
+function deriveDefaultParity(termType: string): ParityFilter {
+  const t = termType.toLowerCase();
+  if (t.includes('fall') || t.includes('guz') || t.includes('güz')) return 'Guz';
+  if (t.includes('spring') || t.includes('bahar')) return 'Bahar';
+  return 'Tumu';
+}
+
 export default function CourseCatalogPage() {
   const { data: catalog, isLoading, error } = useStudentRegistration();
 
   const [selectedClassYear, setSelectedClassYear] = useState<number | null>(null);
   const [parity, setParity] = useState<ParityFilter>('Tumu');
+  const parityInitialized = useRef(false);
   const [pickerCourse, setPickerCourse] = useState<CatalogCourseRow | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -58,6 +65,13 @@ export default function CourseCatalogPage() {
     const clamped = years.includes(target) ? target : years[0];
     setSelectedClassYear(clamped);
   }, [catalog, selectedClassYear]);
+
+  // Set default parity from active term type — run only once on first catalog load.
+  useEffect(() => {
+    if (!catalog || parityInitialized.current) return;
+    setParity(deriveDefaultParity(catalog.term.termType));
+    parityInitialized.current = true;
+  }, [catalog]);
 
   // ── Loading ─────────────────────────────────────────────────────────────────
 
@@ -235,91 +249,95 @@ export default function CourseCatalogPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-background">
-      {topBanner && <div className="px-4 py-2">{topBanner}</div>}
+    <>
+      {/* Top banner lives OUTSIDE the white card */}
+      {topBanner && <div className="mb-2">{topBanner}</div>}
 
-      <RegistrationHeaderBar student={student} />
-
-      <RegistrationToolbar
-        onDownloadPdf={() => pdf.mutate()}
-        pdfLoading={pdf.isPending}
-      />
-
-      {/* Inline alerts — below toolbar, above curriculum */}
-      {submitSuccess && (
-        <div className="px-4 py-2">
-          <Alert variant="success">
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-        <div className="px-4 py-2">
-          <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
-        </div>
-      )}
-
-      <SemesterClassTabs
-        classYears={classYearList}
-        selectedClassYear={effectiveClassYear}
-        onClassYearChange={setSelectedClassYear}
-        parity={parity}
-        onParityChange={setParity}
-      />
-
-      <CurriculumCourseGrid
-        classYearData={selectedYearData}
-        parityFilter={parity}
-        onPickSection={setPickerCourse}
-        registrationActionsOpen={registrationActionsOpen}
-      />
-
-      {retakeCourses.length > 0 && (
-        <RetakeCoursesPanel
-          retakeCourses={retakeCourses}
-          onCheck={() =>
-            validate.mutate(selectedCourses.map((s) => s.courseSectionId))
-          }
-          checkLoading={validate.isPending}
-          validationSummary={validationSummary}
+      {/* Single outer white card wrapping everything */}
+      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+        {/* Header with Ek İşlemler dropdown built-in */}
+        <RegistrationHeaderBar
+          student={student}
+          onDownloadPdf={() => pdf.mutate()}
+          pdfLoading={pdf.isPending}
         />
-      )}
 
-      <RegistrationStatusLine selectedCourses={selectedCourses} />
+        {/* Inline alerts — below header, above tabs */}
+        {submitSuccess && (
+          <div className="px-4 py-2">
+            <Alert variant="success">
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
+            </Alert>
+          </div>
+        )}
 
-      <SelectedCoursesGrid
-        selectedCourses={selectedCourses}
-        registrationActionsOpen={registrationActionsOpen}
-      />
+        {(validationErrors.length > 0 || validationWarnings.length > 0) && (
+          <div className="px-4 py-2">
+            <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
+          </div>
+        )}
 
-      <RegistrationSummaryBar
-        totalCredit={totalCredit}
-        totalEcts={totalEcts}
-        ectsLimit={student.ectsLimit}
-        totalHours={totalHours}
-        courseCount={courseCount}
-      />
+        <SemesterClassTabs
+          classYears={classYearList}
+          selectedClassYear={effectiveClassYear}
+          onClassYearChange={setSelectedClassYear}
+          parity={parity}
+          onParityChange={setParity}
+        />
 
-      {/* Bottom action bar */}
-      {planItems.length > 0 && (
-        <div className="border-t border-border/40 bg-muted/20 px-4 py-2 flex justify-end">
-          <Button
-            onClick={handleSubmit}
-            disabled={submit.isPending || !registrationActionsOpen}
-            className="gap-2"
-            size="sm"
-          >
-            {submit.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Kaydı Kesinleştir
-          </Button>
-        </div>
-      )}
+        <CurriculumCourseGrid
+          classYearData={selectedYearData}
+          parityFilter={parity}
+          onPickSection={setPickerCourse}
+          registrationActionsOpen={registrationActionsOpen}
+        />
+
+        {retakeCourses.length > 0 && (
+          <RetakeCoursesPanel
+            retakeCourses={retakeCourses}
+            onCheck={() =>
+              validate.mutate(selectedCourses.map((s) => s.courseSectionId))
+            }
+            checkLoading={validate.isPending}
+            validationSummary={validationSummary}
+          />
+        )}
+
+        <RegistrationStatusLine selectedCourses={selectedCourses} />
+
+        <SelectedCoursesGrid
+          selectedCourses={selectedCourses}
+          registrationActionsOpen={registrationActionsOpen}
+        />
+
+        <RegistrationSummaryBar
+          totalCredit={totalCredit}
+          totalEcts={totalEcts}
+          ectsLimit={student.ectsLimit}
+          totalHours={totalHours}
+          courseCount={courseCount}
+        />
+
+        {/* Bottom action bar — inside the card */}
+        {planItems.length > 0 && (
+          <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 flex justify-end">
+            <Button
+              onClick={handleSubmit}
+              disabled={submit.isPending || !registrationActionsOpen}
+              className="gap-2"
+              size="sm"
+            >
+              {submit.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Kaydı Kesinleştir
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Section picker dialog */}
       <SectionPickerDialog
@@ -370,6 +388,6 @@ export default function CourseCatalogPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
