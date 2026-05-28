@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -22,16 +23,19 @@ public class CourseController : ControllerBase
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
     private readonly ISystemConfigProvider _systemConfig;
+    private readonly IStudentRegistrationCatalogService _registrationCatalogService;
 
     public CourseController(
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider systemConfig,
+        IStudentRegistrationCatalogService registrationCatalogService,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _clock = clock;
         _systemConfig = systemConfig;
+        _registrationCatalogService = registrationCatalogService;
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -200,6 +204,75 @@ public class CourseController : ControllerBase
             return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
         return await BuildStudentCatalogAsync(student, activeProgram);
+    }
+
+    /// <summary>GET api/course/registration-catalog — yeni müfredat-ağacı katalog (öğrenci).</summary>
+    [HttpGet("registration-catalog")]
+    [RequirePermission("menu.ders-kayit.view")]
+    public async Task<IActionResult> GetRegistrationCatalog(CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
+
+        var student = await _context.Students
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (student == null)
+            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+
+        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        if (activeProgram == null)
+            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
+
+        try
+        {
+            var dto = await _registrationCatalogService.BuildAsync(student, activeProgram, ct);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "ActiveTermNotFound")
+        {
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
+        }
+    }
+
+    /// <summary>GET api/course/registration-catalog/{studentId} — danışman öğrenci-adına.</summary>
+    [HttpGet("registration-catalog/{studentId:int}")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetRegistrationCatalogForAdvisor(int studentId, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
+
+        var instructor = await _context.Instructors.FirstOrDefaultAsync(i => i.UserId == userId, ct);
+        if (instructor == null)
+            return StatusCode(403, new ApiErrorResponse("Bu islem icin ogretim uyesi profili gerekli.", "InstructorRequired"));
+
+        var student = await _context.Students
+            .Include(s => s.StudentPrograms)
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+        if (student == null)
+            return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+
+        if (student.AdvisorId != instructor.Id)
+            return StatusCode(403, new ApiErrorResponse("Bu ogrencinin danismani degilsiniz.", "NotAdvisee"));
+
+        var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        if (activeProgram == null)
+            return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
+
+        try
+        {
+            var dto = await _registrationCatalogService.BuildAsync(student, activeProgram, ct);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "ActiveTermNotFound")
+        {
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
+        }
     }
 
     /// <summary>
