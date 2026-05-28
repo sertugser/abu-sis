@@ -541,8 +541,15 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                             .OrderBy(r => r.Code)
                             .ToList();
 
-                        // SemesterNumber = first SuggestedSemester in this group (or 0)
-                        var semNum = orderedCourses.First().SuggestedSemester;
+                        // SemesterNumber = smallest positive SuggestedSemester in the group;
+                        // fall back to the first element's value (may be 0) if none are positive.
+                        var positiveSemesters = orderedCourses
+                            .Where(r => r.SuggestedSemester > 0)
+                            .Select(r => r.SuggestedSemester)
+                            .ToList();
+                        var semNum = positiveSemesters.Count > 0
+                            ? positiveSemesters.Min()
+                            : orderedCourses.First().SuggestedSemester;
 
                         return new CatalogSemesterDto(
                             Parity:         parityGroup.Key,

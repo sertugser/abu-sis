@@ -17,7 +17,7 @@ namespace SIS.Infrastructure.Services;
 /// resmî PDF olarak üretir. Dropped ve Withdrawn kayıtlar dahil edilmez.
 /// Görsel stil CourseHistoryPdfService ile tutarlıdır.
 /// </summary>
-public class RegistrationPlanPdfService : IRegistrationPlanPdfService
+public sealed class RegistrationPlanPdfService : IRegistrationPlanPdfService
 {
     private readonly AppDbContext     _context;
     private readonly IDateTimeProvider _clock;
@@ -50,6 +50,16 @@ public class RegistrationPlanPdfService : IRegistrationPlanPdfService
             ?? throw new InvalidOperationException($"Öğrenci bulunamadı: {studentId}");
 
         var activeProgram = student.StudentPrograms.FirstOrDefault(sp => sp.IsActive);
+        var mainProgram   = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive)
+                         ?? activeProgram;
+
+        // Zorunlu/Seçmeli haritası (müfredattan)
+        var compulsoryMap = mainProgram != null
+            ? await _context.CurriculumCourses
+                .AsNoTracking()
+                .Where(cc => cc.CurriculumId == mainProgram.CurriculumId)
+                .ToDictionaryAsync(cc => cc.CourseId, cc => cc.IsCompulsory, cancellationToken)
+            : new Dictionary<int, bool>();
 
         // Öğrenci kullanıcı adı
         var studentUser = await _context.Users
@@ -148,7 +158,7 @@ public class RegistrationPlanPdfService : IRegistrationPlanPdfService
                 {
                     col.Spacing(8);
                     col.Item().Element(c => RenderStudentInfoBlock(c, headerInfo));
-                    col.Item().Element(c => RenderCoursesTable(c, registrations, instructorNames));
+                    col.Item().Element(c => RenderCoursesTable(c, registrations, instructorNames, compulsoryMap));
                     col.Item().Element(c => RenderTotalsRow(c, registrations));
                 });
 
@@ -194,7 +204,8 @@ public class RegistrationPlanPdfService : IRegistrationPlanPdfService
     private static void RenderCoursesTable(
         IContainer container,
         List<Domain.Entities.CourseRegistration> registrations,
-        Dictionary<int, string> instructorNames)
+        Dictionary<int, string> instructorNames,
+        Dictionary<int, bool> compulsoryMap)
     {
         var headerColor = Colors.Grey.Lighten2;
         var rowBorder   = Colors.Grey.Lighten1;
@@ -236,7 +247,7 @@ public class RegistrationPlanPdfService : IRegistrationPlanPdfService
                 var ects    = reg.EctsSnapshot   ?? course.Ects;
                 var credit  = reg.CreditSnapshot ?? course.NationalCredit;
                 var hours   = course.TheoryHours + course.LabHours;
-                var zs      = course.Level == CourseLevel.Graduate ? "S" : "Z";
+                var zs      = compulsoryMap.TryGetValue(course.Id, out var isComp) && isComp ? "Z" : "S";
 
                 AddCenter(course.Code);
                 AddLeft  (course.Name);
