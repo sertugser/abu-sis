@@ -24,21 +24,18 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
 
     public void Dispose() => _context.Dispose();
 
-    [Fact]
-    public async Task BuildAsync_ReturnsHeader_WithStudentBasics()
-    {
-        // Arrange — seed minimum entities
-        var now = DateTime.UtcNow;
+    // ────────────────────────────────────────────────────────────────────
+    // Shared seed helper — call at the start of each test that needs it
+    // ────────────────────────────────────────────────────────────────────
 
-        // Faculty (required by Department FK)
+    private async Task<(Student student, StudentProgram sp)> SeedMinimumAsync(DateTime now)
+    {
         var faculty = new Faculty { Id = 1, Name = "Mühendislik Fakültesi", Code = "MF", CreatedAt = now };
         _context.Set<Faculty>().Add(faculty);
 
-        // Department
         var dept = new Department { Id = 1, Name = "Bilgisayar Mühendisliği", Code = "CENG", FacultyId = 1, CreatedAt = now };
         _context.Set<Department>().Add(dept);
 
-        // AcademicProgram
         var program = new AcademicProgram
         {
             Id = 1,
@@ -52,7 +49,6 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         };
         _context.Set<AcademicProgram>().Add(program);
 
-        // Curriculum
         var curriculum = new Curriculum
         {
             Id = 1,
@@ -65,7 +61,6 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         };
         _context.Set<Curriculum>().Add(curriculum);
 
-        // Active AcademicTerm (IsActivated=true, not cancelled)
         var term = new AcademicTerm
         {
             Id = 10,
@@ -83,7 +78,6 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         };
         _context.Set<AcademicTerm>().Add(term);
 
-        // ApplicationUser — for FullName lookup
         var user = new ApplicationUser
         {
             Id = 100,
@@ -96,7 +90,6 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         };
         _context.Set<ApplicationUser>().Add(user);
 
-        // Student
         var student = new Student
         {
             Id = 1,
@@ -111,7 +104,6 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         };
         _context.Set<Student>().Add(student);
 
-        // StudentProgram
         var sp = new StudentProgram
         {
             StudentId = 1,
@@ -125,18 +117,29 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
 
         await _context.SaveChangesAsync();
 
-        // Construct service with real dependencies
-        var ectsResolver = new EctsLimitResolver(new NullSystemConfigProvider());
-        var gate = new RegistrationGate(_context);
-        var poolCalc = new ElectivePoolProgressCalculator(_context);
-        var clock = new SystemDateTimeProvider();
+        return (student, sp);
+    }
 
-        var service = new StudentRegistrationCatalogService(_context, ectsResolver, gate, poolCalc, clock);
+    private StudentRegistrationCatalogService BuildService() =>
+        new StudentRegistrationCatalogService(
+            _context,
+            new EctsLimitResolver(new NullSystemConfigProvider()),
+            new RegistrationGate(_context),
+            new ElectivePoolProgressCalculator(_context),
+            new SystemDateTimeProvider());
 
-        // Act
-        var result = await service.BuildAsync(student, sp);
+    // ────────────────────────────────────────────────────────────────────
+    // Test 1 (B2 — header / empty tree)
+    // ────────────────────────────────────────────────────────────────────
 
-        // Assert — Student header
+    [Fact]
+    public async Task BuildAsync_ReturnsHeader_WithStudentBasics()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        var result = await BuildService().BuildAsync(student, sp);
+
         result.Student.StudentNumber.Should().Be("20220001");
         result.Student.Cgpa.Should().Be(3.10m);
         result.Student.EctsLimit.Should().Be(48); // CGPA ≥ 2.50 → default 48
@@ -145,14 +148,108 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         result.Student.ClassYear.Should().Be(2); // CompletedSemesters=2 → year=2
         result.Student.CompletedSemesters.Should().Be(2);
 
-        // Assert — Term info
         result.Term.Id.Should().Be(10);
         result.Term.Year.Should().Be(2025);
+    }
 
-        // Assert — lists are empty (not yet implemented)
-        result.ClassYears.Should().BeEmpty();
-        result.RetakeCourses.Should().BeEmpty();
-        result.ElectivePoolSlots.Should().BeEmpty();
-        result.SelectedCourses.Should().BeEmpty();
+    // ────────────────────────────────────────────────────────────────────
+    // Test 2 — tree grouping (NEW — must FAIL until Step 2 implementation)
+    // ────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildAsync_GroupsCurriculumCourses_ByClassYearAndSemesterParity()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // Course 10: C101, SuggestedSemester=1 → classYear=1, parity=Guz
+        var c10 = new Course
+        {
+            Id = 10, Code = "C101", Name = "Intro", Ects = 5, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        // Course 11: C202, SuggestedSemester=4 → classYear=2, parity=Bahar
+        var c11 = new Course
+        {
+            Id = 11, Code = "C202", Name = "Algorithms", Ects = 5, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        _context.Set<Course>().AddRange(c10, c11);
+
+        _context.Set<CurriculumCourse>().AddRange(
+            new CurriculumCourse { CurriculumId = 1, CourseId = 10, IsCompulsory = true, SuggestedSemester = 1 },
+            new CurriculumCourse { CurriculumId = 1, CourseId = 11, IsCompulsory = true, SuggestedSemester = 4 });
+
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().BuildAsync(student, sp);
+
+        result.ClassYears.Should().HaveCount(2);
+
+        var year1 = result.ClassYears.Single(y => y.ClassYear == 1);
+        var guzSemester = year1.Semesters.Single(s => s.Parity == "Guz");
+        guzSemester.Courses.Should().ContainSingle(r => r.Code == "C101");
+
+        var year2 = result.ClassYears.Single(y => y.ClassYear == 2);
+        var baharSemester = year2.Semesters.Single(s => s.Parity == "Bahar");
+        baharSemester.Courses.Should().ContainSingle(r => r.Code == "C202");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Test 3 — TakeStatus + PreviousAttemptInfo (NEW — must FAIL until Step 2)
+    // ────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildAsync_SetsTakeStatus_Alttan_ForFailedCourse()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // Course 10: SuggestedSemester=1 → year1, Guz
+        var c10 = new Course
+        {
+            Id = 10, Code = "C101", Name = "Intro", Ects = 5, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        _context.Set<Course>().Add(c10);
+        _context.Set<CurriculumCourse>().Add(
+            new CurriculumCourse { CurriculumId = 1, CourseId = 10, IsCompulsory = true, SuggestedSemester = 1 });
+
+        // Past registration in a prior term section with grade FF
+        var pastSection = new CourseSection
+        {
+            Id = 200,
+            CourseId = 10,
+            TermId = 10, // same term is fine for the test — past regs query doesn't filter by term
+            Capacity = 30,
+            EnrolledCount = 0,
+            SectionNumber = 1,
+            Status = CourseSectionStatus.Active,
+            CreatedAt = now,
+        };
+        _context.Set<CourseSection>().Add(pastSection);
+
+        var pastReg = new CourseRegistration
+        {
+            Id = 1,
+            StudentId = 1,
+            CourseSectionId = 200,
+            Status = RegistrationStatus.Completed,
+            Grade = GradeCode.FF,
+            CreatedAt = now,
+        };
+        _context.Set<CourseRegistration>().Add(pastReg);
+
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().BuildAsync(student, sp);
+
+        var year1 = result.ClassYears.Single(y => y.ClassYear == 1);
+        var guzSemester = year1.Semesters.Single(s => s.Parity == "Guz");
+        var row = guzSemester.Courses.Single(r => r.Code == "C101");
+
+        row.TakeStatus.Should().Be("Alttan");
+        row.PreviousAttemptInfo.Should().NotBeNullOrEmpty()
+            .And.Contain("FF");
     }
 }
