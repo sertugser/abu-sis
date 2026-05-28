@@ -13,6 +13,30 @@ namespace SIS.Infrastructure.Services;
 /// <inheritdoc />
 public sealed class StudentRegistrationCatalogService : IStudentRegistrationCatalogService
 {
+    // ── Inner records ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Carries a built row together with the grouping fields needed to slot it
+    /// into the curriculum tree (classYear / parity) and the flag that marks it
+    /// as a currently-failed course for the RetakeCourses list.
+    /// </summary>
+    private sealed record CatalogRowBuild(
+        CatalogCourseRowDto Row,
+        int ClassYear,
+        string Parity,
+        bool IsCurrentlyFailed);
+
+    /// <summary>
+    /// Typed result returned by <see cref="BuildClassYearsAsync"/> —
+    /// replaces the previous 5-element value tuple.
+    /// </summary>
+    private sealed record BuildClassYearsResult(
+        IReadOnlyList<CatalogClassYearDto> ClassYears,
+        IReadOnlyList<CatalogRowBuild> FlatRows,
+        Dictionary<int, bool> CompulsoryMap,
+        List<CurriculumElectivePool> CurriculumPools,
+        List<CurriculumCourse> CurriculumCourses);
+
     private readonly AppDbContext _context;
     private readonly IEctsLimitResolver _ectsLimitResolver;
     private readonly IRegistrationGate _registrationGate;
@@ -121,21 +145,22 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             RegistrationMessage: null);
 
         // 9. Build curriculum tree (classYears / semesters / course rows)
-        // Also surfaces intermediate data (failedCourseIds, compulsoryMap, pools, allCurriculumCourses) for reuse.
-        var (classYears, failedCourseIds, compulsoryMap, curriculumPools, allCurriculumCourses) =
-            await BuildClassYearsAsync(student, activeProgram, term, ct);
+        // Also surfaces intermediate data (flatRows, compulsoryMap, pools, allCurriculumCourses) for reuse.
+        var built = await BuildClassYearsAsync(student, activeProgram, term, ct);
+        var classYears       = built.ClassYears;
+        var failedCourseIds  = built.FlatRows
+            .Where(b => b.IsCurrentlyFailed)
+            .Select(b => b.Row.CourseId)
+            .ToHashSet();
+        var compulsoryMap        = built.CompulsoryMap;
+        var curriculumPools      = built.CurriculumPools;
+        var allCurriculumCourses = built.CurriculumCourses;
 
-        // 10. RetakeCourses — curriculum courses whose latest grade is still FF/NA/U (not later passed).
-        //     Reuses the already-loaded allCurriculumCourses — no extra DB query.
-        var retakeCourses = allCurriculumCourses
-            .Where(cc => failedCourseIds.Contains(cc.CourseId))
-            .Select(cc => BuildCourseRow(
-                cc,
-                takeStatus: "Alttan",
-                prereqsMet: true,
-                previousAttemptInfo: null,
-                activeRegStatus: null,
-                poolSlots: Array.Empty<ApplicablePoolSlotRefDto>()))
+        // 10. RetakeCourses — same row objects from the flat list; ClassYear, IsCompulsory,
+        //     and PreviousAttemptInfo are now consistent with the curriculum tree (single build path).
+        var retakeCourses = built.FlatRows
+            .Where(b => b.IsCurrentlyFailed)
+            .Select(b => b.Row)
             .OrderBy(r => r.Code)
             .ToList();
 
@@ -234,13 +259,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
     /// Ported from CourseController.BuildStudentCatalogAsync lines 221-492.
     /// HasOpenSections is always false here (filled in task B5).
     /// </summary>
-    private async Task<(
-        IReadOnlyList<CatalogClassYearDto> ClassYears,
-        HashSet<int> FailedCourseIds,
-        Dictionary<int, bool> CompulsoryMap,
-        List<CurriculumElectivePool> CurriculumPools,
-        List<CurriculumCourse> CurriculumCourses)>
-    BuildClassYearsAsync(
+    private async Task<BuildClassYearsResult> BuildClassYearsAsync(
         StudentEntity student,
         StudentProgramEntity activeProgram,
         AcademicTerm term,
@@ -265,9 +284,12 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             .ToListAsync(ct);
 
         if (curriculumCourses.Count == 0)
-            return (Array.Empty<CatalogClassYearDto>(), new HashSet<int>(),
-                new Dictionary<int, bool>(), curriculumPools,
-                curriculumCourses);
+            return new BuildClassYearsResult(
+                ClassYears:       Array.Empty<CatalogClassYearDto>(),
+                FlatRows:         Array.Empty<CatalogRowBuild>(),
+                CompulsoryMap:    new Dictionary<int, bool>(),
+                CurriculumPools:  curriculumPools,
+                CurriculumCourses: curriculumCourses);
 
         var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
 
@@ -386,8 +408,8 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
         }
 
         // ── Step 6: Build course rows ─────────────────────────────────────
-        // Ported from controller lines 404-492 (TakeStatus, prereqsMet, curriculumType)
-        var rows = new List<(CatalogCourseRowDto row, int classYear, string parity)>();
+        // Single construction path — rows are shared by the tree AND RetakeCourses.
+        var rows = new List<CatalogRowBuild>();
 
         foreach (var cc in curriculumCourses)
         {
@@ -478,23 +500,27 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                 HasOpenSections:       false, // B5
                 ApplicablePoolSlots:   poolSlots);
 
-            rows.Add((row, rowClassYear, rowParity));
+            rows.Add(new CatalogRowBuild(
+                Row:               row,
+                ClassYear:         rowClassYear,
+                Parity:            rowParity,
+                IsCurrentlyFailed: failedCourseIds.Contains(cid)));
         }
 
         // ── Step 7: Group into tree ───────────────────────────────────────
         var tree = rows
-            .GroupBy(r => r.classYear)
+            .GroupBy(r => r.ClassYear)
             .OrderBy(g => g.Key)
             .Select(yearGroup =>
             {
                 var semesters = yearGroup
-                    .GroupBy(r => r.parity)
+                    .GroupBy(r => r.Parity)
                     // Guz (odd) before Bahar (even)
                     .OrderBy(g => g.Key == "Guz" ? 0 : 1)
                     .Select(parityGroup =>
                     {
                         var orderedCourses = parityGroup
-                            .Select(r => r.row)
+                            .Select(r => r.Row)
                             .OrderBy(r => r.Code)
                             .ToList();
 
@@ -514,37 +540,12 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             })
             .ToList();
 
-        return (tree, failedCourseIds, compulsoryMap, curriculumPools, curriculumCourses);
-    }
-
-    /// <summary>
-    /// Builds a <see cref="CatalogCourseRowDto"/> from a CurriculumCourse with explicit override fields.
-    /// Shared by the curriculum tree rows and the RetakeCourses list so construction is DRY.
-    /// </summary>
-    private static CatalogCourseRowDto BuildCourseRow(
-        CurriculumCourse cc,
-        string takeStatus,
-        bool prereqsMet,
-        string? previousAttemptInfo,
-        string? activeRegStatus,
-        IReadOnlyList<ApplicablePoolSlotRefDto> poolSlots)
-    {
-        var course = cc.Course;
-        return new CatalogCourseRowDto(
-            CourseId:                 cc.CourseId,
-            Code:                     course.Code,
-            Name:                     course.Name,
-            IsCompulsory:             cc.IsCompulsory,
-            NationalCredit:           course.NationalCredit,
-            Ects:                     course.Ects,
-            SuggestedSemester:        cc.SuggestedSemester,
-            ClassYear:                cc.SuggestedSemester > 0 ? (cc.SuggestedSemester - 1) / 2 + 1 : 1,
-            TakeStatus:               takeStatus,
-            PrerequisitesMet:         prereqsMet,
-            PreviousAttemptInfo:      previousAttemptInfo,
-            ActiveRegistrationStatus: activeRegStatus,
-            HasOpenSections:          false,
-            ApplicablePoolSlots:      poolSlots);
+        return new BuildClassYearsResult(
+            ClassYears:        tree,
+            FlatRows:          rows,
+            CompulsoryMap:     compulsoryMap,
+            CurriculumPools:   curriculumPools,
+            CurriculumCourses: curriculumCourses);
     }
 
     /// <summary>

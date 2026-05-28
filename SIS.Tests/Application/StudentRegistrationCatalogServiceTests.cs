@@ -340,6 +340,73 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
         result.SelectedCourses[0].Status.Should().Be("Active");
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // Test: single row-builder — RetakeCourses agrees with tree on
+    //       ClassYear (code-fallback) and PreviousAttemptInfo (with grade)
+    // ────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildAsync_RetakeRow_HasCorrectClassYearAndAttemptInfo()
+    {
+        // Arrange — a failed course whose SuggestedSemester=0, Code="C301"
+        // The code-fallback rule (project_course_code_year_rule) must yield ClassYear=3.
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        var course = new Course
+        {
+            Id = 60, Code = "C301", Name = "Advanced Topics", Ects = 4, NationalCredit = 3,
+            DepartmentId = 1, CreatedAt = now,
+        };
+        _context.Set<Course>().Add(course);
+
+        // SuggestedSemester = 0 → ClassYear must come from CourseCodeYearFallback("C301") = 3
+        _context.Set<CurriculumCourse>().Add(
+            new CurriculumCourse { CurriculumId = 1, CourseId = 60, IsCompulsory = true, SuggestedSemester = 0 });
+
+        var section = new CourseSection
+        {
+            Id = 600, CourseId = 60, TermId = 10,
+            Capacity = 30, EnrolledCount = 0, SectionNumber = 1,
+            Status = CourseSectionStatus.Active, CreatedAt = now,
+        };
+        _context.Set<CourseSection>().Add(section);
+
+        // Past graded attempt with grade FF → currently failed
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 60, StudentId = 1, CourseSectionId = 600,
+            Status = RegistrationStatus.Completed, Grade = GradeCode.FF, CreatedAt = now,
+        });
+
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await BuildService().BuildAsync(student, sp);
+
+        // Assert — RetakeCourses must use the same row as the tree (single build path)
+        var retakeRow = result.RetakeCourses.Should().ContainSingle(r => r.Code == "C301")
+            .Which;
+
+        retakeRow.ClassYear.Should().Be(3,
+            because: "CourseCodeYearFallback(\"C301\") = 3; the retake row must use the same logic as the tree");
+
+        retakeRow.PreviousAttemptInfo.Should().NotBeNullOrEmpty()
+            .And.Contain("FF",
+            because: "the single build path computes PreviousAttemptInfo from grade history for all rows");
+
+        // Also confirm the tree row for this course has the same ClassYear
+        var treeYear = result.ClassYears.Should().ContainSingle(y => y.ClassYear == 3).Which;
+        var treeRow  = treeYear.Semesters
+            .SelectMany(s => s.Courses)
+            .Should().ContainSingle(r => r.Code == "C301").Which;
+
+        treeRow.ClassYear.Should().Be(retakeRow.ClassYear,
+            because: "tree and retake must agree — they share the same CatalogCourseRowDto object");
+        treeRow.PreviousAttemptInfo.Should().Be(retakeRow.PreviousAttemptInfo,
+            because: "tree and retake must agree — they share the same CatalogCourseRowDto object");
+    }
+
     [Fact]
     public async Task BuildAsync_SetsTakeStatus_Alttan_ForFailedCourse()
     {
