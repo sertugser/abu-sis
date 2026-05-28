@@ -241,6 +241,7 @@ builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.ISectionP
 builder.Services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
 builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
+builder.Services.AddScoped<IRegistrationPlanPdfService, RegistrationPlanPdfService>();
 builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
 builder.Services.AddHostedService<RegistrationCleanupJob>();
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
