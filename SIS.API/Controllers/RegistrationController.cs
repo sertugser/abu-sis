@@ -17,17 +17,20 @@ public class RegistrationController : ControllerBase
 {
     private readonly ICourseRegistrationService _registrationService;
     private readonly ICourseHistoryPdfService _courseHistoryPdfService;
+    private readonly IRegistrationPlanPdfService _planPdfService;
     private readonly IRegistrationValidationService _validationService;
     private readonly AppDbContext _context;
 
     public RegistrationController(
         ICourseRegistrationService registrationService,
         ICourseHistoryPdfService courseHistoryPdfService,
+        IRegistrationPlanPdfService planPdfService,
         IRegistrationValidationService validationService,
         AppDbContext context)
     {
         _registrationService = registrationService;
         _courseHistoryPdfService = courseHistoryPdfService;
+        _planPdfService = planPdfService;
         _validationService = validationService;
         _context = context;
     }
@@ -144,6 +147,19 @@ public class RegistrationController : ControllerBase
 
         var history = await _registrationService.GetCourseHistoryAsync(studentId.Value);
         return Ok(history);
+    }
+
+    /// <summary>GET api/registrations/plan/pdf — "Seçilen Dersler" / kayıt planı PDF raporu.</summary>
+    [HttpGet("plan/pdf")]
+    [RequirePermission("menu.ders-kayit.view")]
+    public async Task<IActionResult> GetRegistrationPlanPdf(CancellationToken ct)
+    {
+        var studentId = await GetStudentIdAsync();
+        if (studentId == null)
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
+        var pdfBytes = await _planPdfService.GenerateAsync(studentId.Value, ct);
+        var fileName = $"ders-kayit-plani-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
     }
 
     /// <summary>
