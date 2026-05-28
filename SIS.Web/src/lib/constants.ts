@@ -79,6 +79,8 @@ export const QUERY_KEYS = {
   activeTerm: ['activeTerm'] as const,
   courses: (programId?: number) => ['courses', programId] as const,
   studentCatalog: ['studentCatalog'] as const,
+  studentRegistrationCatalog: ['studentRegistrationCatalog'] as const,
+  sectionPicker: (courseId: number, q?: unknown) => ['sectionPicker', courseId, q] as const,
   myRegistrations: ['myRegistrations'] as const,
   advisorStudents: ['advisor', 'students'] as const,
   advisorConstraints: (studentId?: number, termId?: number) => ['advisor', 'constraints', studentId, termId] as const,

@@ -20,6 +20,7 @@ export interface SectionDto {
   schedule: string;
   isActive: boolean;
   quotaVisible: boolean;
+  isEnrollmentSuspended?: boolean;
 }
 
 export interface StudentCourseDto {

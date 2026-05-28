@@ -71,11 +71,19 @@ export interface CourseHistoryItemDto {
 export interface StudentRegistrationDto {
   registrationId: number;
   courseSectionId: number;
+  /** Ders kimliği — /course/{id}/detail çağrısı için. */
+  courseId?: number;
+  /** Şube numarası (Proliz "Şb" kolonu). */
+  sectionNumber?: number;
   courseCode: string;
   courseName: string;
   ects: number;
+  /** Ulusal kredi (Proliz "Krd" kolonu). */
+  nationalCredit?: number;
   theoryHours: number;
   labHours: number;
+  /** Uygulama saati — "T+U" gösterimi için. */
+  applicationHours?: number | null;
   instructorName: string;
   schedule: string;
   status: string;
@@ -84,6 +92,12 @@ export interface StudentRegistrationDto {
   isRepeated: boolean;
   takeType: string;
   advisorNote?: string;
+  /** Açma Nedeni adı (OpeningReasonIdSnapshot çözümlenmiş). Yoksa null. */
+  openingReasonName?: string | null;
+  /** Seçmeli havuz slot adı (AppliedElectivePoolId çözümlenmiş). Yoksa null. */
+  electivePoolSlotName?: string | null;
+  /** Seçmeli grup kodu (ElectiveGroup.Code). Yoksa null. */
+  electiveGroupCode?: string | null;
 }
 
 export interface StudentAttendanceStatusDto {
