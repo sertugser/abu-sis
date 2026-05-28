@@ -52,10 +52,9 @@ export function CurriculumCourseRow({ row, onPickSection, registrationActionsOpe
         <span className="text-sm">
           {row.name}
           {!row.prerequisitesMet && (
-            <AlertTriangle
-              className="inline h-3 w-3 text-amber-500 ml-1 align-text-bottom"
-              title="Önkoşul karşılanmamış"
-            />
+            <span title="Önkoşul karşılanmamış" className="inline-flex align-text-bottom">
+              <AlertTriangle className="inline h-3 w-3 text-amber-500 ml-1" />
+            </span>
           )}
         </span>
         {row.applicablePoolSlots.length > 0 && (
