@@ -41,7 +41,7 @@ public sealed record CatalogCourseRowDto(
     bool HasOpenSections,
     IReadOnlyList<ApplicablePoolSlotRefDto> ApplicablePoolSlots);
 
-public sealed record ApplicablePoolSlotRefDto(int PoolId, string SlotName, string GroupCode, string GroupName);
+public sealed record ApplicablePoolSlotRefDto(int PoolId, string SlotName, string GroupCode, string GroupName, int? EctsPerCourse);
 
 public sealed record CatalogPoolSlotDto(
     int PoolId, string GroupCode, string GroupName, string SlotName,

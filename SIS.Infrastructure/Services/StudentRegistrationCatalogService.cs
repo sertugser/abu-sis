@@ -158,9 +158,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
         if (curriculumCourses.Count == 0)
             return Array.Empty<CatalogClassYearDto>();
 
-        var curriculumCourseIds = curriculumCourses.Select(cc => cc.CourseId).ToHashSet();
         var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
-        var semesterMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.SuggestedSemester);
 
         // ── Step 2: Pool slots — courseId → applicable slot list ──────────
         // Ported from controller lines 229-259
@@ -175,10 +173,11 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
         foreach (var pool in curriculumPools)
         {
             var slotRef = new ApplicablePoolSlotRefDto(
-                PoolId:    pool.Id,
-                SlotName:  pool.SlotName,
-                GroupCode: pool.ElectiveGroup.Code,
-                GroupName: pool.ElectiveGroup.Name);
+                PoolId:       pool.Id,
+                SlotName:     pool.SlotName,
+                GroupCode:    pool.ElectiveGroup.Code,
+                GroupName:    pool.ElectiveGroup.Name,
+                EctsPerCourse: pool.EctsPerCourse);
 
             foreach (var groupCourse in pool.ElectiveGroup.Courses)
             {
