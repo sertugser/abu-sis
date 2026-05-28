@@ -20,17 +20,17 @@ export function RegistrationSummaryBar({
   const progressValue = Math.min(100, (totalEcts / Math.max(1, ectsLimit)) * 100);
 
   return (
-    <div className="bg-muted/40 border-t border-border/40 px-4 py-2 flex flex-wrap items-center gap-6 text-sm">
+    <div className="bg-muted/40 border-t border-border/40 px-3 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
       <span>
-        <span className="text-muted-foreground text-xs">Toplam Kredi: </span>
-        <strong className="tabular-nums text-xs">{totalCredit}</strong>
+        <span className="text-muted-foreground">Toplam Kredi: </span>
+        <strong className="tabular-nums">{totalCredit}</strong>
       </span>
 
       <span>
-        <span className="text-muted-foreground text-xs">AKTS: </span>
+        <span className="text-muted-foreground">AKTS: </span>
         <strong
           className={cn(
-            'tabular-nums text-xs',
+            'tabular-nums',
             isOver && 'text-destructive font-bold',
           )}
         >
@@ -39,13 +39,13 @@ export function RegistrationSummaryBar({
       </span>
 
       <span>
-        <span className="text-muted-foreground text-xs">Saat: </span>
-        <strong className="tabular-nums text-xs">{totalHours}</strong>
+        <span className="text-muted-foreground">Saat: </span>
+        <strong className="tabular-nums">{totalHours}</strong>
       </span>
 
       <span>
-        <span className="text-muted-foreground text-xs">Ders Sayısı: </span>
-        <strong className="tabular-nums text-xs">{courseCount}</strong>
+        <span className="text-muted-foreground">Ders Sayısı: </span>
+        <strong className="tabular-nums">{courseCount}</strong>
       </span>
 
       <Progress

@@ -31,12 +31,12 @@ export function CurriculumCourseRow({ row, onPickSection, registrationActionsOpe
       )}
     >
       {/* + / section picker */}
-      <TableCell className="w-10 py-2 px-2 text-center">
+      <TableCell className="w-10 py-1 px-2 text-center">
         <Button
           size="icon"
           variant="ghost"
           className={cn(
-            'h-6 w-6 rounded-full disabled:opacity-100',
+            'h-5 w-5 rounded-full disabled:opacity-100',
             pickDisabled
               ? 'bg-slate-200 hover:bg-slate-200'
               : 'bg-emerald-500 hover:bg-emerald-600',
@@ -45,17 +45,17 @@ export function CurriculumCourseRow({ row, onPickSection, registrationActionsOpe
           title={pickButtonTitle(row, registrationActionsOpen)}
           onClick={() => onPickSection(row)}
         >
-          <Plus className="h-3.5 w-3.5 text-white" />
+          <Plus className="h-3 w-3 text-white" />
         </Button>
       </TableCell>
 
       {/* Ders Kodu */}
-      <TableCell className="w-28 py-2 px-2 font-mono text-[15px] font-semibold text-primary whitespace-nowrap">
+      <TableCell className="w-28 py-1 px-2 font-mono text-xs font-semibold text-primary whitespace-nowrap">
         {row.code}
       </TableCell>
 
       {/* Ders Adı */}
-      <TableCell className="py-2 px-2 text-[15px] text-slate-700">
+      <TableCell className="py-1 px-2 text-xs text-slate-700">
         <span>
           {row.name}
           {!row.prerequisitesMet && (
@@ -76,38 +76,38 @@ export function CurriculumCourseRow({ row, onPickSection, registrationActionsOpe
       </TableCell>
 
       {/* Z/S */}
-      <TableCell className="w-12 py-2 px-2 text-center text-[15px] font-bold text-slate-700">
+      <TableCell className="w-12 py-1 px-2 text-center text-xs font-bold text-slate-700">
         <span className={row.isCompulsory ? 'text-primary' : 'text-muted-foreground'}>
           {row.isCompulsory ? 'Z' : 'S'}
         </span>
       </TableCell>
 
       {/* KRD */}
-      <TableCell className="w-12 py-2 px-2 text-center tabular-nums text-[15px] text-slate-700">
+      <TableCell className="w-12 py-1 px-2 text-center tabular-nums text-xs text-slate-700">
         {row.nationalCredit}
       </TableCell>
 
       {/* AKTS */}
-      <TableCell className="w-14 py-2 px-2 text-center text-[15px] text-slate-700">
+      <TableCell className="w-14 py-1 px-2 text-center text-xs text-slate-700">
         {row.ects}
       </TableCell>
 
       {/* Sınıf (yarıyıl) */}
-      <TableCell className="hidden md:table-cell w-14 py-2 px-2 text-center tabular-nums text-[15px] text-slate-700">
+      <TableCell className="hidden md:table-cell w-14 py-1 px-2 text-center tabular-nums text-xs text-slate-700">
         {row.suggestedSemester > 0 ? row.suggestedSemester : '—'}
       </TableCell>
 
       {/* Önceki Tekrar Durumu */}
-      <TableCell className="hidden lg:table-cell py-2 px-2 text-[15px] text-slate-700">
+      <TableCell className="hidden lg:table-cell py-1 px-2 text-xs text-slate-700">
         <span className={isAlttan ? 'text-destructive' : 'text-muted-foreground'}>
           {row.previousAttemptInfo ?? '—'}
         </span>
       </TableCell>
 
       {/* Aktif Kayıt Durumu */}
-      <TableCell className="w-32 py-2 px-2 text-center text-[15px] text-slate-700">
+      <TableCell className="w-32 py-1 px-2 text-center text-xs text-slate-700">
         {row.activeRegistrationStatus ? (
-          <Badge variant="success" className="text-[11px] px-1.5 py-0">
+          <Badge variant="success" className="text-[10px] px-1.5 py-0 h-5">
             {row.activeRegistrationStatus}
           </Badge>
         ) : (

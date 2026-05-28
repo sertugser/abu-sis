@@ -38,14 +38,14 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
 
   return (
     <div>
-      {/* Slate-50 section title strip */}
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between">
-        <h3 className="text-[15px] font-semibold text-slate-700">Seçilen Dersler</h3>
-        <span className="text-[13px] text-slate-500">Toplam: {selectedCourses.length} ders</span>
+      {/* Section title strip */}
+      <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 flex items-center justify-between">
+        <h3 className="text-[12px] font-semibold text-slate-700">Seçilen Dersler</h3>
+        <span className="text-[12px] text-slate-500">Toplam: {selectedCourses.length} ders</span>
       </div>
 
       {dropCourse.isError && (
-        <div className="px-4 py-2">
+        <div className="px-3 py-1">
           <Alert variant="destructive">
             <AlertDescription>
               {dropCourse.error instanceof Error
@@ -57,7 +57,7 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
       )}
 
       {selectedCourses.length === 0 ? (
-        <div className="px-4 py-5 text-[13px] text-muted-foreground">
+        <div className="px-3 py-4 text-xs text-muted-foreground">
           Henüz ders seçilmedi.
         </div>
       ) : (
@@ -66,21 +66,21 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
             <TableHeader>
               {/* Dark navy column headers */}
               <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
-                <TableHead className="h-10 w-12 px-2 text-center text-[14px] font-semibold text-white">Çıkar</TableHead>
-                <TableHead className="h-10 w-12 px-2 text-center text-[14px] font-semibold text-white">Şube</TableHead>
-                <TableHead className="h-10 w-24 px-2 text-[14px] font-semibold text-white">Kod</TableHead>
-                <TableHead className="h-10 px-2 text-[14px] font-semibold text-white">Ad</TableHead>
-                <TableHead className="h-10 w-10 px-2 text-center text-[14px] font-semibold text-white">Z/S</TableHead>
-                <TableHead className="h-10 w-12 px-2 text-center text-[14px] font-semibold text-white">T+U</TableHead>
-                <TableHead className="h-10 w-10 px-2 text-center text-[14px] font-semibold text-white">KRD</TableHead>
-                <TableHead className="h-10 w-12 px-2 text-center text-[14px] font-semibold text-white">AKTS</TableHead>
-                <TableHead className="hidden md:table-cell h-10 w-12 px-2 text-center text-[14px] font-semibold text-white">
+                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">Çıkar</TableHead>
+                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">Şube</TableHead>
+                <TableHead className="h-8 w-24 px-2 text-[12px] font-semibold text-white">Kod</TableHead>
+                <TableHead className="h-8 px-2 text-[12px] font-semibold text-white">Ad</TableHead>
+                <TableHead className="h-8 w-10 px-2 text-center text-[12px] font-semibold text-white">Z/S</TableHead>
+                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">T+U</TableHead>
+                <TableHead className="h-8 w-10 px-2 text-center text-[12px] font-semibold text-white">KRD</TableHead>
+                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">AKTS</TableHead>
+                <TableHead className="hidden md:table-cell h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">
                   Sınıf
                 </TableHead>
-                <TableHead className="hidden lg:table-cell h-10 px-2 text-[14px] font-semibold text-white">Alış</TableHead>
-                <TableHead className="hidden lg:table-cell h-10 px-2 text-[14px] font-semibold text-white">AcNeden</TableHead>
-                <TableHead className="h-10 w-32 px-2 text-center text-[14px] font-semibold text-white">Durum</TableHead>
-                <TableHead className="hidden xl:table-cell h-10 w-20 px-2 text-[14px] font-semibold text-white">Grup Kod</TableHead>
+                <TableHead className="hidden lg:table-cell h-8 px-2 text-[12px] font-semibold text-white">Alış</TableHead>
+                <TableHead className="hidden lg:table-cell h-8 px-2 text-[12px] font-semibold text-white">AcNeden</TableHead>
+                <TableHead className="h-8 w-32 px-2 text-center text-[12px] font-semibold text-white">Durum</TableHead>
+                <TableHead className="hidden xl:table-cell h-8 w-20 px-2 text-[12px] font-semibold text-white">Grup Kod</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -97,11 +97,11 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
                     )}
                   >
                     {/* Çıkar */}
-                    <TableCell className="w-12 py-2 px-2 text-center">
+                    <TableCell className="w-12 py-1 px-2 text-center">
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-6 w-6"
+                        className="h-5 w-5"
                         disabled={!canDrop(row.status) || dropCourse.isPending}
                         title={canDrop(row.status) ? 'Dersi çıkar' : 'Bu ders çıkarılamaz'}
                         onClick={() => handleDrop(row.registrationId)}
@@ -115,68 +115,68 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
                     </TableCell>
 
                     {/* Şube */}
-                    <TableCell className="w-12 py-2 px-2 text-center text-[15px] tabular-nums text-slate-700">
+                    <TableCell className="w-12 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
                       —
                     </TableCell>
 
                     {/* Kod */}
-                    <TableCell className="w-24 py-2 px-2 font-mono text-[15px] font-semibold text-primary whitespace-nowrap">
+                    <TableCell className="w-24 py-1 px-2 font-mono text-xs font-semibold text-primary whitespace-nowrap">
                       {row.courseCode}
                     </TableCell>
 
                     {/* Ad */}
-                    <TableCell className="py-2 px-2 text-[15px] text-slate-700">
+                    <TableCell className="py-1 px-2 text-xs text-slate-700">
                       {row.courseName}
                     </TableCell>
 
                     {/* Z/S */}
-                    <TableCell className="w-10 py-2 px-2 text-center text-[15px] font-bold">
+                    <TableCell className="w-10 py-1 px-2 text-center text-xs font-bold">
                       <span className={row.isCompulsory ? 'text-primary' : 'text-muted-foreground'}>
                         {row.isCompulsory ? 'Z' : 'S'}
                       </span>
                     </TableCell>
 
                     {/* T+U */}
-                    <TableCell className="w-12 py-2 px-2 text-center text-[15px] font-mono tabular-nums text-slate-700">
+                    <TableCell className="w-12 py-1 px-2 text-center text-xs font-mono tabular-nums text-slate-700">
                       {row.theoryHours}+{row.labHours}
                     </TableCell>
 
                     {/* KRD */}
-                    <TableCell className="w-10 py-2 px-2 text-center text-[15px] tabular-nums text-slate-700">
+                    <TableCell className="w-10 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
                       —
                     </TableCell>
 
                     {/* AKTS */}
-                    <TableCell className="w-12 py-2 px-2 text-center text-[15px] text-slate-700">
-                      <Badge variant="secondary" className="font-mono text-[11px] px-1.5 py-0">
+                    <TableCell className="w-12 py-1 px-2 text-center text-xs text-slate-700">
+                      <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 h-5">
                         {row.ects}
                       </Badge>
                     </TableCell>
 
                     {/* Sınıf */}
-                    <TableCell className="hidden md:table-cell w-12 py-2 px-2 text-center text-[15px] tabular-nums text-slate-700">
+                    <TableCell className="hidden md:table-cell w-12 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
                       {row.suggestedSemester > 0 ? row.suggestedSemester : '—'}
                     </TableCell>
 
                     {/* Alış */}
-                    <TableCell className="hidden lg:table-cell py-2 px-2 text-[15px] text-slate-700">
+                    <TableCell className="hidden lg:table-cell py-1 px-2 text-xs text-slate-700">
                       <span className={row.takeType === 'Alttan' ? 'text-destructive' : undefined}>
                         {row.takeType}
                       </span>
                     </TableCell>
 
                     {/* AcNeden */}
-                    <TableCell className="hidden lg:table-cell py-2 px-2 text-[15px] text-slate-700">
+                    <TableCell className="hidden lg:table-cell py-1 px-2 text-xs text-slate-700">
                       {row.openingReasonName ?? '—'}
                     </TableCell>
 
                     {/* Durum */}
-                    <TableCell className="w-32 py-2 px-2 text-center">
+                    <TableCell className="w-32 py-1 px-2 text-center">
                       <RegistrationStatusBadge status={row.status} />
                     </TableCell>
 
                     {/* Grup Kod */}
-                    <TableCell className="hidden xl:table-cell w-20 py-2 px-2 text-[15px] font-mono text-orange-700">
+                    <TableCell className="hidden xl:table-cell w-20 py-1 px-2 text-xs font-mono text-orange-700">
                       {row.electiveGroupCode ?? '—'}
                     </TableCell>
                   </TableRow>

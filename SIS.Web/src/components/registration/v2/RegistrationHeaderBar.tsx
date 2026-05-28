@@ -23,11 +23,9 @@ interface LabelValueProps {
 
 function LabelValue({ label, value }: LabelValueProps) {
   return (
-    <div className="flex flex-col gap-0.5 py-1.5 border-b border-slate-200 last:border-b-0">
-      <span className="text-[11px] uppercase tracking-wide text-slate-500 leading-none">
-        {label}
-      </span>
-      <span className="text-[13px] text-slate-700 leading-snug">{value}</span>
+    <div className="flex items-baseline gap-3 py-1 border-b border-slate-100 last:border-b-0">
+      <span className="w-44 shrink-0 text-[12px] text-slate-500">{label}</span>
+      <span className="text-[12px] text-slate-700 font-medium">{value}</span>
     </div>
   );
 }
@@ -40,10 +38,10 @@ export function RegistrationHeaderBar({
   const isDebt = student.financialStatus !== 'Uygun';
 
   return (
-    <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex gap-6">
+    <section className="border-b border-slate-200 bg-white px-4 py-2">
+      <div className="flex flex-col md:flex-row md:divide-x divide-slate-200 gap-0 md:gap-0">
         {/* Left column */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 md:pr-4">
           <LabelValue
             label="Öğrenci No / Adı Soyadı"
             value={`${student.studentNumber} / ${student.fullName}`}
@@ -58,11 +56,8 @@ export function RegistrationHeaderBar({
           <LabelValue label="Genel Ortalama" value={student.cgpa.toFixed(2)} />
         </div>
 
-        {/* Vertical divider */}
-        <div className="w-px bg-slate-200 flex-shrink-0" />
-
         {/* Right column */}
-        <div className="flex-1 min-w-0 flex flex-col justify-between">
+        <div className="flex-1 min-w-0 md:pl-4 flex flex-col justify-between">
           <div>
             <LabelValue label="AKTS Limiti" value={`${student.ectsLimit} AKTS`} />
             <LabelValue
@@ -86,10 +81,10 @@ export function RegistrationHeaderBar({
           </div>
 
           {/* Ek İşlemler dropdown */}
-          <div className="mt-3">
+          <div className="mt-2 flex justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="inline-flex items-center gap-1.5 rounded border border-rose-300 bg-white px-3 py-1.5 text-[12px] font-medium text-rose-600 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-300">
+                <button className="inline-flex items-center gap-1.5 rounded border border-rose-300 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-300 h-7">
                   Ek İşlemler <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
@@ -135,6 +130,6 @@ export function RegistrationHeaderBar({
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

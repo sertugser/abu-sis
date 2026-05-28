@@ -264,7 +264,7 @@ export default function CourseCatalogPage() {
 
         {/* Inline alerts — below header, above tabs */}
         {submitSuccess && (
-          <div className="px-4 py-2">
+          <div className="px-3 py-1">
             <Alert variant="success">
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
@@ -273,7 +273,7 @@ export default function CourseCatalogPage() {
         )}
 
         {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-          <div className="px-4 py-2">
+          <div className="px-3 py-1">
             <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
           </div>
         )}
@@ -321,17 +321,17 @@ export default function CourseCatalogPage() {
 
         {/* Bottom action bar — inside the card */}
         {planItems.length > 0 && (
-          <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 flex justify-end">
+          <div className="border-t border-slate-200 bg-slate-50 px-4 py-1.5 flex justify-end">
             <Button
               onClick={handleSubmit}
               disabled={submit.isPending || !registrationActionsOpen}
-              className="gap-2"
+              className="gap-1.5 h-8 text-[12px]"
               size="sm"
             >
               {submit.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-3.5 w-3.5" />
               )}
               Kaydı Kesinleştir
             </Button>

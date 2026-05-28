@@ -31,13 +31,13 @@ export default function RetakeCoursesPanel({
 
   return (
     <div>
-      <div className="bg-destructive/5 border-y border-destructive/30 px-3 py-2 flex items-center justify-between gap-4">
-        <div className="text-xs min-w-0">
+      <div className="bg-destructive/5 border-y border-destructive/30 px-3 py-1.5 flex items-center justify-between gap-4">
+        <div className="text-[12px] min-w-0">
           <span className="font-semibold text-destructive">Tekrar Edilmesi Gereken Dersler: </span>
           {retakeCourses.length === 0 ? (
             <span className="text-muted-foreground">Yok</span>
           ) : (
-            <span className="font-mono text-foreground">{courseList}</span>
+            <span className="font-mono text-[11px] text-foreground">{courseList}</span>
           )}
         </div>
         <Button
@@ -45,12 +45,12 @@ export default function RetakeCoursesPanel({
           variant="outline"
           onClick={onCheck}
           disabled={checkLoading}
-          className="flex-shrink-0 gap-1"
+          className="flex-shrink-0 gap-1 h-7 text-[11px] px-2.5"
         >
           {checkLoading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <ShieldCheck className="h-3.5 w-3.5" />
+            <ShieldCheck className="h-3 w-3" />
           )}
           Kontrol Et
         </Button>
