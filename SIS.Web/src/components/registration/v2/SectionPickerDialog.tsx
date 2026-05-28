@@ -15,10 +15,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { prolizButtonClass } from '@/lib/prolizButton';
 import { useSectionPicker } from '@/hooks/useSectionPicker';
 import { useAddToPlan } from '@/hooks/useAddToPlan';
 import { SectionPickerRow } from './SectionPickerRow';
@@ -188,13 +188,13 @@ export function SectionPickerDialog({
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            <Button size="sm" className="h-8 gap-1.5" onClick={handleSearch}>
+            <button type="button" className={prolizButtonClass} onClick={handleSearch}>
               <Search className="h-3.5 w-3.5" />
               Ara
-            </Button>
-            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleClear}>
+            </button>
+            <button type="button" className={prolizButtonClass} onClick={handleClear}>
               Temizle
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -265,14 +265,14 @@ export function SectionPickerDialog({
             {totalCount} sonuç · Sayfa {page} / {totalPages}
           </span>
           <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-7 w-7"
+            <button type="button" className={prolizButtonClass}
               disabled={page <= 1 || isLoading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
               {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-            </Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7"
+            </button>
+            <button type="button" className={prolizButtonClass}
               disabled={page >= totalPages || isLoading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
               <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+            </button>
           </div>
         </div>
       </DialogContent>

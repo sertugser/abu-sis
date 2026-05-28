@@ -1,7 +1,7 @@
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import type { CatalogCourseRow } from '../../../types/registrationCatalog';
+import { prolizButtonClass } from '@/lib/prolizButton';
 
 interface Props {
   retakeCourses: CatalogCourseRow[];
@@ -40,12 +40,11 @@ export default function RetakeCoursesPanel({
             <span className="font-mono text-[11px] text-foreground">{courseList}</span>
           )}
         </div>
-        <Button
-          size="sm"
-          variant="outline"
+        <button
+          type="button"
           onClick={onCheck}
           disabled={checkLoading}
-          className="flex-shrink-0 gap-1 h-7 text-[11px] px-2.5"
+          className={`${prolizButtonClass} flex-shrink-0`}
         >
           {checkLoading ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -53,7 +52,7 @@ export default function RetakeCoursesPanel({
             <ShieldCheck className="h-3 w-3" />
           )}
           Kontrol Et
-        </Button>
+        </button>
       </div>
 
       {validationSummary != null && alertVariant != null && (

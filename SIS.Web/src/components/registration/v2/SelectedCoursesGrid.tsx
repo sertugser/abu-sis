@@ -9,9 +9,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { prolizDangerButtonClass } from '@/lib/prolizButton';
 import RegistrationStatusBadge from '@/components/registration/RegistrationStatusBadge';
 import { useDropCourse } from '@/hooks/useDropCourse';
 import type { SelectedCourse } from '@/types/registrationCatalog';
@@ -98,10 +98,9 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
                   >
                     {/* Çıkar */}
                     <TableCell className="w-12 py-1 px-2 text-center">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-5 w-5"
+                      <button
+                        type="button"
+                        className={prolizDangerButtonClass}
                         disabled={!canDrop(row.status) || dropCourse.isPending}
                         title={canDrop(row.status) ? 'Dersi çıkar' : 'Bu ders çıkarılamaz'}
                         onClick={() => handleDrop(row.registrationId)}
@@ -111,7 +110,7 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
                         ) : (
                           <Trash2 className="h-3 w-3" />
                         )}
-                      </Button>
+                      </button>
                     </TableCell>
 
                     {/* Şube */}

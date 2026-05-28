@@ -1,4 +1,3 @@
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 export type ParityFilter = 'Tumu' | 'Guz' | 'Bahar';
@@ -26,51 +25,57 @@ export function SemesterClassTabs({
 }: SemesterClassTabsProps) {
   if (classYears.length === 0) {
     return (
-      <div className="border-b border-border/40 bg-muted/20 px-3 py-1">
-        <p className="text-[12px] text-muted-foreground italic">Müfredat dersi yok.</p>
+      <div className="border-b border-slate-200 bg-white px-3 pt-2 flex items-center">
+        <p className="text-[12px] text-slate-500 italic">Müfredat dersi yok.</p>
       </div>
     );
   }
 
   return (
-    <div className="border-b border-border/40 bg-muted/20 px-3 py-1 flex items-center justify-between flex-wrap gap-1">
-      {/* Parity pills — LEFT */}
-      <div className="flex items-center gap-1">
-        {PARITY_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onParityChange(opt.value)}
-            className={cn(
-              'inline-flex items-center rounded px-2.5 h-6 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-              parity === opt.value
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground',
-            )}
-            aria-pressed={parity === opt.value}
-          >
-            {opt.label}
-          </button>
-        ))}
+    <div className="border-b border-slate-200 bg-white px-3 pt-2 flex items-center justify-between gap-4 flex-wrap">
+      {/* Parity underline tabs — LEFT */}
+      <div className="flex items-center gap-4">
+        {PARITY_OPTIONS.map((opt) => {
+          const active = parity === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onParityChange(opt.value)}
+              className={cn(
+                'pb-1.5 text-[12px] transition-colors',
+                active
+                  ? 'border-b-2 border-blue-600 text-blue-700 font-semibold'
+                  : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300',
+              )}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Class year tabs — RIGHT */}
-      <Tabs
-        value={String(selectedClassYear)}
-        onValueChange={(v) => onClassYearChange(Number(v))}
-      >
-        <TabsList className="h-7 gap-0.5 bg-transparent p-0 rounded-none">
-          {classYears.map((year) => (
-            <TabsTrigger
+      {/* Class year underline tabs — RIGHT */}
+      <div className="flex items-center gap-4">
+        {classYears.map((year) => {
+          const active = year === selectedClassYear;
+          return (
+            <button
               key={year}
-              value={String(year)}
-              className="rounded px-3 h-7 text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              type="button"
+              onClick={() => onClassYearChange(year)}
+              className={cn(
+                'pb-1.5 text-[12px] transition-colors',
+                active
+                  ? 'border-b-2 border-blue-600 text-blue-700 font-semibold'
+                  : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300',
+              )}
             >
               {year}. Sınıf
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

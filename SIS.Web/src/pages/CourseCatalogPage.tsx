@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { prolizPrimaryButtonClass } from '@/lib/prolizButton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -322,11 +322,11 @@ export default function CourseCatalogPage() {
         {/* Bottom action bar — inside the card */}
         {planItems.length > 0 && (
           <div className="border-t border-slate-200 bg-slate-50 px-4 py-1.5 flex justify-end">
-            <Button
+            <button
+              type="button"
               onClick={handleSubmit}
               disabled={submit.isPending || !registrationActionsOpen}
-              className="gap-1.5 h-8 text-[12px]"
-              size="sm"
+              className={prolizPrimaryButtonClass}
             >
               {submit.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -334,7 +334,7 @@ export default function CourseCatalogPage() {
                 <Send className="h-3.5 w-3.5" />
               )}
               Kaydı Kesinleştir
-            </Button>
+            </button>
           </div>
         )}
       </div>

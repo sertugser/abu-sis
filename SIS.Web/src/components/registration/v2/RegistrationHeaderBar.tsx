@@ -1,6 +1,7 @@
 import { ChevronDown, BookOpen, CalendarDays, History, Loader2, Printer } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { prolizButtonClass } from '@/lib/prolizButton';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +25,8 @@ interface LabelValueProps {
 function LabelValue({ label, value }: LabelValueProps) {
   return (
     <div className="flex items-baseline gap-3 py-1 border-b border-slate-100 last:border-b-0">
-      <span className="w-44 shrink-0 text-[12px] text-slate-500">{label}</span>
-      <span className="text-[12px] text-slate-700 font-medium">{value}</span>
+      <span className="w-44 shrink-0 text-[12px] text-slate-600">{label}</span>
+      <span className="text-[12px] text-slate-900">{value}</span>
     </div>
   );
 }
@@ -84,7 +85,7 @@ export function RegistrationHeaderBar({
           <div className="mt-2 flex justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="inline-flex items-center gap-1.5 rounded border border-rose-300 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-300 h-7">
+                <button className={prolizButtonClass}>
                   Ek İşlemler <ChevronDown className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>

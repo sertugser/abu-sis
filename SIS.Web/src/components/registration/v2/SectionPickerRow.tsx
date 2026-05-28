@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TableCell, TableRow } from '@/components/ui/table';
+import { prolizPrimaryButtonClass } from '@/lib/prolizButton';
 import type { SectionPickerRow as SectionPickerRowType } from '@/types/registrationCatalog';
 
 function shortLabelFromReason(reason: string | null | undefined): string {
@@ -45,15 +45,15 @@ export function SectionPickerRow({ row, onAdd, isAdding, isInPlan, registrationA
       return <Badge variant="secondary" className="text-[10px]">Kayıt kapalı</Badge>;
     }
     return (
-      <Button
-        size="sm"
-        className="h-7 gap-1"
+      <button
+        type="button"
+        className={prolizPrimaryButtonClass}
         onClick={() => onAdd(row.sectionId)}
         disabled={isAdding}
       >
         <Plus className="h-3 w-3" />
         Ekle
-      </Button>
+      </button>
     );
   }
 
