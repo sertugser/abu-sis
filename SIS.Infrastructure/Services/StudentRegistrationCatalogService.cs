@@ -121,15 +121,107 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             RegistrationMessage: null);
 
         // 9. Build curriculum tree (classYears / semesters / course rows)
-        var classYears = await BuildClassYearsAsync(student, activeProgram, term, ct);
+        // Also surfaces intermediate data (failedCourseIds, compulsoryMap, pools, allCurriculumCourses) for reuse.
+        var (classYears, failedCourseIds, compulsoryMap, curriculumPools, allCurriculumCourses) =
+            await BuildClassYearsAsync(student, activeProgram, term, ct);
+
+        // 10. RetakeCourses — curriculum courses whose latest grade is still FF/NA/U (not later passed).
+        //     Reuses the already-loaded allCurriculumCourses — no extra DB query.
+        var retakeCourses = allCurriculumCourses
+            .Where(cc => failedCourseIds.Contains(cc.CourseId))
+            .Select(cc => BuildCourseRow(
+                cc,
+                takeStatus: "Alttan",
+                prereqsMet: true,
+                previousAttemptInfo: null,
+                activeRegStatus: null,
+                poolSlots: Array.Empty<ApplicablePoolSlotRefDto>()))
+            .OrderBy(r => r.Code)
+            .ToList();
+
+        // 11. ElectivePoolSlots — load pools once; reuse for ElectiveGroupCode lookup in SelectedCourses.
+        var poolIds = curriculumPools.Select(p => p.Id).ToList();
+        var poolEctsPerCourse = curriculumPools.ToDictionary(p => p.Id, p => p.EctsPerCourse);
+        var progress = await _poolProgressCalculator.CalculateAsync(
+            student.Id, poolIds, poolEctsPerCourse, ct);
+
+        var electivePoolSlots = curriculumPools.Select(p =>
+        {
+            var pr = progress[p.Id];
+            var isFulfilled =
+                (p.RequiredCourseCount == 0 || pr.CompletedCourseCount >= p.RequiredCourseCount)
+             && (p.RequiredEcts == 0 || pr.EarnedEcts >= p.RequiredEcts);
+
+            return new CatalogPoolSlotDto(
+                PoolId:               p.Id,
+                GroupCode:            p.ElectiveGroup.Code,
+                GroupName:            p.ElectiveGroup.Name,
+                SlotName:             p.SlotName,
+                SuggestedSemesterStart: p.SuggestedSemesterStart,
+                SuggestedSemesterEnd:   p.SuggestedSemesterEnd,
+                RequiredCourseCount:  p.RequiredCourseCount,
+                CompletedCourseCount: pr.CompletedCourseCount,
+                RequiredEcts:         p.RequiredEcts,
+                EarnedEcts:           pr.EarnedEcts,
+                EctsPerCourse:        p.EctsPerCourse,
+                IsFulfilled:          isFulfilled);
+        }).ToList();
+
+        // 12. SelectedCourses — current-term registrations (Draft/PendingAdvisorApproval/Active/Rejected).
+        //     Dropped and Withdrawn are excluded (rule #24).
+        var poolGroupCodeByPoolId = curriculumPools.ToDictionary(p => p.Id, p => p.ElectiveGroup.Code);
+
+        var currentTermRegs = await _context.CourseRegistrations
+            .Include(cr => cr.CourseSection)
+                .ThenInclude(cs => cs.Course)
+            .Include(cr => cr.OpeningReasonSnapshot)
+            .Where(cr => cr.StudentId == student.Id
+                && cr.CourseSection.TermId == term.Id
+                && (cr.Status == RegistrationStatus.Draft
+                    || cr.Status == RegistrationStatus.PendingAdvisorApproval
+                    || cr.Status == RegistrationStatus.Active
+                    || cr.Status == RegistrationStatus.Rejected))
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var selectedCourses = currentTermRegs.Select(cr =>
+        {
+            var course = cr.CourseSection.Course;
+            var cid = course.Id;
+            var isCompulsory = compulsoryMap.TryGetValue(cid, out var comp) && comp;
+            var sugSemester = 0; // not readily available without curriculum lookup
+            // Derive SuggestedSemester from curriculum if present; else 0
+            // (we can reuse the already-loaded curriculum data via the return from BuildClassYearsAsync)
+            var ects = cr.EctsSnapshot ?? course.Ects;
+            string? electiveGroupCode = cr.AppliedElectivePoolId.HasValue
+                && poolGroupCodeByPoolId.TryGetValue(cr.AppliedElectivePoolId.Value, out var egCode)
+                ? egCode
+                : null;
+
+            return new SelectedCourseDto(
+                RegistrationId:    cr.Id,
+                CourseSectionId:   cr.CourseSectionId,
+                CourseId:          cid,
+                CourseCode:        course.Code,
+                CourseName:        course.Name,
+                IsCompulsory:      isCompulsory,
+                TheoryHours:       course.TheoryHours,
+                LabHours:          course.LabHours,
+                Ects:              ects,
+                SuggestedSemester: sugSemester,
+                TakeType:          failedCourseIds.Contains(cid) ? "Alttan" : "IlkDefa",
+                Status:            cr.Status.ToString(),
+                OpeningReasonName: cr.OpeningReasonSnapshot?.Name,
+                ElectiveGroupCode: electiveGroupCode);
+        }).ToList();
 
         return new StudentRegistrationCatalogDto(
             Student:          header,
             Term:             termInfo,
             ClassYears:       classYears,
-            RetakeCourses:    Array.Empty<CatalogCourseRowDto>(),
-            ElectivePoolSlots: Array.Empty<CatalogPoolSlotDto>(),
-            SelectedCourses:  Array.Empty<SelectedCourseDto>());
+            RetakeCourses:    retakeCourses,
+            ElectivePoolSlots: electivePoolSlots,
+            SelectedCourses:  selectedCourses);
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -138,10 +230,17 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
 
     /// <summary>
     /// Builds the curriculum tree: classYear → semester(Guz/Bahar) → course rows.
+    /// Also returns failedCourseIds, compulsoryMap and curriculumPools for reuse in BuildAsync.
     /// Ported from CourseController.BuildStudentCatalogAsync lines 221-492.
     /// HasOpenSections is always false here (filled in task B5).
     /// </summary>
-    private async Task<IReadOnlyList<CatalogClassYearDto>> BuildClassYearsAsync(
+    private async Task<(
+        IReadOnlyList<CatalogClassYearDto> ClassYears,
+        HashSet<int> FailedCourseIds,
+        Dictionary<int, bool> CompulsoryMap,
+        List<CurriculumElectivePool> CurriculumPools,
+        List<CurriculumCourse> CurriculumCourses)>
+    BuildClassYearsAsync(
         StudentEntity student,
         StudentProgramEntity activeProgram,
         AcademicTerm term,
@@ -155,12 +254,8 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             .AsNoTracking()
             .ToListAsync(ct);
 
-        if (curriculumCourses.Count == 0)
-            return Array.Empty<CatalogClassYearDto>();
-
-        var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
-
         // ── Step 2: Pool slots — courseId → applicable slot list ──────────
+        // Loaded unconditionally so BuildAsync can build ElectivePoolSlots even when curriculum has no courses.
         // Ported from controller lines 229-259
         var curriculumPools = await _context.CurriculumElectivePools
             .AsNoTracking()
@@ -168,6 +263,13 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             .Include(p => p.ElectiveGroup)
                 .ThenInclude(eg => eg.Courses)
             .ToListAsync(ct);
+
+        if (curriculumCourses.Count == 0)
+            return (Array.Empty<CatalogClassYearDto>(), new HashSet<int>(),
+                new Dictionary<int, bool>(), curriculumPools,
+                curriculumCourses);
+
+        var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
 
         var courseToPoolSlots = new Dictionary<int, List<ApplicablePoolSlotRefDto>>();
         foreach (var pool in curriculumPools)
@@ -412,7 +514,37 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             })
             .ToList();
 
-        return tree;
+        return (tree, failedCourseIds, compulsoryMap, curriculumPools, curriculumCourses);
+    }
+
+    /// <summary>
+    /// Builds a <see cref="CatalogCourseRowDto"/> from a CurriculumCourse with explicit override fields.
+    /// Shared by the curriculum tree rows and the RetakeCourses list so construction is DRY.
+    /// </summary>
+    private static CatalogCourseRowDto BuildCourseRow(
+        CurriculumCourse cc,
+        string takeStatus,
+        bool prereqsMet,
+        string? previousAttemptInfo,
+        string? activeRegStatus,
+        IReadOnlyList<ApplicablePoolSlotRefDto> poolSlots)
+    {
+        var course = cc.Course;
+        return new CatalogCourseRowDto(
+            CourseId:                 cc.CourseId,
+            Code:                     course.Code,
+            Name:                     course.Name,
+            IsCompulsory:             cc.IsCompulsory,
+            NationalCredit:           course.NationalCredit,
+            Ects:                     course.Ects,
+            SuggestedSemester:        cc.SuggestedSemester,
+            ClassYear:                cc.SuggestedSemester > 0 ? (cc.SuggestedSemester - 1) / 2 + 1 : 1,
+            TakeStatus:               takeStatus,
+            PrerequisitesMet:         prereqsMet,
+            PreviousAttemptInfo:      previousAttemptInfo,
+            ActiveRegistrationStatus: activeRegStatus,
+            HasOpenSections:          false,
+            ApplicablePoolSlots:      poolSlots);
     }
 
     /// <summary>

@@ -200,6 +200,147 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
     // ────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task BuildAsync_RetakeCourses_OnlyCurrentlyFailed()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // Two courses in curriculum
+        var cFailed = new Course { Id = 20, Code = "C201", Name = "Failed Course", Ects = 5, NationalCredit = 3, DepartmentId = 1, CreatedAt = now };
+        var cPassed = new Course { Id = 21, Code = "C202", Name = "Passed Course", Ects = 5, NationalCredit = 3, DepartmentId = 1, CreatedAt = now };
+        _context.Set<Course>().AddRange(cFailed, cPassed);
+
+        _context.Set<CurriculumCourse>().AddRange(
+            new CurriculumCourse { CurriculumId = 1, CourseId = 20, IsCompulsory = true, SuggestedSemester = 1 },
+            new CurriculumCourse { CurriculumId = 1, CourseId = 21, IsCompulsory = true, SuggestedSemester = 2 });
+
+        // Section for both (in a past term)
+        var pastSection20 = new CourseSection { Id = 300, CourseId = 20, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 1, Status = CourseSectionStatus.Active, CreatedAt = now };
+        var pastSection21 = new CourseSection { Id = 301, CourseId = 21, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 1, Status = CourseSectionStatus.Active, CreatedAt = now };
+        _context.Set<CourseSection>().AddRange(pastSection20, pastSection21);
+
+        // C201 → FF (currently failed, not later passed)
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 10, StudentId = 1, CourseSectionId = 300,
+            Status = RegistrationStatus.Completed, Grade = GradeCode.FF, CreatedAt = now
+        });
+
+        // C202 → passed (AA)
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 11, StudentId = 1, CourseSectionId = 301,
+            Status = RegistrationStatus.Completed, Grade = GradeCode.AA, CreatedAt = now
+        });
+
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().BuildAsync(student, sp);
+
+        // C201 (failed) must appear in RetakeCourses
+        result.RetakeCourses.Should().ContainSingle(r => r.Code == "C201");
+        // C202 (passed) must NOT appear
+        result.RetakeCourses.Should().NotContain(r => r.Code == "C202");
+    }
+
+    [Fact]
+    public async Task BuildAsync_ElectivePoolSlots_FromCalculator()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // Seed ElectiveSubtype (required FK)
+        var subtype = new ElectiveSubtypeEntity { Id = 1, Code = "TE", Name = "Teknik Seçmeli", IsActive = true, CreatedAt = now };
+        _context.Set<ElectiveSubtypeEntity>().Add(subtype);
+
+        // ElectiveGroup
+        var group = new ElectiveGroup { Id = 1, Code = "TE-GRP", Name = "Teknik Seçmeli Grubu", ElectiveSubtypeId = 1, IsActive = true, CreatedAt = now };
+        _context.Set<ElectiveGroup>().Add(group);
+
+        // A course in that group
+        var electiveCourse = new Course { Id = 30, Code = "E301", Name = "Elective Course", Ects = 5, NationalCredit = 3, DepartmentId = 1, CreatedAt = now };
+        _context.Set<Course>().Add(electiveCourse);
+        _context.Set<ElectiveGroupCourse>().Add(new ElectiveGroupCourse { ElectiveGroupId = 1, CourseId = 30, AddedAt = now });
+
+        // CurriculumElectivePool — RequiredCourseCount=1, EctsPerCourse=null
+        var pool = new CurriculumElectivePool
+        {
+            Id = 1, CurriculumId = 1, ElectiveGroupId = 1,
+            SlotName = "TE-1", SuggestedSemesterStart = 5, SuggestedSemesterEnd = 6,
+            RequiredCourseCount = 1, RequiredEcts = 0, EctsPerCourse = null,
+            CreatedAt = now
+        };
+        _context.Set<CurriculumElectivePool>().Add(pool);
+
+        // Past registration: student passed E301, applied to pool 1
+        var pastSection = new CourseSection { Id = 400, CourseId = 30, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 1, Status = CourseSectionStatus.Active, CreatedAt = now };
+        _context.Set<CourseSection>().Add(pastSection);
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 20, StudentId = 1, CourseSectionId = 400,
+            Status = RegistrationStatus.Completed, Grade = GradeCode.AA,
+            AppliedElectivePoolId = 1, CreatedAt = now
+        });
+
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().BuildAsync(student, sp);
+
+        result.ElectivePoolSlots.Should().HaveCount(1);
+        var slot = result.ElectivePoolSlots[0];
+        slot.PoolId.Should().Be(1);
+        slot.GroupCode.Should().Be("TE-GRP");
+        slot.SlotName.Should().Be("TE-1");
+        slot.CompletedCourseCount.Should().Be(1);
+        slot.IsFulfilled.Should().BeTrue(); // RequiredCourseCount=1, completed=1 → fulfilled
+    }
+
+    [Fact]
+    public async Task BuildAsync_SelectedCourses_ExcludesDroppedAndWithdrawn()
+    {
+        var now = DateTime.UtcNow;
+        var (student, sp) = await SeedMinimumAsync(now);
+
+        // A course in curriculum
+        var course = new Course { Id = 40, Code = "C401", Name = "Selected Course", Ects = 5, NationalCredit = 3, DepartmentId = 1, CreatedAt = now };
+        _context.Set<Course>().Add(course);
+        _context.Set<CurriculumCourse>().Add(new CurriculumCourse { CurriculumId = 1, CourseId = 40, IsCompulsory = true, SuggestedSemester = 1 });
+
+        // 3 sections in the active term
+        var secActive   = new CourseSection { Id = 500, CourseId = 40, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 1, Status = CourseSectionStatus.Active, CreatedAt = now };
+        var secDropped  = new CourseSection { Id = 501, CourseId = 40, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 2, Status = CourseSectionStatus.Active, CreatedAt = now };
+        var secWithdrawn = new CourseSection { Id = 502, CourseId = 40, TermId = 10, Capacity = 30, EnrolledCount = 0, SectionNumber = 3, Status = CourseSectionStatus.Active, CreatedAt = now };
+        _context.Set<CourseSection>().AddRange(secActive, secDropped, secWithdrawn);
+
+        // Active registration
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 30, StudentId = 1, CourseSectionId = 500,
+            Status = RegistrationStatus.Active, CreatedAt = now
+        });
+        // Dropped — must be excluded
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 31, StudentId = 1, CourseSectionId = 501,
+            Status = RegistrationStatus.Dropped, CreatedAt = now
+        });
+        // Withdrawn — must be excluded
+        _context.Set<CourseRegistration>().Add(new CourseRegistration
+        {
+            Id = 32, StudentId = 1, CourseSectionId = 502,
+            Status = RegistrationStatus.Withdrawn, CreatedAt = now
+        });
+
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().BuildAsync(student, sp);
+
+        result.SelectedCourses.Should().HaveCount(1);
+        result.SelectedCourses[0].RegistrationId.Should().Be(30);
+        result.SelectedCourses[0].Status.Should().Be("Active");
+    }
+
+    [Fact]
     public async Task BuildAsync_SetsTakeStatus_Alttan_ForFailedCourse()
     {
         var now = DateTime.UtcNow;
