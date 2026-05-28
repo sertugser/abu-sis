@@ -126,7 +126,8 @@ public sealed class StudentRegistrationCatalogServiceTests : IDisposable
             new EctsLimitResolver(new NullSystemConfigProvider()),
             new RegistrationGate(_context),
             new ElectivePoolProgressCalculator(_context),
-            new SystemDateTimeProvider());
+            new SystemDateTimeProvider(),
+            new NullWebModuleControlService());
 
     // ────────────────────────────────────────────────────────────────────
     // Test 1 (B2 — header / empty tree)

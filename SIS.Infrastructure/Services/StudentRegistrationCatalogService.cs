@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
@@ -42,19 +43,22 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
     private readonly IRegistrationGate _registrationGate;
     private readonly IElectivePoolProgressCalculator _poolProgressCalculator;
     private readonly IDateTimeProvider _clock;
+    private readonly IWebModuleControlService _webModuleControls;
 
     public StudentRegistrationCatalogService(
         AppDbContext context,
         IEctsLimitResolver ectsLimitResolver,
         IRegistrationGate registrationGate,
         IElectivePoolProgressCalculator poolProgressCalculator,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        IWebModuleControlService webModuleControls)
     {
         _context = context;
         _ectsLimitResolver = ectsLimitResolver;
         _registrationGate = registrationGate;
         _poolProgressCalculator = poolProgressCalculator;
         _clock = clock;
+        _webModuleControls = webModuleControls;
     }
 
     public async Task<StudentRegistrationCatalogDto> BuildAsync(
@@ -133,16 +137,21 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                                      ? "Normal Süresi İçinde"
                                      : "Süre Aşımı");
 
-        // 8. Term info
+        // 8. Term info — openness sourced from IWebModuleControlService (same as CourseController.GetActiveTerm
+        //    and write-path _webModuleControls checks) so TopBar and catalog agree on registration state.
+        //    TODO: port per-student-state code resolution (new/extended) from CourseController if needed.
+        var regAccess     = await _webModuleControls.EvaluateAsync("student-course-registration", term.Id, ct);
+        var addDropAccess = await _webModuleControls.EvaluateAsync("student-add-drop", term.Id, ct);
+
         var termInfo = new RegistrationTermInfoDto(
-            Id:                 term.Id,
-            Name:               term.Name,
-            Year:               term.Year,
-            TermType:           term.TermType.ToString(),
-            IsRegistrationOpen: term.IsRegistrationOpen(now),
-            IsAddDropOpen:      term.IsAddDropOpen(now),
+            Id:                  term.Id,
+            Name:                term.Name,
+            Year:                term.Year,
+            TermType:            term.TermType.ToString(),
+            IsRegistrationOpen:  regAccess.IsOpen,
+            IsAddDropOpen:       addDropAccess.IsOpen,
             HasAcademicCalendar: term.AcademicCalendar != null,
-            RegistrationMessage: null);
+            RegistrationMessage: regAccess.Message);
 
         // 9. Build curriculum tree (classYears / semesters / course rows)
         // Also surfaces intermediate data (flatRows, compulsoryMap, pools, allCurriculumCourses) for reuse.
