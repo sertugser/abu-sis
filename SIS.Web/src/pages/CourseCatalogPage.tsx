@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { prolizPrimaryButtonClass } from '@/lib/prolizButton';
@@ -23,6 +23,8 @@ import RegistrationStatusLine from '../components/registration/v2/RegistrationSt
 import { SelectedCoursesGrid } from '../components/registration/v2/SelectedCoursesGrid';
 import { RegistrationSummaryBar } from '../components/registration/v2/RegistrationSummaryBar';
 import { useStudentRegistration } from '../hooks/useStudentRegistration';
+import { useAddToPlan } from '../hooks/useAddToPlan';
+import { useDropCourse } from '../hooks/useDropCourse';
 import { useDownloadRegistrationPlanPdf } from '../hooks/useDownloadRegistrationPlanPdf';
 import { useValidateRegistration } from '../hooks/useValidateRegistration';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
@@ -55,6 +57,42 @@ export default function CourseCatalogPage() {
   const validate = useValidateRegistration();
   const pdf = useDownloadRegistrationPlanPdf();
   const submit = useSubmitRegistration();
+
+  const addToPlanMutation = useAddToPlan();
+  const [addError, setAddError] = useState<string | null>(null);
+  const handleAddSection = useCallback(async (sectionId: number): Promise<void> => {
+    setAddError(null);
+    return new Promise<void>((resolve, reject) => {
+      addToPlanMutation.mutate(sectionId, {
+        onSuccess: () => resolve(),
+        onError: (err) => {
+          setAddError(err instanceof Error ? err.message : 'Eklenemedi.');
+          reject(err);
+        },
+      });
+    });
+  }, [addToPlanMutation]);
+
+  const dropMutation = useDropCourse();
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const handleRemove = useCallback(async (registrationId: number): Promise<void> => {
+    setRemovingId(registrationId);
+    setRemoveError(null);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        dropMutation.mutate(registrationId, {
+          onSuccess: () => resolve(),
+          onError: (err) => {
+            setRemoveError(err instanceof Error ? err.message : 'Çıkarılamadı.');
+            reject(err);
+          },
+        });
+      });
+    } finally {
+      setRemovingId(null);
+    }
+  }, [dropMutation]);
 
   // On first catalog load, default selectedClassYear to student.classYear (clamped to available years).
   useEffect(() => {
@@ -309,6 +347,9 @@ export default function CourseCatalogPage() {
         <SelectedCoursesGrid
           selectedCourses={selectedCourses}
           registrationActionsOpen={registrationActionsOpen}
+          onRemove={handleRemove}
+          removingId={removingId}
+          removeError={removeError}
         />
 
         <RegistrationSummaryBar
@@ -348,6 +389,9 @@ export default function CourseCatalogPage() {
         }}
         registeredSectionIds={registeredSectionIds}
         registrationActionsOpen={registrationActionsOpen}
+        onAddSection={handleAddSection}
+        isAdding={addToPlanMutation.isPending}
+        addError={addError}
         onAdded={() => { /* catalog refetch is automatic via cache invalidation */ }}
       />
 

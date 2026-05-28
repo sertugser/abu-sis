@@ -20,7 +20,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { prolizButtonClass } from '@/lib/prolizButton';
 import { useSectionPicker } from '@/hooks/useSectionPicker';
-import { useAddToPlan } from '@/hooks/useAddToPlan';
 import { SectionPickerRow } from './SectionPickerRow';
 import type { CatalogCourseRow, SectionPickerQuery } from '@/types/registrationCatalog';
 
@@ -41,6 +40,13 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   registeredSectionIds: number[];
   registrationActionsOpen: boolean;
+  /** Caller provides: how to add a section. Returns promise that resolves on success. */
+  onAddSection: (sectionId: number) => Promise<void>;
+  /** Is an add currently in flight (for disabling buttons). */
+  isAdding: boolean;
+  /** Add error message if any (display in dialog). */
+  addError?: string | null;
+  /** Called after a successful add (parent decides whether to close dialog, etc.). */
   onAdded?: () => void;
 }
 
@@ -50,6 +56,9 @@ export function SectionPickerDialog({
   onOpenChange,
   registeredSectionIds,
   registrationActionsOpen,
+  onAddSection,
+  isAdding,
+  addError,
   onAdded,
 }: Props) {
   const [pendingInstructorId, setPendingInstructorId] = useState('');
@@ -59,8 +68,6 @@ export function SectionPickerDialog({
 
   const [appliedQuery, setAppliedQuery] = useState<SectionPickerQuery>(EMPTY_QUERY);
   const [page, setPage] = useState(1);
-
-  const addToPlan = useAddToPlan();
 
   const { data, isLoading, isError, error } = useSectionPicker(
     course?.courseId ?? null,
@@ -101,21 +108,18 @@ export function SectionPickerDialog({
     setPage(1);
   }
 
-  function handleAdd(sectionId: number) {
-    addToPlan.mutate(sectionId, {
-      onSuccess: () => {
-        onAdded?.();
-        onOpenChange(false);
-      },
-    });
+  async function handleAdd(sectionId: number) {
+    try {
+      await onAddSection(sectionId);
+      onAdded?.();
+      onOpenChange(false);
+    } catch {
+      // error already surfaced via addError prop; don't re-handle here
+    }
   }
 
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-
-  const addErrorMessage = addToPlan.error instanceof Error
-    ? addToPlan.error.message
-    : addToPlan.error ? 'Eklenirken bir hata oluştu.' : null;
 
   if (!course) return null;
 
@@ -199,9 +203,9 @@ export function SectionPickerDialog({
         </div>
 
         {/* Add error */}
-        {addErrorMessage && (
+        {addError && (
           <Alert variant="destructive" className="shrink-0 py-2">
-            <AlertDescription className="text-xs">{addErrorMessage}</AlertDescription>
+            <AlertDescription className="text-xs">{addError}</AlertDescription>
           </Alert>
         )}
 
@@ -249,7 +253,7 @@ export function SectionPickerDialog({
                     key={row.sectionId}
                     row={row}
                     onAdd={handleAdd}
-                    isAdding={addToPlan.isPending}
+                    isAdding={isAdding}
                     isInPlan={registeredSectionIds.includes(row.sectionId)}
                     registrationActionsOpen={registrationActionsOpen}
                   />

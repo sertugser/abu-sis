@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Trash2, Loader2 } from 'lucide-react';
 import {
   Table,
@@ -13,27 +12,28 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { prolizDangerButtonClass } from '@/lib/prolizButton';
 import RegistrationStatusBadge from '@/components/registration/RegistrationStatusBadge';
-import { useDropCourse } from '@/hooks/useDropCourse';
 import type { SelectedCourse } from '@/types/registrationCatalog';
 
 interface Props {
   selectedCourses: SelectedCourse[];
   registrationActionsOpen: boolean;
+  /** Caller provides: how to drop. Returns promise that resolves on success. */
+  onRemove: (registrationId: number) => Promise<void>;
+  /** Currently in-flight registrationId (for showing spinner on that row). */
+  removingId: number | null;
+  /** Drop error (if any). */
+  removeError?: string | null;
 }
 
-export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }: Props) {
-  const [pendingId, setPendingId] = useState<number | null>(null);
-  const dropCourse = useDropCourse();
-
+export function SelectedCoursesGrid({
+  selectedCourses,
+  registrationActionsOpen,
+  onRemove,
+  removingId,
+  removeError,
+}: Props) {
   function canDrop(status: string): boolean {
     return (status === 'Draft' || status === 'Rejected') && registrationActionsOpen;
-  }
-
-  function handleDrop(registrationId: number): void {
-    setPendingId(registrationId);
-    dropCourse.mutate(registrationId, {
-      onSettled: () => setPendingId(null),
-    });
   }
 
   return (
@@ -44,14 +44,10 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
         <span className="text-[12px] text-slate-500">Toplam: {selectedCourses.length} ders</span>
       </div>
 
-      {dropCourse.isError && (
+      {removeError && (
         <div className="px-3 py-1">
           <Alert variant="destructive">
-            <AlertDescription>
-              {dropCourse.error instanceof Error
-                ? dropCourse.error.message
-                : 'Ders silinirken bir hata oluştu.'}
-            </AlertDescription>
+            <AlertDescription>{removeError}</AlertDescription>
           </Alert>
         </div>
       )}
@@ -86,7 +82,7 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
 
             <TableBody>
               {selectedCourses.map((row, index) => {
-                const isPending = pendingId === row.registrationId && dropCourse.isPending;
+                const isPending = removingId === row.registrationId;
 
                 return (
                   <TableRow
@@ -101,9 +97,9 @@ export function SelectedCoursesGrid({ selectedCourses, registrationActionsOpen }
                       <button
                         type="button"
                         className={prolizDangerButtonClass}
-                        disabled={!canDrop(row.status) || dropCourse.isPending}
+                        disabled={!canDrop(row.status) || removingId !== null}
                         title={canDrop(row.status) ? 'Dersi çıkar' : 'Bu ders çıkarılamaz'}
-                        onClick={() => handleDrop(row.registrationId)}
+                        onClick={() => onRemove(row.registrationId)}
                       >
                         {isPending ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
