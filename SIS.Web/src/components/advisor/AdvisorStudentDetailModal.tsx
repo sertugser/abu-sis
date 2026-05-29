@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogTitle } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Button } from '@/components/ui/button';
@@ -6,12 +6,24 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, AlertTriangle, BookOpen, ChevronDown, GraduationCap, ScrollText, TrendingUp, ListChecks, RotateCcw } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAdvisorStudents, usePendingApprovals, useApproveStudent, useRejectStudent } from '../../hooks/useAdvisor';
+import { useAdvisorRegistrationCatalog } from '../../hooks/useAdvisorRegistrationCatalog';
+import { useAdvisorAddCourse, useAdvisorDropCourse } from '../../hooks/useAdvisor';
 import { getErrorMessage } from '../../lib/errorMessage';
 import { toApiError } from '../../lib/apiError';
 import { formatDate, formatDateTime } from '../../lib/utils';
 import type { ValidationError } from '../../types/registration';
-import AdvisorCourseEditor from './AdvisorCourseEditor';
+import type { CatalogCourseRow } from '../../types/registrationCatalog';
+import { RegistrationHeaderBar } from '../registration/v2/RegistrationHeaderBar';
+import { SemesterClassTabs } from '../registration/v2/SemesterClassTabs';
+import type { ParityFilter } from '../registration/v2/SemesterClassTabs';
+import { CurriculumCourseGrid } from '../registration/v2/CurriculumCourseGrid';
+import { SectionPickerDialog } from '../registration/v2/SectionPickerDialog';
+import RetakeCoursesPanel from '../registration/v2/RetakeCoursesPanel';
+import RegistrationStatusLine from '../registration/v2/RegistrationStatusLine';
+import { SelectedCoursesGrid } from '../registration/v2/SelectedCoursesGrid';
+import { RegistrationSummaryBar } from '../registration/v2/RegistrationSummaryBar';
 import AdvisorStudentInfoDialogs, { type AdvisorInfoView } from './AdvisorStudentInfoDialogs';
 import { PLAN_STATUS_LABELS, PLAN_STATUS_VARIANTS } from './planStatus';
 
@@ -21,10 +33,17 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+function deriveDefaultParity(termType: string): ParityFilter {
+  const t = termType.toLowerCase();
+  if (t.includes('fall') || t.includes('guz') || t.includes('güz')) return 'Guz';
+  if (t.includes('spring') || t.includes('bahar')) return 'Bahar';
+  return 'Tumu';
+}
+
 /**
  * Danışmanın bir öğrencinin DERS KAYDINA odaklı, boyutlandırılabilir/taşınabilir modali
- * (sistem geneli ResizableDialogContent). Plan özeti + kayıtlı dersler (çıkar) + aday
- * dersler (ekle) + Onayla/Reddet.
+ * (sistem geneli ResizableDialogContent). Plan özeti + v2 kayıt kataloğu (müfredat ağacı)
+ * + Onayla/Reddet.
  */
 export default function AdvisorStudentDetailModal({ studentId, open, onOpenChange }: Props) {
   const { data: advisees = [] } = useAdvisorStudents();
@@ -39,6 +58,87 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
   const approve = useApproveStudent();
   const reject = useRejectStudent();
   const busy = approve.isPending || reject.isPending;
+
+  // v2 catalog
+  const { data: catalog, isLoading: catalogLoading } = useAdvisorRegistrationCatalog(open ? studentId : null);
+
+  // v2 UI state
+  const [selectedClassYear, setSelectedClassYear] = useState<number | null>(null);
+  const [parity, setParity] = useState<ParityFilter>('Tumu');
+  const parityInitialized = useRef(false);
+  const [pickerCourse, setPickerCourse] = useState<CatalogCourseRow | null>(null);
+
+  // v2 mutations
+  const advisorAdd = useAdvisorAddCourse();
+  const advisorDrop = useAdvisorDropCourse();
+  const [addError, setAddError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  // Sync catalog defaults whenever studentId changes or modal opens
+  useEffect(() => {
+    parityInitialized.current = false;
+    setSelectedClassYear(null);
+    setParity('Tumu');
+    setPickerCourse(null);
+    setAddError(null);
+    setRemovingId(null);
+    setRemoveError(null);
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!catalog || selectedClassYear !== null) return;
+    const years = catalog.classYears.map((y) => y.classYear);
+    if (years.length === 0) return;
+    const target = catalog.student.classYear;
+    const clamped = years.includes(target) ? target : years[0];
+    setSelectedClassYear(clamped);
+  }, [catalog, selectedClassYear]);
+
+  useEffect(() => {
+    if (!catalog || parityInitialized.current) return;
+    setParity(deriveDefaultParity(catalog.term.termType));
+    parityInitialized.current = true;
+  }, [catalog]);
+
+  const handleAddSection = useCallback(async (sectionId: number): Promise<void> => {
+    if (studentId === null) return;
+    setAddError(null);
+    return new Promise<void>((resolve, reject_) => {
+      advisorAdd.mutate(
+        { studentId, courseSectionId: sectionId },
+        {
+          onSuccess: () => resolve(),
+          onError: (e) => {
+            setAddError(e instanceof Error ? e.message : 'Eklenemedi.');
+            reject_(e);
+          },
+        },
+      );
+    });
+  }, [advisorAdd, studentId]);
+
+  const handleRemove = useCallback(async (registrationId: number): Promise<void> => {
+    if (studentId === null) return;
+    setRemovingId(registrationId);
+    setRemoveError(null);
+    try {
+      await new Promise<void>((resolve, reject_) => {
+        advisorDrop.mutate(
+          { studentId, registrationId },
+          {
+            onSuccess: () => resolve(),
+            onError: (e) => {
+              setRemoveError(e instanceof Error ? e.message : 'Çıkarılamadı.');
+              reject_(e);
+            },
+          },
+        );
+      });
+    } finally {
+      setRemovingId(null);
+    }
+  }, [advisorDrop, studentId]);
 
   const row = advisees.find(a => a.studentId === studentId);
   const pending = pendingData?.items.find(p => p.studentId === studentId) ?? null;
@@ -119,11 +219,20 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
   // onaylı plana ekleme yapsa bile (Proliz modeli) buton çıkar.
   const canDecide = pending != null;
 
+  // v2 derived values
+  const classYearList = catalog?.classYears.map((y) => y.classYear) ?? [];
+  const effectiveClassYear = selectedClassYear ?? classYearList[0] ?? 1;
+  const selectedYearData = catalog?.classYears.find((y) => y.classYear === effectiveClassYear) ?? null;
+  const registeredSectionIds = catalog?.selectedCourses.map((s) => s.courseSectionId) ?? [];
+  const v2TotalEcts = catalog?.selectedCourses.reduce((sum, s) => sum + s.ects, 0) ?? 0;
+  const v2TotalHours = catalog?.selectedCourses.reduce((sum, s) => sum + s.theoryHours + s.labHours, 0) ?? 0;
+  const v2CourseCount = catalog?.selectedCourses.length ?? 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ResizableDialogContent
         defaultWidth={920}
-        defaultHeight={680}
+        defaultHeight={700}
         minWidth={560}
         minHeight={460}
         className="flex flex-col p-0"
@@ -185,14 +294,49 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
           </div>
         </div>
 
-        {/* Gövde — Proliz sırası: aday grid (üstte) → kontrol (orta) → seçilen dersler (altta) */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {/* Gövde — v2 katalog + kontrol alanı */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {studentId != null && (
-            <AdvisorCourseEditor
-              studentId={studentId}
-              studentClass={row?.completedSemesters != null ? Math.floor(row.completedSemesters / 2) + 1 : undefined}
-              controlSlot={
-                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+            catalogLoading ? (
+              <div className="space-y-2 p-5">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-48 w-full" />
+              </div>
+            ) : catalog ? (
+              <>
+                <RegistrationHeaderBar
+                  student={catalog.student}
+                  onDownloadPdf={() => { /* TODO: advisor PDF */ }}
+                  pdfLoading={false}
+                />
+
+                <SemesterClassTabs
+                  classYears={classYearList}
+                  selectedClassYear={effectiveClassYear}
+                  onClassYearChange={setSelectedClassYear}
+                  parity={parity}
+                  onParityChange={setParity}
+                />
+
+                <CurriculumCourseGrid
+                  classYearData={selectedYearData}
+                  parityFilter={parity}
+                  onPickSection={setPickerCourse}
+                  registrationActionsOpen={true}
+                />
+
+                {catalog.retakeCourses.length > 0 && (
+                  <RetakeCoursesPanel
+                    retakeCourses={catalog.retakeCourses}
+                    onCheck={() => { /* advisor does not run validation locally */ }}
+                    checkLoading={false}
+                    validationSummary={null}
+                  />
+                )}
+
+                {/* Kontrol alanı (Proliz: aday grid ile seçilen dersler arası) */}
+                <div className="space-y-2 border-t border-border bg-muted/10 px-4 py-3">
                   {ectsLimit != null && totalEcts > ectsLimit && (
                     <p className="text-xs font-medium text-destructive">Toplam {totalEcts} / {ectsLimit} AKTS — AKTS limiti aşıldı.</p>
                   )}
@@ -259,7 +403,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                     </span>
                   </div>
 
-                  {/* Alttan Dersleri Göster (sol) + Kontrol Et ve Onayla / Reddet (sağ) */}
+                  {/* Onayla / Reddet butonları */}
                   {canDecide && (
                     !showReject ? (
                       <div className="flex items-center gap-2">
@@ -289,8 +433,41 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                     )
                   )}
                 </div>
-              }
-            />
+
+                <RegistrationStatusLine selectedCourses={catalog.selectedCourses} />
+
+                <SelectedCoursesGrid
+                  selectedCourses={catalog.selectedCourses}
+                  registrationActionsOpen={true}
+                  onRemove={handleRemove}
+                  removingId={removingId}
+                  removeError={removeError}
+                />
+
+                <RegistrationSummaryBar
+                  totalCredit={0}
+                  totalEcts={v2TotalEcts}
+                  ectsLimit={catalog.student.ectsLimit}
+                  totalHours={v2TotalHours}
+                  courseCount={v2CourseCount}
+                />
+
+                <SectionPickerDialog
+                  course={pickerCourse}
+                  open={pickerCourse !== null}
+                  onOpenChange={(o) => { if (!o) setPickerCourse(null); }}
+                  registeredSectionIds={registeredSectionIds}
+                  registrationActionsOpen={true}
+                  onAddSection={handleAddSection}
+                  isAdding={advisorAdd.isPending}
+                  addError={addError}
+                />
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+                Öğrenci ders kaydı kataloğu yüklenemedi.
+              </div>
+            )
           )}
         </div>
 
