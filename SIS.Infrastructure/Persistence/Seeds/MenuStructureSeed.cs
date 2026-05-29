@@ -111,6 +111,7 @@ public static class MenuStructureSeed
         dersVeDonemIslemleri.Items = new List<MenuItem>
         {
             BuildItem(permissions, "Ders Kayıt",              "/ders-kayit",            "ders-kayit",              1, "menu.ders-kayit.view"),
+            BuildItem(permissions, "Ders Programım",          "/ders-programim",        "ders-programim-ogrenci",  2, "menu.ders-programim.view"),
             BuildItem(permissions, "Not Listesi",             "/not-listesi",           "not-listesi",             4, "menu.not-listesi.view"),
             BuildItem(permissions, "Devamsızlık Durumu",      "/devamsizlik-durumu",    "devamsizlik-durumu",      5, "menu.devamsizlik-durumu.view"),
             BuildItem(permissions, "Dönem Ortalamaları",      "/donem-ortalamalari",    "donem-ortalamalari",      6, "menu.donem-ortalamalari.view"),

@@ -44,6 +44,7 @@ public static class RolePermissionSeed
                 "menu.danisman-bilgileri.view",
                 "menu.acilan-bolum-dersleri.view",
                 "menu.ders-kayit.view",
+                "menu.ders-programim.view",
                 "menu.plan.view",
                 "menu.not-listesi.view",
                 "menu.devamsizlik-durumu.view",
