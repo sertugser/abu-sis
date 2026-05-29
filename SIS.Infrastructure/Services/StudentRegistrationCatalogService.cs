@@ -5,6 +5,7 @@ using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
+using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
 using StudentEntity = SIS.Domain.Entities.Student;
 using StudentProgramEntity = SIS.Domain.Entities.StudentProgram;
@@ -455,7 +456,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             else
             {
                 // Fallback: first digit of code (memory project_course_code_year_rule)
-                rowClassYear = CourseCodeYearFallback(course.Code);
+                rowClassYear = CourseCodeHelper.DeriveClassYearFromCode(course.Code);
                 rowParity = "Guz";
             }
 
@@ -581,18 +582,4 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             CurriculumCourses: curriculumCourses);
     }
 
-    /// <summary>
-    /// Derives class year from the first digit of a course code (1xx→1, 2xx→2, 3xx→3, 4xx→4).
-    /// Falls back to 1 if the code does not start with a digit 1-4.
-    /// Memory: project_course_code_year_rule.
-    /// </summary>
-    private static int CourseCodeYearFallback(string code)
-    {
-        foreach (var ch in code)
-        {
-            if (ch >= '1' && ch <= '4') return ch - '0';
-            if (ch >= '0' && ch <= '9') break; // first digit not 1-4 → fallback to 1
-        }
-        return 1;
-    }
 }
