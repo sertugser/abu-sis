@@ -68,7 +68,7 @@ export default function StudentTimetablePage() {
     try {
       const blob = await downloadStudentTimetablePdf(selectedTermId);
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       alert('PDF oluşturulamadı. Lütfen tekrar deneyin.');
