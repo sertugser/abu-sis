@@ -25,7 +25,7 @@ import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
 import AttendanceEntryPage from './pages/AttendanceEntryPage';
 import QrAttendancePage from './pages/QrAttendancePage';
-import InstructorSchedulingPage from './pages/InstructorSchedulingPage';
+import DersProgramimRouter from './pages/DersProgramimRouter';
 import GradeEntryPage from './pages/GradeEntryPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import SchedulingEditorPage from './pages/SchedulingEditorPage';
@@ -194,7 +194,7 @@ export default function App() {
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.ders-programim.view" />}>
-                    <Route path="ders-programim" element={<InstructorSchedulingPage />} />
+                    <Route path="ders-programim" element={<DersProgramimRouter />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.akademik-takvim.view" />}>
                     <Route path="ogretim-elemani-akademik-takvim" element={<AcademicCalendarPage />} />
