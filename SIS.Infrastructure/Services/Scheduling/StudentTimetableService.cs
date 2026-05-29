@@ -126,10 +126,11 @@ public sealed class StudentTimetableService : IStudentTimetableService
             .ToListAsync(cancellationToken);
     }
 
-    public Task<byte[]> GeneratePdfAsync(int studentId, int termId, CancellationToken cancellationToken)
+    public async Task<byte[]> GeneratePdfAsync(int studentId, int termId, CancellationToken cancellationToken)
     {
-        // Task 4'te PDF renderer ile doldurulacak.
-        throw new NotImplementedException("PDF rendering Task 4'te eklenecek.");
+        var data = await GetTimetableAsync(studentId, termId, cancellationToken);
+        var renderer = new Reports.StudentTimetablePdfRenderer();
+        return renderer.Render(data);
     }
 
     private async Task<int> ResolveDefaultTermIdAsync(int studentId, CancellationToken cancellationToken)

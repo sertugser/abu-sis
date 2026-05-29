@@ -300,4 +300,20 @@ public sealed class StudentTimetableServiceTests : IDisposable
         terms[1].IsDefault.Should().BeFalse();
         terms[2].TermId.Should().Be(12);
     }
+
+    [Fact]
+    public async Task GeneratePdfAsync_returns_non_empty_pdf_bytes()
+    {
+        await SeedBaseAsync();
+        await AddCourseAsync(CourseId, "TST101", "Test Dersi");
+        var section = await AddSectionAsync(1001, CourseId);
+        await AddRegistrationAsync(StudentId, section.Id, RegistrationStatus.Active);
+
+        var bytes = await _sut.GeneratePdfAsync(StudentId, TermId, CancellationToken.None);
+
+        bytes.Should().NotBeNullOrEmpty();
+        bytes.Length.Should().BeGreaterThan(500);
+        // PDF magic bytes "%PDF"
+        bytes.Take(4).Should().Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 });
+    }
 }
