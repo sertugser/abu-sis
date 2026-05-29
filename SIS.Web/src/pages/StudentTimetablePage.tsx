@@ -90,34 +90,28 @@ export default function StudentTimetablePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 border-b pb-3">
-        <h1 className="text-xl font-semibold">Öğrenci Ders Programı</h1>
-        {data?.studentName && (
-          <p className="text-sm text-muted-foreground">{data.studentName}</p>
-        )}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Dönem</label>
-            <Select
-              value={selectedTermId?.toString()}
-              onValueChange={(v) => setSelectedTermId(Number(v))}
-            >
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Dönem seçin" />
-              </SelectTrigger>
-              <SelectContent>
-                {terms?.map((t) => (
-                  <SelectItem key={t.termId} value={t.termId.toString()}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
-            <Printer className="mr-2 h-4 w-4" /> Yazdır
-          </Button>
+      <div className="flex items-center justify-between gap-3 border-b pb-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Dönem</label>
+          <Select
+            value={selectedTermId?.toString()}
+            onValueChange={(v) => setSelectedTermId(Number(v))}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Dönem seçin" />
+            </SelectTrigger>
+            <SelectContent>
+              {terms?.map((t) => (
+                <SelectItem key={t.termId} value={t.termId.toString()}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
+          <Printer className="mr-2 h-4 w-4" /> Yazdır
+        </Button>
       </div>
 
       {isLoading ? (
