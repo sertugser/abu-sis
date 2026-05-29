@@ -259,6 +259,7 @@ builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider 
 builder.Services.AddSchedulingConstraints();
 builder.Services.AddScoped<SchedulingService>();
 builder.Services.AddScoped<ISchedulingService>(sp => sp.GetRequiredService<SchedulingService>());
+builder.Services.AddScoped<SIS.Application.Scheduling.Services.IStudentTimetableService, SIS.Infrastructure.Services.Scheduling.StudentTimetableService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();
