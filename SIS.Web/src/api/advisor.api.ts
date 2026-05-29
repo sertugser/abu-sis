@@ -1,5 +1,4 @@
 import apiClient from './axios';
-import type { StudentCourseDto } from '../types/course';
 import type { CourseHistoryTermDto } from '../types/registration';
 import type { CurriculumStatusDto } from '../types/curriculum';
 import type { StudentTranscriptDto } from '../types/transcript';
@@ -140,9 +139,6 @@ export const getAdvisorStudents = () =>
 
 export const getAdvisorStudentRegistrations = (studentId: number) =>
   apiClient.get<StudentRegistrationItem[]>(`/advisor/students/${studentId}/registrations`).then(r => r.data);
-
-export const getAdvisorStudentCatalog = (studentId: number) =>
-  apiClient.get<StudentCourseDto[]>(`/course/student-catalog/${studentId}`).then(r => r.data);
 
 export const advisorAddCourse = (studentId: number, courseSectionId: number) =>
   apiClient.post(`/advisor/students/${studentId}/add`, { courseSectionId });

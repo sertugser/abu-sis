@@ -6,7 +6,6 @@ import {
   getAdvisorDashboardStats,
   getAdvisorStudents,
   getAdvisorStudentRegistrations,
-  getAdvisorStudentCatalog,
   advisorAddCourse,
   advisorDropCourse,
   getAdvisorStudentCourseHistory,
@@ -41,14 +40,6 @@ export function useAdvisorStudentRegistrations(studentId: number | null) {
   return useQuery({
     queryKey: ['advisor', 'student-registrations', studentId],
     queryFn: () => getAdvisorStudentRegistrations(studentId!),
-    enabled: studentId != null,
-  });
-}
-
-export function useAdvisorStudentCatalog(studentId: number | null) {
-  return useQuery({
-    queryKey: ['advisor', 'student-catalog', studentId],
-    queryFn: () => getAdvisorStudentCatalog(studentId!),
     enabled: studentId != null,
   });
 }
