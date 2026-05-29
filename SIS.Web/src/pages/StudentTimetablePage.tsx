@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -89,41 +90,45 @@ export default function StudentTimetablePage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 border-b pb-3">
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Dönem</label>
-          <Select
-            value={selectedTermId?.toString()}
-            onValueChange={(v) => setSelectedTermId(Number(v))}
-          >
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Dönem seçin" />
-            </SelectTrigger>
-            <SelectContent>
-              {terms?.map((t) => (
-                <SelectItem key={t.termId} value={t.termId.toString()}>
-                  {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <Card className="overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm">Dönem</label>
+            <Select
+              value={selectedTermId?.toString()}
+              onValueChange={(v) => setSelectedTermId(Number(v))}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Dönem seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                {terms?.map((t) => (
+                  <SelectItem key={t.termId} value={t.termId.toString()}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
+            <Printer className="mr-2 h-4 w-4" /> Yazdır
+          </Button>
         </div>
-        <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
-          <Printer className="mr-2 h-4 w-4" /> Yazdır
-        </Button>
-      </div>
 
-      {isLoading ? (
-        <Skeleton className="h-[400px] rounded-xl" />
-      ) : isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>Program yüklenemedi</AlertTitle>
-          <AlertDescription>Dönemi değiştirip tekrar deneyin.</AlertDescription>
-        </Alert>
-      ) : (
-        <ProlizWeekLayout rowsByDay={rowsByDay} />
-      )}
-    </div>
+        {isLoading ? (
+          <Skeleton className="m-4 h-[400px] rounded-xl" />
+        ) : isError ? (
+          <div className="p-4">
+            <Alert variant="destructive">
+              <AlertTitle>Program yüklenemedi</AlertTitle>
+              <AlertDescription>Dönemi değiştirip tekrar deneyin.</AlertDescription>
+            </Alert>
+          </div>
+        ) : (
+          <ProlizWeekLayout rowsByDay={rowsByDay} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
