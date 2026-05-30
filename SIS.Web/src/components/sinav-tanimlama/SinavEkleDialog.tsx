@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -29,10 +29,16 @@ function toUtcIso(localString: string): string {
 }
 
 // ── types ──────────────────────────────────────────────────────
+// ExamType is used only for CREATE mode select options (Midterm | Final).
+// In EDIT mode we preserve the full GradeComponentType from the server so
+// 'Other' is never silently coerced to 'Final'.
 type ExamType = 'Midterm' | 'Final';
 
 interface FormState {
-  examType: ExamType;
+  // componentType holds the authoritative grade-component type.
+  // In CREATE mode it is always Midterm or Final (user-chosen).
+  // In EDIT mode it is the original type from the server (may be 'Other').
+  componentType: GradeComponentType;
   name: string;
   shortName: string;
   weight: string;         // string to allow empty input
@@ -51,7 +57,7 @@ interface SinavEkleDialogProps {
 }
 
 const emptyForm = (examType: ExamType = 'Midterm'): FormState => ({
-  examType,
+  componentType: examType,
   name: '',
   shortName: '',
   weight: '',
@@ -62,11 +68,10 @@ const emptyForm = (examType: ExamType = 'Midterm'): FormState => ({
   isAnnouncedToStudents: false,
 });
 
-function examTypeToGradeType(t: ExamType): GradeComponentType {
-  return t === 'Midterm' ? 'Midterm' : 'Final';
-}
-
-function gradeTypeToExamType(t: GradeComponentType): ExamType {
+// Only used for CREATE mode weight-limit lookups (Midterm vs Final bounds).
+// 'Other' falls back to Final bounds as a best-effort — irrelevant in
+// practice since Other components are only edited, never created here.
+function componentTypeToExamType(t: GradeComponentType): ExamType {
   return t === 'Midterm' ? 'Midterm' : 'Final';
 }
 
@@ -91,16 +96,21 @@ export function SinavEkleDialog({
   const [prevKey, setPrevKey] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // prev-key reset pattern (same as ExamRegulationFormDialog)
+  // prev-key reset pattern (same as ExamRegulationFormDialog).
+  // Fix 1: when config is already cached, seed shortName immediately so no
+  // separate effect is needed. When config has not yet loaded, shortName starts
+  // empty and the effect below fills it once the query resolves.
   const key = `${open}-${editTarget?.id ?? 'new'}`;
   if (open && key !== prevKey) {
     setPrevKey(key);
     setSubmitError(null);
     if (editTarget) {
+      const cachedShortName =
+        config.data?.components.find((c) => c.id === editTarget.gradeComponentId)?.shortName ?? '';
       setForm({
-        examType: gradeTypeToExamType(editTarget.componentType),
+        componentType: editTarget.componentType,
         name: editTarget.componentName,
-        shortName: '', // shortName not carried in SectionExam list; user may re-enter
+        shortName: cachedShortName,
         weight: String(editTarget.weight),
         dateLocal: toLocalInput(editTarget.examDate),
         durationMinutes: editTarget.durationMinutes != null ? String(editTarget.durationMinutes) : '',
@@ -113,18 +123,32 @@ export function SinavEkleDialog({
     }
   }
 
+  // Fix 1 (late-load path): when config finishes loading after the dialog opened,
+  // fill shortName if it is still empty (user has not typed yet).
+  useEffect(() => {
+    if (!editTarget || !config.data) return;
+    const matched = config.data.components.find((c) => c.id === editTarget.gradeComponentId);
+    if (!matched) return;
+    setForm((f) => ({
+      ...f,
+      shortName: f.shortName === '' ? matched.shortName : f.shortName,
+    }));
+  }, [editTarget, config.data]);
+
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   // ── Derived limits from config ─────────────────────────────
   const cfg = config.data;
   const allComponents = cfg?.components ?? [];
-  const existingOfType = allComponents.filter((c) => c.type === examTypeToGradeType(form.examType));
+  // For count/weight limits, map componentType to the Midterm|Final axis.
+  const examTypeForLimits = componentTypeToExamType(form.componentType);
+  const existingOfType = allComponents.filter((c) => c.type === form.componentType);
   const editingComponentId = editTarget?.gradeComponentId ?? null;
   // Exclude the component being edited from "existing" count
   const otherOfType = existingOfType.filter((c) => c.id !== editingComponentId);
 
-  const limitCount = form.examType === 'Midterm' ? (cfg?.midtermCount ?? 0) : (cfg?.finalCount ?? 0);
+  const limitCount = examTypeForLimits === 'Midterm' ? (cfg?.midtermCount ?? 0) : (cfg?.finalCount ?? 0);
   const isAtLimit = cfg?.hasRegulation && limitCount > 0 && otherOfType.length >= limitCount;
 
   const existingWeightSum = allComponents
@@ -132,8 +156,8 @@ export function SinavEkleDialog({
     .reduce((sum, c) => sum + c.weight, 0);
   const remainingWeight = 100 - existingWeightSum;
 
-  const minBound = form.examType === 'Midterm' ? (cfg?.minMidtermWeight ?? null) : (cfg?.minFinalWeight ?? null);
-  const maxBound = form.examType === 'Midterm' ? (cfg?.maxMidtermWeight ?? null) : (cfg?.maxFinalWeight ?? null);
+  const minBound = examTypeForLimits === 'Midterm' ? (cfg?.minMidtermWeight ?? null) : (cfg?.minFinalWeight ?? null);
+  const maxBound = examTypeForLimits === 'Midterm' ? (cfg?.maxMidtermWeight ?? null) : (cfg?.maxFinalWeight ?? null);
 
   const weightNum = Number(form.weight);
   const weightValid = !isNaN(weightNum) && weightNum > 0 && weightNum <= 100;
@@ -141,6 +165,14 @@ export function SinavEkleDialog({
     (minBound != null && weightNum < minBound) ||
     (maxBound != null && weightNum > maxBound)
   );
+
+  // Fix 4: Build bounds warning message with correct text for partial bounds.
+  function buildBoundsMessage(): string {
+    if (minBound != null && maxBound != null) return `Bu değer yönerge sınırlarının (%${minBound}–%${maxBound}) dışında.`;
+    if (minBound != null) return `Bu değer yönerge alt sınırının (%${minBound}) altında.`;
+    if (maxBound != null) return `Bu değer yönerge üst sınırını (%${maxBound}) aşıyor.`;
+    return '';
+  }
 
   const canSubmit =
     form.name.trim() !== '' &&
@@ -158,7 +190,8 @@ export function SinavEkleDialog({
     if (!canSubmit) return;
     setSubmitError(null);
     try {
-      // Step 1: upsert component
+      // Step 1: upsert component.
+      // Fix 2: pass componentType directly — preserves 'Other' in edit mode.
       const componentResult = await upsertComponentMut.mutateAsync({
         id: editingComponentId,
         name: form.name.trim(),
@@ -167,7 +200,7 @@ export function SinavEkleDialog({
         order: editingComponentId != null
           ? (allComponents.find((c) => c.id === editingComponentId)?.order ?? nextOrder)
           : nextOrder,
-        type: examTypeToGradeType(form.examType),
+        type: form.componentType,
       });
 
       // Step 2: save section exam
@@ -210,32 +243,43 @@ export function SinavEkleDialog({
             {/* Sınav Tipi */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Sınav Tipi</Label>
-              <Select
-                value={form.examType}
-                onValueChange={(v) => set('examType', v as ExamType)}
-              >
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Midterm">
-                    Ara Sınav
-                    {cfg?.hasRegulation && cfg.midtermCount > 0 && (
-                      <span className="ml-1.5 text-xs text-muted-foreground">
-                        (maks. {cfg.midtermCount})
-                      </span>
-                    )}
-                  </SelectItem>
-                  <SelectItem value="Final">
-                    Yarıyıl Sonu
-                    {cfg?.hasRegulation && cfg.finalCount > 0 && (
-                      <span className="ml-1.5 text-xs text-muted-foreground">
-                        (maks. {cfg.finalCount})
-                      </span>
-                    )}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Fix 2: In edit mode the type is fixed after creation — disable the select.
+                  In create mode only Midterm/Final are offered. */}
+              {editTarget ? (
+                <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground">
+                  {form.componentType === 'Midterm' ? 'Ara Sınav'
+                    : form.componentType === 'Final' ? 'Yarıyıl Sonu'
+                    : 'Diğer'}
+                  <span className="ml-1.5 text-xs">(değiştirilemez)</span>
+                </div>
+              ) : (
+                <Select
+                  value={form.componentType as ExamType}
+                  onValueChange={(v) => set('componentType', v as ExamType)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Midterm">
+                      Ara Sınav
+                      {cfg?.hasRegulation && cfg.midtermCount > 0 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          (maks. {cfg.midtermCount})
+                        </span>
+                      )}
+                    </SelectItem>
+                    <SelectItem value="Final">
+                      Yarıyıl Sonu
+                      {cfg?.hasRegulation && cfg.finalCount > 0 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          (maks. {cfg.finalCount})
+                        </span>
+                      )}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               {isAtLimit && (
                 <p className="text-xs text-amber-600">
                   Bu tür için izin verilen sınav sayısına ({limitCount}) ulaşıldı. Devam edebilirsiniz ancak yönerge sınırını aşacaksınız.
@@ -272,8 +316,16 @@ export function SinavEkleDialog({
                 <Label className="text-sm font-medium">Etki Oranı (%)</Label>
                 <span className="text-xs text-muted-foreground">
                   Kalan: %{Math.max(0, remainingWeight)}
-                  {minBound != null && maxBound != null && (
-                    <> · Yönerge: %{minBound}–{maxBound}</>
+                  {/* Fix 4: show bounds label only when at least one bound exists */}
+                  {(minBound != null || maxBound != null) && (
+                    <>
+                      {' · Yönerge: '}
+                      {minBound != null && maxBound != null
+                        ? `%${minBound}–%${maxBound}`
+                        : minBound != null
+                          ? `en az %${minBound}`
+                          : `en çok %${maxBound}`}
+                    </>
                   )}
                 </span>
               </div>
@@ -287,9 +339,7 @@ export function SinavEkleDialog({
                 placeholder="örn. 40"
               />
               {weightOutOfBounds && (
-                <p className="text-xs text-amber-600">
-                  Bu değer yönerge sınırlarının (%{minBound}–%{maxBound}) dışında.
-                </p>
+                <p className="text-xs text-amber-600">{buildBoundsMessage()}</p>
               )}
             </div>
 

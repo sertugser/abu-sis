@@ -38,6 +38,15 @@ const TYPE_BADGE: Record<string, string> = {
 };
 
 // ── delete confirm dialog ─────────────────────────────────────
+function extractDeleteError(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const response = (err as { response?: { data?: { error?: string; message?: string } } }).response;
+    if (response?.data?.error) return response.data.error;
+    if (response?.data?.message) return response.data.message;
+  }
+  return 'Sınav silinemedi.';
+}
+
 function DeleteConfirmDialog({
   target,
   sectionId,
@@ -50,7 +59,14 @@ function DeleteConfirmDialog({
   const deleteMut = useDeleteSectionExam(sectionId);
 
   return (
-    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+    <Dialog
+      open={target !== null}
+      onOpenChange={(v) => {
+        // Fix 3: keep dialog open on error; only allow close via button or success
+        if (!v && deleteMut.isError) return;
+        onOpenChange(v);
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Sınavı Sil</DialogTitle>
@@ -59,6 +75,10 @@ function DeleteConfirmDialog({
           <span className="font-medium text-foreground">{target?.componentName}</span> sınavı
           silinecek. Bu işlem geri alınamaz.
         </p>
+        {/* Fix 3: surface delete error inline */}
+        {deleteMut.isError && (
+          <p className="text-sm text-destructive">{extractDeleteError(deleteMut.error)}</p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
           <Button
