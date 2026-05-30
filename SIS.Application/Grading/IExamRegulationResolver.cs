@@ -18,6 +18,9 @@ public interface IExamRegulationResolver
 
     Task<WeightBounds?> ResolveCourseWeightBoundsAsync(int courseId, int academicTermId, CancellationToken ct);
 
+    /// <summary>Dersin programlarındaki regülasyondan ara/final sınav sayısı (en katı = max). Regülasyon yoksa (0,0,false).</summary>
+    Task<ExamCounts> ResolveCourseExamCountsAsync(int courseId, int academicTermId, CancellationToken ct);
+
     /// <summary>
     /// Resolves the letter-grade thresholds for a course by gathering all DegreeLevel-matched,
     /// term-matched active regulations for the programs whose curricula include the course.
@@ -44,6 +47,8 @@ public sealed record WeightBounds(
 public sealed record LetterPolicy(
     int AAMin, int BAMin, int BBMin, int CBMin, int CCMin, int DCMin, int DDMin,
     bool Editable, bool HasUniqueThresholds);
+
+public sealed record ExamCounts(int MidtermCount, int FinalCount, bool HasRegulation);
 
 public sealed record RelativePolicy(
     GradeEvaluationType EvaluationType,
