@@ -544,7 +544,6 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
 
     var templateSectionIdText = worksheet.Cell(1, 2).GetValue<string>();
     var templateComponentIdText = worksheet.Cell(2, 2).GetValue<string>();
-    var templateComponentName = worksheet.Cell(3, 2).GetValue<string>();
 
     if (!int.TryParse(templateSectionIdText, out var templateSectionId) || templateSectionId != sectionId)
         return BadRequest(new { error = "Yanlis section sablonu yuklendi." });
@@ -567,148 +566,29 @@ public async Task<IActionResult> ImportPreview(int sectionId, [FromForm] ImportF
     if (section.IsFinalized)
         return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
 
-    var registrations = await _context.CourseRegistrations
-        .Include(cr => cr.Student)
-        .Where(cr => cr.CourseSectionId == sectionId
-            && cr.Status != RegistrationStatus.Dropped
-            && cr.Status != RegistrationStatus.Draft
-            && cr.Status != RegistrationStatus.Withdrawn)
-        .ToListAsync();
-
-    var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
-
-    var registrationIds = registrations.Select(r => r.Id).ToList();
-
-    var existingGrades = await _context.StudentGrades
-        .Where(sg => sg.GradeComponentId == componentId
-            && registrationIds.Contains(sg.CourseRegistrationId))
-        .ToDictionaryAsync(sg => sg.CourseRegistrationId, sg => sg.Score);
-
-    var previewRows = new List<object>();
-    int validCount = 0;
-    int warningCount = 0;
-    int errorCount = 0;
-    int emptyCount = 0;
-
-    var row = 6;
-
+    // Parse Excel rows into (studentNumber, rawScore) pairs — col2=StudentNumber, col6=NewScore.
+    var pairs = new List<(string StudentNumber, string RawScore)>();
+    var xlRow = 6;
     while (true)
     {
-        var studentIdCell = worksheet.Cell(row, 1).GetValue<string>()?.Trim();
-        var studentNumber = worksheet.Cell(row, 2).GetValue<string>()?.Trim();
-        var firstName = worksheet.Cell(row, 3).GetValue<string>()?.Trim();
-        var lastName = worksheet.Cell(row, 4).GetValue<string>()?.Trim();
-        var currentScoreText = worksheet.Cell(row, 5).GetValue<string>()?.Trim();
-        var newScoreText = worksheet.Cell(row, 6).GetValue<string>()?.Trim();
-
-        if (string.IsNullOrWhiteSpace(studentIdCell)
-            && string.IsNullOrWhiteSpace(studentNumber)
-            && string.IsNullOrWhiteSpace(firstName)
-            && string.IsNullOrWhiteSpace(lastName)
-            && string.IsNullOrWhiteSpace(currentScoreText)
-            && string.IsNullOrWhiteSpace(newScoreText))
-        {
-            break;
-        }
-
-        string status;
-        string message;
-        decimal? parsedScore = null;
-        decimal? currentScore = null;
-        int? studentId = null;
-
-        if (decimal.TryParse(currentScoreText, out var currentParsed))
-            currentScore = currentParsed;
-
-        if (!int.TryParse(studentIdCell, out var parsedStudentId))
-        {
-            status = "Error";
-            message = "StudentId okunamadi.";
-            errorCount++;
-        }
-        else if (!registrationMap.TryGetValue(parsedStudentId, out var registration))
-        {
-            status = "Warning";
-            message = "Kayitsiz ogrenci, bu satir atlanacak.";
-            warningCount++;
-            studentId = parsedStudentId;
-        }
-        else if (string.IsNullOrWhiteSpace(newScoreText))
-        {
-            status = "Empty";
-            message = "Bos hucre, mevcut not korunacak.";
-            emptyCount++;
-            studentId = parsedStudentId;
-
-            existingGrades.TryGetValue(registration.Id, out var existingScore);
-            currentScore = existingScore;
-        }
-        else if (!decimal.TryParse(newScoreText, out var score))
-        {
-            status = "Error";
-            message = "Not sayisal degil.";
-            errorCount++;
-            studentId = parsedStudentId;
-        }
-        else if (score < 0 || score > 100)
-        {
-            status = "Error";
-            message = "Not 0-100 araliginda olmali.";
-            errorCount++;
-            studentId = parsedStudentId;
-        }
-        else
-        {
-            studentId = parsedStudentId;
-            parsedScore = score;
-
-            existingGrades.TryGetValue(registration.Id, out var existingScore);
-            currentScore = existingScore;
-
-            if (currentScore.HasValue && currentScore.Value != parsedScore.Value)
-            {
-                status = "Update";
-                message = $"Mevcut not guncellenecek ({currentScore.Value} -> {parsedScore.Value}).";
-                warningCount++;
-            }
-            else
-            {
-                status = "Valid";
-                message = "Gecerli satir, kaydedilebilir.";
-                validCount++;
-            }
-        }
-
-        previewRows.Add(new
-        {
-            RowNumber = row,
-            StudentId = studentId,
-            StudentNumber = studentNumber,
-            FirstName = firstName,
-            LastName = lastName,
-            CurrentScore = currentScore,
-            NewScore = parsedScore,
-            RawNewScore = newScoreText,
-            Status = status,
-            Message = message
-        });
-
-        row++;
+        var allEmpty =
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 1).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 2).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 3).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 4).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 5).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 6).GetValue<string>());
+        if (allEmpty) break;
+        var studentNumber = worksheet.Cell(xlRow, 2).GetValue<string>()?.Trim() ?? string.Empty;
+        var rawScore = worksheet.Cell(xlRow, 6).GetValue<string>()?.Trim() ?? string.Empty;
+        pairs.Add((studentNumber, rawScore));
+        xlRow++;
     }
 
-    return Ok(new
-    {
-        SectionId = section.Id,
-        ComponentId = component.Id,
-        ComponentName = templateComponentName,
-        TotalRows = previewRows.Count,
-        ValidCount = validCount,
-        WarningCount = warningCount,
-        ErrorCount = errorCount,
-        EmptyCount = emptyCount,
-        Rows = previewRows
-    });
+    var preview = await BuildScoreImportPreviewAsync(section, componentId, pairs, default);
+    return Ok(preview);
 }
+
 /// <summary>
 /// POST api/instructor/section/{sectionId}/grades/import-apply
 /// Onaylanan Excel notlarını uygular.
@@ -779,69 +659,294 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
     if (section.IsFinalized)
         return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
 
+    // Parse Excel rows into (studentNumber, rawScore) pairs — col2=StudentNumber, col6=NewScore.
+    var pairs = new List<(string StudentNumber, string RawScore)>();
+    var xlRow = 6;
+    while (true)
+    {
+        var allEmpty =
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 1).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 2).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 3).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 4).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 5).GetValue<string>()) &&
+            string.IsNullOrWhiteSpace(worksheet.Cell(xlRow, 6).GetValue<string>());
+        if (allEmpty) break;
+        var studentNumber = worksheet.Cell(xlRow, 2).GetValue<string>()?.Trim() ?? string.Empty;
+        var rawScore = worksheet.Cell(xlRow, 6).GetValue<string>()?.Trim() ?? string.Empty;
+        pairs.Add((studentNumber, rawScore));
+        xlRow++;
+    }
+
+    var result = await ApplyScoreImportAsync(section, componentId, pairs, default);
+    return Ok(result);
+}
+
+// ══════════════════════════════════════════════════════════
+//  PASTE IMPORT (Toplu Not Aktar — metin yapıştırma)
+// ══════════════════════════════════════════════════════════
+
+/// <summary>
+/// POST api/instructor/section/{sectionId}/grades/paste-preview
+/// Yapıştırılan metin notlarının önizlemesini döner.
+/// </summary>
+[HttpPost("section/{sectionId}/grades/paste-preview")]
+[RequirePermission("menu.not-girisi.import")]
+public async Task<IActionResult> PastePreview(int sectionId, [FromBody] PasteScoresRequest req, CancellationToken ct)
+{
+    var section = await GetAuthorizedSectionAsync(sectionId);
+    if (section == null)
+        return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    var pairs = ParseScorePaste(req.Text, req.Separator);
+    var preview = await BuildScoreImportPreviewAsync(section, req.ComponentId, pairs, ct);
+    return Ok(preview);
+}
+
+/// <summary>
+/// POST api/instructor/section/{sectionId}/grades/paste-apply
+/// Yapıştırılan metin notlarını uygular.
+/// </summary>
+[HttpPost("section/{sectionId}/grades/paste-apply")]
+[RequirePermission("menu.not-girisi.import")]
+public async Task<IActionResult> PasteApply(int sectionId, [FromBody] PasteScoresRequest req, CancellationToken ct)
+{
+    var section = await GetAuthorizedSectionAsync(sectionId);
+    if (section == null)
+        return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    var pairs = ParseScorePaste(req.Text, req.Separator);
+    var result = await ApplyScoreImportAsync(section, req.ComponentId, pairs, ct);
+    return Ok(result);
+}
+
+/// <summary>
+/// "ÖğrenciNo&lt;ayraç&gt;Not" satırlarını çiftlere ayırır.
+/// Ayraç boş/null → whitespace ile böl. İlk token = öğrenci no, son token = not.
+/// </summary>
+private static IReadOnlyList<(string StudentNumber, string RawScore)> ParseScorePaste(string? text, string? separator)
+{
+    var pairs = new List<(string, string)>();
+    if (string.IsNullOrWhiteSpace(text)) return pairs;
+
+    foreach (var rawLine in text.Replace("\r\n", "\n").Split('\n'))
+    {
+        var line = rawLine.Trim();
+        if (line.Length == 0) continue;
+
+        string[] parts = string.IsNullOrEmpty(separator)
+            ? line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            : line.Split(separator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length < 2) { pairs.Add((parts.Length == 1 ? parts[0] : line, string.Empty)); continue; }
+        pairs.Add((parts[0], parts[^1]));
+    }
+
+    return pairs;
+}
+
+/// <summary>
+/// Ortak önizleme çekirdeği: (studentNumber, rawScore) çiftlerinden preview üretir.
+/// Excel import ve paste import ORTAK — davranış değişmemeli.
+/// </summary>
+private async Task<object> BuildScoreImportPreviewAsync(
+    CourseSection section,
+    int componentId,
+    IReadOnlyList<(string StudentNumber, string RawScore)> pairs,
+    CancellationToken ct)
+{
+    var sectionId = section.Id;
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == componentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId, ct);
+
     var registrations = await _context.CourseRegistrations
+        .Include(cr => cr.Student)
         .Where(cr => cr.CourseSectionId == sectionId
             && cr.Status != RegistrationStatus.Dropped
             && cr.Status != RegistrationStatus.Draft
             && cr.Status != RegistrationStatus.Withdrawn)
-        .ToListAsync();
+        .ToListAsync(ct);
 
-    var registrationMap = registrations.ToDictionary(r => r.StudentId, r => r);
+    // Index by StudentNumber for pair matching
+    var regByStudentNumber = registrations
+        .ToDictionary(r => r.Student.StudentNumber, r => r, StringComparer.OrdinalIgnoreCase);
+
+    var studentUserIds = registrations.Select(r => r.Student.UserId).ToList();
+    var userMap = await _context.Users
+        .Where(u => studentUserIds.Contains(u.Id))
+        .ToDictionaryAsync(u => u.Id, ct);
 
     var registrationIds = registrations.Select(r => r.Id).ToList();
-
     var existingGrades = await _context.StudentGrades
         .Where(sg => sg.GradeComponentId == componentId
             && registrationIds.Contains(sg.CourseRegistrationId))
-        .ToDictionaryAsync(sg => sg.CourseRegistrationId);
+        .ToDictionaryAsync(sg => sg.CourseRegistrationId, sg => sg.Score, ct);
+
+    var previewRows = new List<object>();
+    int validCount = 0;
+    int warningCount = 0;
+    int errorCount = 0;
+    int emptyCount = 0;
+
+    for (var i = 0; i < pairs.Count; i++)
+    {
+        var (studentNumber, rawScore) = pairs[i];
+        var rowNumber = i + 1;
+
+        string status;
+        string message;
+        decimal? parsedScore = null;
+        decimal? currentScore = null;
+
+        if (string.IsNullOrWhiteSpace(studentNumber))
+        {
+            status = "Error";
+            message = "Öğrenci numarası boş.";
+            errorCount++;
+        }
+        else if (!regByStudentNumber.TryGetValue(studentNumber, out var registration))
+        {
+            status = "Warning";
+            message = "Kayitsiz ogrenci, bu satir atlanacak.";
+            warningCount++;
+        }
+        else if (string.IsNullOrWhiteSpace(rawScore))
+        {
+            status = "Empty";
+            message = "Bos hucre, mevcut not korunacak.";
+            emptyCount++;
+            existingGrades.TryGetValue(registration.Id, out var existingEmpty);
+            currentScore = existingEmpty;
+        }
+        else if (!decimal.TryParse(rawScore, out var score))
+        {
+            status = "Error";
+            message = "Not sayisal degil.";
+            errorCount++;
+        }
+        else if (score < 0 || score > 100)
+        {
+            status = "Error";
+            message = "Not 0-100 araliginda olmali.";
+            errorCount++;
+        }
+        else
+        {
+            parsedScore = score;
+            existingGrades.TryGetValue(registration.Id, out var existingScore);
+            currentScore = existingScore;
+
+            if (currentScore.HasValue && currentScore.Value != parsedScore.Value)
+            {
+                status = "Update";
+                message = $"Mevcut not guncellenecek ({currentScore.Value} -> {parsedScore.Value}).";
+                warningCount++;
+            }
+            else
+            {
+                status = "Valid";
+                message = "Gecerli satir, kaydedilebilir.";
+                validCount++;
+            }
+        }
+
+        string? firstName = null;
+        string? lastName = null;
+        if (regByStudentNumber.TryGetValue(studentNumber, out var reg2))
+        {
+            var user = userMap.GetValueOrDefault(reg2.Student.UserId);
+            firstName = user?.FirstName;
+            lastName = user?.LastName;
+        }
+
+        previewRows.Add(new
+        {
+            RowNumber = rowNumber,
+            StudentNumber = studentNumber,
+            FirstName = firstName,
+            LastName = lastName,
+            CurrentScore = currentScore,
+            NewScore = parsedScore,
+            RawNewScore = rawScore,
+            Status = status,
+            Message = message
+        });
+    }
+
+    return new
+    {
+        SectionId = sectionId,
+        ComponentId = componentId,
+        ComponentName = component?.Name ?? string.Empty,
+        TotalRows = previewRows.Count,
+        ValidCount = validCount,
+        WarningCount = warningCount,
+        ErrorCount = errorCount,
+        EmptyCount = emptyCount,
+        Rows = previewRows
+    };
+}
+
+/// <summary>
+/// Ortak uygulama çekirdeği: (studentNumber, rawScore) çiftlerini veritabanına uygular.
+/// Excel import ve paste import ORTAK — davranış değişmemeli.
+/// </summary>
+private async Task<object> ApplyScoreImportAsync(
+    CourseSection section,
+    int componentId,
+    IReadOnlyList<(string StudentNumber, string RawScore)> pairs,
+    CancellationToken ct)
+{
+    var sectionId = section.Id;
+
+    var registrations = await _context.CourseRegistrations
+        .Include(cr => cr.Student)
+        .Where(cr => cr.CourseSectionId == sectionId
+            && cr.Status != RegistrationStatus.Dropped
+            && cr.Status != RegistrationStatus.Draft
+            && cr.Status != RegistrationStatus.Withdrawn)
+        .ToListAsync(ct);
+
+    // Index by StudentNumber for pair matching
+    var regByStudentNumber = registrations
+        .ToDictionary(r => r.Student.StudentNumber, r => r, StringComparer.OrdinalIgnoreCase);
+
+    var registrationIds = registrations.Select(r => r.Id).ToList();
+    var existingGrades = await _context.StudentGrades
+        .Where(sg => sg.GradeComponentId == componentId
+            && registrationIds.Contains(sg.CourseRegistrationId))
+        .ToDictionaryAsync(sg => sg.CourseRegistrationId, ct);
 
     int inserted = 0;
     int updated = 0;
     int skipped = 0;
 
-    var row = 6;
-
-    while (true)
+    foreach (var (studentNumber, rawScore) in pairs)
     {
-        var studentIdText = worksheet.Cell(row, 1).GetValue<string>()?.Trim();
-        var newScoreText = worksheet.Cell(row, 6).GetValue<string>()?.Trim();
-
-        var rowIsEmpty =
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 1).GetValue<string>()) &&
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 2).GetValue<string>()) &&
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 3).GetValue<string>()) &&
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 4).GetValue<string>()) &&
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 5).GetValue<string>()) &&
-            string.IsNullOrWhiteSpace(worksheet.Cell(row, 6).GetValue<string>());
-
-        if (rowIsEmpty)
-            break;
-
-        if (!int.TryParse(studentIdText, out var studentId))
+        if (string.IsNullOrWhiteSpace(studentNumber))
         {
             skipped++;
-            row++;
             continue;
         }
 
-        if (!registrationMap.TryGetValue(studentId, out var registration))
+        if (!regByStudentNumber.TryGetValue(studentNumber, out var registration))
         {
             skipped++;
-            row++;
             continue;
         }
 
-        if (string.IsNullOrWhiteSpace(newScoreText))
+        if (string.IsNullOrWhiteSpace(rawScore))
         {
             skipped++;
-            row++;
             continue;
         }
 
-        if (!decimal.TryParse(newScoreText, out var newScore) || newScore < 0 || newScore > 100)
+        if (!decimal.TryParse(rawScore, out var newScore) || newScore < 0 || newScore > 100)
         {
             skipped++;
-            row++;
             continue;
         }
 
@@ -852,23 +957,19 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         }
         else
         {
-            var grade = new StudentGrade
+            _context.StudentGrades.Add(new StudentGrade
             {
                 CourseRegistrationId = registration.Id,
                 GradeComponentId = componentId,
                 Score = newScore
-            };
-
-            _context.StudentGrades.Add(grade);
+            });
             inserted++;
         }
-
-        row++;
     }
 
-    await _context.SaveChangesAsync();
+    await _context.SaveChangesAsync(ct);
 
-    return Ok(new
+    return new
     {
         message = "Import tamamlandi.",
         SectionId = sectionId,
@@ -876,8 +977,116 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         Inserted = inserted,
         Updated = updated,
         Skipped = skipped
-    });
+    };
 }
+    // ══════════════════════════════════════════════════════════
+    //  SINAVLARA GENEL BAKIŞ (Tüm Sınavları Göster)
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// GET api/instructor/exams-overview?termId
+    /// Hocanın tüm şubelerinin sınav/kalem durumunu tek listede döner.
+    /// termId verilmezse aktif dönem kullanılır.
+    /// </summary>
+    [HttpGet("exams-overview")]
+    [RequirePermission("menu.not-girisi.view")]
+    public async Task<IActionResult> ExamsOverview([FromQuery] int? termId, CancellationToken ct)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { error = "Kullanici bilgisi bulunamadi." });
+
+        var instructor = await _context.Instructors.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.UserId == userId, ct);
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        // Resolve term: explicit termId or active term
+        int resolvedTermId;
+        if (termId.HasValue)
+        {
+            var termExists = await _context.AcademicTerms.AsNoTracking()
+                .AnyAsync(t => t.Id == termId.Value, ct);
+            if (!termExists)
+                return NotFound(new { error = "Donem bulunamadi." });
+            resolvedTermId = termId.Value;
+        }
+        else
+        {
+            var activeTerm = await _context.AcademicTerms.AsNoTracking()
+                .ActiveTerm().FirstOrDefaultAsync(ct);
+            if (activeTerm == null)
+                return NotFound(new { error = "Aktif donem bulunamadi." });
+            resolvedTermId = activeTerm.Id;
+        }
+
+        // All sections this instructor teaches in the resolved term
+        var sections = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == resolvedTermId)
+            .OrderBy(cs => cs.Course.Code)
+            .ThenBy(cs => cs.SectionNumber)
+            .ToListAsync(ct);
+
+        if (sections.Count == 0)
+            return Ok(Array.Empty<object>());
+
+        var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
+        var sectionIds = sections.Select(s => s.Id).ToList();
+
+        // Load all GradeComponents for these courses/term at once (shared across sections)
+        var allComponents = await _context.GradeComponents
+            .AsNoTracking()
+            .Where(gc => courseIds.Contains(gc.CourseId) && gc.AcademicTermId == resolvedTermId)
+            .OrderBy(gc => gc.Order)
+            .ToListAsync(ct);
+
+        var componentsByCourse = allComponents
+            .GroupBy(gc => gc.CourseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Load SectionExam rows for all relevant sections and components in one query
+        var allComponentIds = allComponents.Select(c => c.Id).ToList();
+        var sectionExams = await _context.SectionExams
+            .AsNoTracking()
+            .Where(se => sectionIds.Contains(se.CourseSectionId)
+                      && allComponentIds.Contains(se.GradeComponentId))
+            .ToListAsync(ct);
+
+        // Index by (sectionId, componentId) for O(1) lookup
+        var examIndex = sectionExams
+            .ToDictionary(se => (se.CourseSectionId, se.GradeComponentId));
+
+        var rows = sections.Select(s =>
+        {
+            var courseComponents = componentsByCourse.GetValueOrDefault(s.CourseId)
+                ?? new List<GradeComponent>();
+
+            var componentDtos = courseComponents.Select(gc =>
+            {
+                examIndex.TryGetValue((s.Id, gc.Id), out var exam);
+                return new ExamOverviewComponentDto(
+                    Id: gc.Id,
+                    Name: gc.Name,
+                    Type: gc.Type,
+                    Weight: gc.Weight,
+                    PublishedAt: gc.PublishedAt,
+                    ExamDate: exam?.ExamDate);
+            }).ToList();
+
+            return new ExamOverviewRowDto(
+                SectionId: s.Id,
+                CourseCode: s.Course.Code,
+                CourseName: s.Course.Name,
+                SectionNumber: s.SectionNumber,
+                IsFinalized: s.IsFinalized,
+                Components: componentDtos);
+        }).ToList();
+
+        return Ok(rows);
+    }
+
     // ══════════════════════════════════════════════════════════
     //  SINAV YOKLAMASI
     // ══════════════════════════════════════════════════════════
@@ -2758,4 +2967,29 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         public int ComponentId { get; set; }
         public decimal MakeupScore { get; set; }
     }
+
+    // ── Paste import DTO ─────────────────────────────────────
+
+    /// <summary>Yapıştırma tabanlı toplu not aktarım isteği.</summary>
+    public record PasteScoresRequest(int ComponentId, string? Text, string? Separator);
+
+    // ── Exams overview DTOs ──────────────────────────────────
+
+    /// <summary>Hocanın bir şubesi için sınav/kalem genel bakış satırı.</summary>
+    public record ExamOverviewRowDto(
+        int SectionId,
+        string CourseCode,
+        string CourseName,
+        int SectionNumber,
+        bool IsFinalized,
+        List<ExamOverviewComponentDto> Components);
+
+    /// <summary>Bir şubeye ait sınav kalemi + varsa sınav tarihi.</summary>
+    public record ExamOverviewComponentDto(
+        int Id,
+        string Name,
+        GradeComponentType Type,
+        decimal Weight,
+        DateTime? PublishedAt,
+        DateTime? ExamDate);
 }
