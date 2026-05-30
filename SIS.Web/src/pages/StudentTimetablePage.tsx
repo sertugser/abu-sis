@@ -90,11 +90,11 @@ export default function StudentTimetablePage() {
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Dönem</label>
+    <Card className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden">
+      <CardContent className="flex flex-1 flex-col p-0">
+        <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-muted-foreground">Dönem</label>
             <Select
               value={selectedTermId?.toString()}
               onValueChange={(v) => setSelectedTermId(Number(v))}
@@ -114,19 +114,23 @@ export default function StudentTimetablePage() {
           <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
             <Printer className="mr-2 h-4 w-4" /> Yazdır
           </Button>
-        </div>
+        </header>
 
         {isLoading ? (
-          <Skeleton className="m-4 h-[400px] rounded-xl" />
+          <div className="flex-1 p-6">
+            <Skeleton className="h-full min-h-[400px] rounded-xl" />
+          </div>
         ) : isError ? (
-          <div className="p-4">
+          <div className="p-6">
             <Alert variant="destructive">
               <AlertTitle>Program yüklenemedi</AlertTitle>
               <AlertDescription>Dönemi değiştirip tekrar deneyin.</AlertDescription>
             </Alert>
           </div>
         ) : (
-          <ProlizWeekLayout rowsByDay={rowsByDay} />
+          <div className="flex flex-1 flex-col">
+            <ProlizWeekLayout rowsByDay={rowsByDay} />
+          </div>
         )}
       </CardContent>
     </Card>

@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { dayNumberToTurkish } from '@/lib/scheduleUtils';
 import type { ProlizRow } from './ProlizDayTable';
@@ -8,71 +9,107 @@ interface ProlizWeekLayoutProps {
 
 const DAY_ORDER = [1, 2, 3, 4, 5];
 
+const COLUMN_GRID =
+  'grid grid-cols-[140px_minmax(120px,150px)_minmax(0,1fr)_minmax(110px,160px)_minmax(180px,260px)] gap-4';
+
 export function ProlizWeekLayout({ rowsByDay }: ProlizWeekLayoutProps) {
   return (
-    <div>
-      <table className="w-full border-collapse text-xs">
-        <colgroup>
-          <col className="w-[10%]" />
-          <col className="w-[12%]" />
-          <col className="w-[34%]" />
-          <col className="w-[14%]" />
-          <col className="w-[30%]" />
-        </colgroup>
+    <div className="flex flex-col">
+      {/* Sütun başlıkları — bir kez, sticky */}
+      <div
+        className={cn(
+          COLUMN_GRID,
+          'sticky top-0 z-10 border-y border-border bg-muted/40 px-6 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground',
+        )}
+      >
+        <span>Saat</span>
+        <span>Ders Kodu</span>
+        <span>Ders Adı</span>
+        <span>Derslik</span>
+        <span>Öğretim Elemanı</span>
+      </div>
+
+      <div className="divide-y divide-border">
         {DAY_ORDER.map((day) => {
           const rows = rowsByDay[day] ?? [];
           return (
-            <tbody key={day} className="border-t border-border">
-              <tr className="bg-muted/60">
-                <th
-                  colSpan={5}
-                  className="px-3 py-2 text-left text-sm font-semibold text-foreground"
-                >
+            <section key={day}>
+              {/* Gün başlığı: sol bant + ders sayısı */}
+              <header className="flex items-center gap-3 px-6 py-2.5">
+                <span className="h-4 w-1 rounded-full bg-primary" aria-hidden />
+                <h2 className="text-sm font-semibold text-foreground">
                   {dayNumberToTurkish(day)}
-                </th>
-              </tr>
-              <tr className="border-y bg-muted/20 text-muted-foreground">
-                <th className="px-3 py-1 text-left font-medium">Saat</th>
-                <th className="px-3 py-1 text-left font-medium">Ders Kodu</th>
-                <th className="px-3 py-1 text-left font-medium">Ders Adı</th>
-                <th className="px-3 py-1 text-left font-medium">Derslik</th>
-                <th className="px-3 py-1 text-left font-medium">Öğretim Elemanı</th>
-              </tr>
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {rows.length === 0
+                    ? 'ders yok'
+                    : `${rows.length} ders`}
+                </span>
+              </header>
+
+              {/* Satırlar */}
               {rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-2 text-xs italic text-muted-foreground"
-                  >
-                    Tanımlı Ders Programı Bulunamadı!
-                  </td>
-                </tr>
+                <p className="px-6 pb-3 pl-10 text-xs italic text-muted-foreground">
+                  Bu güne tanımlı ders programı bulunamadı.
+                </p>
               ) : (
-                rows.map((row, idx) => (
-                  <tr
-                    key={`${day}-${row.sectionId}-${idx}`}
-                    className={cn(row.isLab && 'bg-emerald-50')}
-                    data-testid={row.isLab ? 'lab-row' : 'theory-row'}
-                  >
-                    <td className="px-3 py-1">
-                      {row.startTime}-{row.endTime}
-                    </td>
-                    <td className="px-3 py-1">
-                      {row.courseCode}({row.sectionNumber})
-                    </td>
-                    <td className="px-3 py-1">{row.courseName}</td>
-                    <td className="px-3 py-1">{row.classroomLabel}</td>
-                    <td className="px-3 py-1">{row.instructorDisplay}</td>
-                  </tr>
-                ))
+                <ul className="pb-1">
+                  {rows.map((row, idx) => (
+                    <li
+                      key={`${day}-${row.sectionId}-${idx}`}
+                      className={cn(
+                        COLUMN_GRID,
+                        'group items-center px-6 py-2 text-sm transition-colors hover:bg-muted/40',
+                        row.isLab &&
+                          'bg-emerald-50/60 hover:bg-emerald-100/70',
+                      )}
+                      data-testid={row.isLab ? 'lab-row' : 'theory-row'}
+                    >
+                      <span className="font-mono text-xs tabular-nums text-foreground">
+                        {row.startTime} – {row.endTime}
+                      </span>
+                      <span className="flex items-baseline gap-1">
+                        <span className="font-medium text-foreground">
+                          {row.courseCode}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          · {row.sectionNumber}
+                        </span>
+                      </span>
+                      <span className="truncate text-foreground" title={row.courseName}>
+                        {row.courseName}
+                      </span>
+                      <span>
+                        <Badge
+                          variant="outline"
+                          className="font-normal text-foreground"
+                        >
+                          {row.classroomLabel}
+                        </Badge>
+                      </span>
+                      <span
+                        className="truncate text-xs text-muted-foreground"
+                        title={row.instructorDisplay}
+                      >
+                        {row.instructorDisplay || '—'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </tbody>
+            </section>
           );
         })}
-      </table>
-      <p className="border-t border-border px-3 py-2 text-xs italic text-muted-foreground">
-        Not: Uygulama saatleri yeşil renkle gösterilir
-      </p>
+      </div>
+
+      {/* Lab açıklama şeridi */}
+      <div className="mt-auto flex items-center gap-2 border-t border-border bg-muted/30 px-6 py-2 text-xs text-muted-foreground">
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200"
+          aria-hidden
+        />
+        Uygulama saatleri yeşil renkle gösterilir
+      </div>
     </div>
   );
 }
