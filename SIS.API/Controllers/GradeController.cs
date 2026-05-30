@@ -698,6 +698,32 @@ public async Task<IActionResult> PastePreview(int sectionId, [FromBody] PasteSco
     if (section == null)
         return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
+    // Fix 3: validate componentId before hitting the shared core
+    if (req.ComponentId <= 0)
+        return BadRequest(new { error = "Geçersiz bileşen kimliği." });
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == req.ComponentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId, ct);
+
+    if (component == null)
+        return BadRequest(new { error = "Seçilen sınav kalemi bu derse ait değil." });
+
+    // Fix 1: load term and apply the same guards as Excel ImportPreview
+    var term = await _context.AcademicTerms.AsNoTracking()
+        .Include(t => t.AcademicCalendar)
+        .FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+    if (term == null)
+        return NotFound(new { error = "Dönem bulunamadi." });
+
+    var pastePreviewGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Paste import sadece uygun takvim penceresinde yapılabilir.");
+    if (pastePreviewGate is not null)
+        return pastePreviewGate;
+
+    // Excel ImportPreview does NOT block on IsFinalized (preview is read-only/informational)
+    // so we intentionally mirror that behaviour here for PastePreview as well.
+
     var pairs = ParseScorePaste(req.Text, req.Separator);
     var preview = await BuildScoreImportPreviewAsync(section, req.ComponentId, pairs, ct);
     return Ok(preview);
@@ -714,6 +740,32 @@ public async Task<IActionResult> PasteApply(int sectionId, [FromBody] PasteScore
     var section = await GetAuthorizedSectionAsync(sectionId);
     if (section == null)
         return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
+
+    // Fix 3: validate componentId before hitting the shared core
+    if (req.ComponentId <= 0)
+        return BadRequest(new { error = "Geçersiz bileşen kimliği." });
+
+    var component = await _context.GradeComponents
+        .FirstOrDefaultAsync(gc => gc.Id == req.ComponentId
+            && gc.CourseId == section.CourseId
+            && gc.AcademicTermId == section.TermId, ct);
+
+    if (component == null)
+        return BadRequest(new { error = "Seçilen sınav kalemi bu derse ait değil." });
+
+    // Fix 1: load term and apply the same guards as Excel ImportApply
+    var term = await _context.AcademicTerms.AsNoTracking()
+        .Include(t => t.AcademicCalendar)
+        .FirstOrDefaultAsync(t => t.Id == section.TermId, ct);
+    if (term == null)
+        return NotFound(new { error = "Dönem bulunamadi." });
+
+    var pasteApplyGate = await EnsureGradeEntryModuleOpenAsync(term.Id, component.Name, "Paste import sadece uygun takvim penceresinde yapılabilir.");
+    if (pasteApplyGate is not null)
+        return pasteApplyGate;
+
+    if (section.IsFinalized)
+        return BadRequest(new { error = "Sonuclandirilmis ders icin import yapilamaz." });
 
     var pairs = ParseScorePaste(req.Text, req.Separator);
     var result = await ApplyScoreImportAsync(section, req.ComponentId, pairs, ct);
@@ -800,6 +852,9 @@ private async Task<object> BuildScoreImportPreviewAsync(
         string message;
         decimal? parsedScore = null;
         decimal? currentScore = null;
+        // Fix 4: declare resolvedReg once; set it in the branch that succeeds, use below for both
+        // StudentId and name resolution — eliminates the redundant second TryGetValue.
+        CourseRegistration? resolvedReg = null;
 
         if (string.IsNullOrWhiteSpace(studentNumber))
         {
@@ -815,6 +870,7 @@ private async Task<object> BuildScoreImportPreviewAsync(
         }
         else if (string.IsNullOrWhiteSpace(rawScore))
         {
+            resolvedReg = registration;
             status = "Empty";
             message = "Bos hucre, mevcut not korunacak.";
             emptyCount++;
@@ -823,18 +879,21 @@ private async Task<object> BuildScoreImportPreviewAsync(
         }
         else if (!decimal.TryParse(rawScore, out var score))
         {
+            resolvedReg = registration;
             status = "Error";
             message = "Not sayisal degil.";
             errorCount++;
         }
         else if (score < 0 || score > 100)
         {
+            resolvedReg = registration;
             status = "Error";
             message = "Not 0-100 araliginda olmali.";
             errorCount++;
         }
         else
         {
+            resolvedReg = registration;
             parsedScore = score;
             existingGrades.TryGetValue(registration.Id, out var existingScore);
             currentScore = existingScore;
@@ -853,11 +912,14 @@ private async Task<object> BuildScoreImportPreviewAsync(
             }
         }
 
+        // Fix 2: include StudentId (nullable) and name — resolve from resolvedReg (single lookup)
+        int? resolvedStudentId = null;
         string? firstName = null;
         string? lastName = null;
-        if (regByStudentNumber.TryGetValue(studentNumber, out var reg2))
+        if (resolvedReg != null)
         {
-            var user = userMap.GetValueOrDefault(reg2.Student.UserId);
+            resolvedStudentId = resolvedReg.StudentId;
+            var user = userMap.GetValueOrDefault(resolvedReg.Student.UserId);
             firstName = user?.FirstName;
             lastName = user?.LastName;
         }
@@ -866,6 +928,7 @@ private async Task<object> BuildScoreImportPreviewAsync(
         {
             RowNumber = rowNumber,
             StudentNumber = studentNumber,
+            StudentId = resolvedStudentId,
             FirstName = firstName,
             LastName = lastName,
             CurrentScore = currentScore,
@@ -1030,7 +1093,7 @@ private async Task<object> ApplyScoreImportAsync(
             .ToListAsync(ct);
 
         if (sections.Count == 0)
-            return Ok(Array.Empty<object>());
+            return Ok(Array.Empty<ExamOverviewRowDto>());
 
         var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
         var sectionIds = sections.Select(s => s.Id).ToList();

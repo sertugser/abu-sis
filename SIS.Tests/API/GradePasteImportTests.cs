@@ -300,6 +300,81 @@ public class GradePasteImportTests : IDisposable
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    //  TASK 2b — Guard and fix tests (new)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task PasteApply_Blocked_WhenSectionFinalized()
+    {
+        // Arrange
+        SeedBase(sectionFinalized: true);
+        SeedStudents();
+        var controller = CreateController();
+
+        var text = $"{Student1Number} 75";
+        var req = new GradeController.PasteScoresRequest(ComponentId, text, Separator: null);
+
+        // Act
+        var result = await controller.PasteApply(SectionId, req, default);
+
+        // Assert — must match the same response Excel ImportApply returns for finalized: BadRequest
+        result.Should().BeOfType<BadRequestObjectResult>();
+        var body = (result as BadRequestObjectResult)!.Value!;
+        GetProp<string>(body, "error").Should().Contain("Sonuclandirilmis");
+    }
+
+    [Fact]
+    public async Task PastePreview_Rejects_WhenComponentNotInSection()
+    {
+        // Arrange
+        SeedBase();
+        SeedStudents();
+        var controller = CreateController();
+
+        const int WrongComponentId = 9999;
+        var req = new GradeController.PasteScoresRequest(WrongComponentId, $"{Student1Number} 80", Separator: null);
+
+        // Act
+        var result = await controller.PastePreview(SectionId, req, default);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
+        var body = (result as BadRequestObjectResult)!.Value!;
+        GetProp<string>(body, "error").Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task PasteApply_UpdatesExistingScore()
+    {
+        // Arrange
+        SeedBase();
+        SeedStudents();
+
+        // Seed an existing grade for Student1
+        _context.StudentGrades.Add(new StudentGrade
+        {
+            CourseRegistrationId = Student1RegId,
+            GradeComponentId = ComponentId,
+            Score = 50m
+        });
+        _context.SaveChanges();
+
+        var controller = CreateController();
+        var text = $"{Student1Number} 90";
+        var req = new GradeController.PasteScoresRequest(ComponentId, text, Separator: null);
+
+        // Act
+        var result = await controller.PasteApply(SectionId, req, default) as OkObjectResult;
+
+        // Assert
+        result.Should().NotBeNull();
+
+        var grade = await _context.StudentGrades
+            .SingleAsync(g => g.CourseRegistrationId == Student1RegId && g.GradeComponentId == ComponentId);
+        grade.Score.Should().Be(90m);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     //  TASK 3 — ExamsOverview tests
     // ═══════════════════════════════════════════════════════════════════════════
 
