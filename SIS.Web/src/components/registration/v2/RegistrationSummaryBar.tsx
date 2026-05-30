@@ -56,6 +56,12 @@ export function RegistrationSummaryBar({
           isOver && 'bg-destructive',
         )}
       />
+
+      {isOver && (
+        <span className="text-destructive font-medium">
+          AKTS limitini aştınız ({totalEcts}/{ectsLimit}). Danışman onayı gerekebilir.
+        </span>
+      )}
     </div>
   );
 }

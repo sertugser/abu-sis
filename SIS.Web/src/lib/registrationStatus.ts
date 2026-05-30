@@ -6,9 +6,9 @@ export type AdvisorState = 'None' | 'Pending' | 'Approved' | 'Rejected';
 
 export interface RegistrationStatusView {
   finalizationLabel: string;
-  finalizationVariant: 'secondary' | 'warning' | 'success';
+  finalizationVariant: 'neutralSoft' | 'warningSoft' | 'successSoft';
   advisorLabel: string;
-  advisorVariant: 'secondary' | 'warning' | 'success' | 'destructive';
+  advisorVariant: 'neutralSoft' | 'warningSoft' | 'successSoft' | 'dangerSoft';
 }
 
 /**
@@ -22,9 +22,9 @@ export function computeRegistrationStatus(
   if (selected.length === 0) {
     return {
       finalizationLabel: '—',
-      finalizationVariant: 'secondary',
+      finalizationVariant: 'neutralSoft',
       advisorLabel: '—',
-      advisorVariant: 'secondary',
+      advisorVariant: 'neutralSoft',
     };
   }
 
@@ -35,38 +35,38 @@ export function computeRegistrationStatus(
 
   // Finalization
   let finalizationLabel: string;
-  let finalizationVariant: 'secondary' | 'warning' | 'success';
+  let finalizationVariant: 'neutralSoft' | 'warningSoft' | 'successSoft';
 
   if (drafts.length > 0 && pending.length === 0 && active.length === 0) {
     finalizationLabel = 'Kesinleştirilmedi';
-    finalizationVariant = 'secondary';
+    finalizationVariant = 'neutralSoft';
   } else if (active.length > 0 && drafts.length === 0 && pending.length === 0) {
     // Tüm derslerin onayı bitti — gerçekten kesinleştirildi
     finalizationLabel = 'Kesinleştirildi';
-    finalizationVariant = 'success';
+    finalizationVariant = 'successSoft';
   } else {
     // Submit edildi ama henüz tamamı onaylı değil — bekliyor
     // (karma durum: bir kısmı pending + bir kısmı draft, ya da sadece pending)
     finalizationLabel = 'Onay Bekliyor';
-    finalizationVariant = 'warning';
+    finalizationVariant = 'warningSoft';
   }
 
   // Advisor
   let advisorLabel: string;
-  let advisorVariant: 'secondary' | 'warning' | 'success' | 'destructive';
+  let advisorVariant: 'neutralSoft' | 'warningSoft' | 'successSoft' | 'dangerSoft';
 
   if (rejected.length > 0) {
     advisorLabel = 'Reddedildi';
-    advisorVariant = 'destructive';
+    advisorVariant = 'dangerSoft';
   } else if (active.length === selected.length) {
     advisorLabel = 'Onaylandı';
-    advisorVariant = 'success';
+    advisorVariant = 'successSoft';
   } else if (pending.length > 0) {
     advisorLabel = 'Onay Bekleniyor';
-    advisorVariant = 'warning';
+    advisorVariant = 'warningSoft';
   } else {
     advisorLabel = '—';
-    advisorVariant = 'secondary';
+    advisorVariant = 'neutralSoft';
   }
 
   return { finalizationLabel, finalizationVariant, advisorLabel, advisorVariant };

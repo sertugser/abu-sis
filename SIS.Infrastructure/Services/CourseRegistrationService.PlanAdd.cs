@@ -70,9 +70,8 @@ public partial class CourseRegistrationService
                 if (!gate.IsOpen)
                     continue;
 
-                if (section.EnrolledCount >= section.Capacity)
-                    continue;
-
+                // Kapasite kontrolü AddToPlanAsync içinde (SeatLedger, cross-list-farkındalıklı) atomik
+                // yapılır; burada ayrı stale ön-kontrol YOK (ikibaşlılık + cross-list yanlışlığı önlenir).
                 // Tüm iş kuralları/kapasite AddToPlanAsync içinde uygulanır. Uygun ilk şubeyi ekle.
                 var addResult = await AddToPlanAsync(studentId, section.Id, RegistrationStatus.Draft);
                 if (addResult.Success)
@@ -339,13 +338,13 @@ public partial class CourseRegistrationService
         // Prerequisite check — block if prerequisites are not met
         var prereqs = await _context.CoursePrerequisites
             .Where(p => p.CourseId == section.CourseId)
-            .Select(p => p.RequiredCourseId)
+            .Select(p => new { p.RequiredCourseId, p.IsCorequisite })
             .ToListAsync();
 
         if (prereqs.Count > 0)
         {
-            // Passed courses: grade is not FF/NA/U/W/I
-            var passedCourseIds = await _context.CourseRegistrations
+            // Geçilen dersler: not FF/NA/U/W/I değil
+            var passedSet = (await _context.CourseRegistrations
                 .Include(cr => cr.CourseSection)
                 .Where(cr => cr.StudentId == studentId
                     && cr.Grade != null
@@ -355,17 +354,15 @@ public partial class CourseRegistrationService
                     && cr.Status != RegistrationStatus.Dropped)
                 .Select(cr => cr.CourseSection.CourseId)
                 .Distinct()
-                .ToListAsync();
+                .ToListAsync()).ToHashSet();
 
-            var passedSet = passedCourseIds.ToHashSet();
+            // İlgili önkoşullar için filtreli simetrik eşdeğerlik haritası (tek kaynak).
+            var requiredIds = prereqs.Select(p => p.RequiredCourseId).Distinct().ToList();
+            var equivalencyMap = PrerequisiteEvaluator.BuildEquivalencyMap(await _context.CourseEquivalencies
+                .Where(ce => requiredIds.Contains(ce.CourseId) || requiredIds.Contains(ce.EquivalentCourseId))
+                .ToListAsync());
 
-            // Check equivalencies
-            var equivMap = (await _context.CourseEquivalencies.ToListAsync())
-                .GroupBy(e => e.CourseId)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
-
-            // İntibak: öğrencinin müfredatındaki (yeni→eski) ders haritası.
-            // Önkoşul yeni bir dersse ve öğrenci o dersin eski karşılığını (PreviousCourse) geçtiyse önkoşul sağlanır.
+            // İntibak (PreviousCourse) haritası — öğrencinin aktif müfredatından.
             var studentCurriculumId = await _context.StudentPrograms
                 .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
                 .Select(sp => (int?)sp.CurriculumId)
@@ -376,22 +373,41 @@ public partial class CourseRegistrationService
                     .Where(cc => cc.CurriculumId == studentCurriculumId && cc.PreviousCourseId != null)
                     .ToListAsync());
 
-            foreach (var reqId in prereqs)
+            // Eş-koşul için aynı dönemde birlikte alınan dersler: mevcut sepet/aktif + eklenen dersin kendisi.
+            var concurrentCourseIds = (await _context.CourseRegistrations
+                .Where(cr => cr.StudentId == studentId
+                    && cr.CourseSection.TermId == section.TermId
+                    && (cr.Status == RegistrationStatus.Draft
+                        || cr.Status == RegistrationStatus.PendingAdvisorApproval
+                        || cr.Status == RegistrationStatus.Active))
+                .Select(cr => cr.CourseSection.CourseId)
+                .ToListAsync()).ToHashSet();
+            concurrentCourseIds.Add(section.CourseId);
+
+            foreach (var prereq in prereqs)
             {
-                var met = PreviousCourseResolver.IsCovered(reqId, passedSet, previousMap);
-                if (!met && equivMap.TryGetValue(reqId, out var equivIds))
-                    met = equivIds.Any(eid => passedSet.Contains(eid));
+                var met = PrerequisiteEvaluator.IsSatisfied(
+                    prereq.RequiredCourseId,
+                    prereq.IsCorequisite,
+                    passedSet,
+                    previousMap,
+                    equivalencyMap,
+                    concurrentCourseIds);
 
                 if (!met)
                 {
-                    var reqCourse = await _context.Courses.FindAsync(reqId);
+                    var reqCourse = await _context.Courses.FindAsync(prereq.RequiredCourseId);
                     response.Success = false;
                     response.ValidationResult = new ValidationResultDto
                     {
                         IsValid = false,
                         Errors = new List<ValidationError>
                         {
-                            new() { Rule = "PrerequisiteNotMet", Message = $"Onkosul karsilanmamistir: {reqCourse?.Code ?? "?"} dersi gecilmeli.", CourseSectionId = courseSectionId }
+                            new() { Rule = "PrerequisiteNotMet",
+                                Message = prereq.IsCorequisite
+                                    ? $"Es kosul karsilanmamistir: {reqCourse?.Code ?? "?"} dersi ayni donemde alinmali veya gecilmis olmali."
+                                    : $"Onkosul karsilanmamistir: {reqCourse?.Code ?? "?"} dersi gecilmeli.",
+                                CourseSectionId = courseSectionId }
                         }
                     };
                     return response;
@@ -399,12 +415,16 @@ public partial class CourseRegistrationService
             }
         }
 
-        // BUG FIX: Check for previously dropped/withdrawn record (unique index on StudentId+CourseSectionId)
+        // Unique index (StudentId, CourseSectionId) durum kolonu içermez → aynı section için
+        // Dropped/Withdrawn/Rejected bir kayıt varsa YENİ insert 500 (unique-violation) verir.
+        // Bu yüzden var olan kaydı reaktive ediyoruz (Rejected dahil — danışman reddettikten sonra
+        // öğrenci aynı şubeyi tekrar ekleyebilmeli).
         var droppedRecord = await _context.CourseRegistrations
             .FirstOrDefaultAsync(cr => cr.StudentId == studentId
                 && cr.CourseSectionId == courseSectionId
                 && (cr.Status == RegistrationStatus.Dropped
-                    || cr.Status == RegistrationStatus.Withdrawn));
+                    || cr.Status == RegistrationStatus.Withdrawn
+                    || cr.Status == RegistrationStatus.Rejected));
 
         Domain.Entities.CourseRegistration registration;
 
@@ -470,35 +490,40 @@ public partial class CourseRegistrationService
             : null;
         try
         {
-            // Fresh reload — başka bir öğrenci aynı anda koltuğu almış olabilir
-            await _context.Entry(section).ReloadAsync();
-            // Madde 14: Cross-list grubundaysa toplam sayı
-            int freshEffective = section.EnrolledCount;
-            if (section.CrossListGroupId.HasValue)
-            {
-                freshEffective = await _context.CourseSections
-                    .Where(cs => cs.CrossListGroupId == section.CrossListGroupId.Value)
-                    .SumAsync(cs => cs.EnrolledCount);
-            }
-            if (freshEffective >= section.Capacity)
+            // Tek kaynak: SeatLedger taze kapasite kontrolü + (cross-list grubu dahil) rezervasyon yapar.
+            if (!await SeatLedger.TryReserveAsync(_context, section))
             {
                 if (tx != null) await tx.RollbackAsync();
+                var effective = await SeatLedger.GetEffectiveEnrolledAsync(_context, section);
                 response.Success = false;
                 response.ValidationResult = new ValidationResultDto
                 {
                     IsValid = false,
                     Errors = new List<ValidationError>
                     {
-                        new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({freshEffective}/{section.Capacity})." }
+                        new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({effective}/{section.Capacity})." }
                     }
                 };
                 return response;
             }
 
-            // Soft hold: sayımı artır (FR-44)
-            section.EnrolledCount++;
             await _context.SaveChangesAsync();
             if (tx != null) await tx.CommitAsync();
+        }
+        catch (Exception ex) when (SeatLedger.IsConcurrencyConflict(ex))
+        {
+            // Eş zamanlı kayıt çakışması (RowVersion / Serializable) → 500 yerine kullanıcı mesajı.
+            if (tx != null) await tx.RollbackAsync();
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada değişti. Lütfen tekrar deneyin." }
+                }
+            };
+            return response;
         }
         catch
         {

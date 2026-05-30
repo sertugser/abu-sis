@@ -5,12 +5,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
 using SIS.Application.Common.Services;
+using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
 using SIS.Infrastructure.Services;
+using SIS.Infrastructure.Services.Scheduling.Reports;
 
 namespace SIS.API.Controllers;
 
@@ -300,17 +302,31 @@ public class InstructorController : ControllerBase
         var mySectionSchedules = await _context.SectionSchedules
             .AsNoTracking()
             .Include(ss => ss.TimeSlot)
+            .Include(ss => ss.Classroom!)
             .Where(ss => mySectionIds.Contains(ss.CourseSectionId))
             .ToListAsync();
         var myScheduleMap = mySectionSchedules
             .GroupBy(ss => ss.CourseSectionId)
             .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
-        // 2026-05-10 — Plan E: structured schedule blocks (replaces frontend string parsing).
-        // BuildScheduleBlocks BlockType-aware merge yapar, frontend `parseScheduleSummary`
-        // helper'ı bu sayede silindi.
+        // Ham TimeSlot bazlı bloklar (öğrenci ders programıyla birebir aynı görünüm için
+        // birleştirilmez; her ders saati ayrı blok, per-blok derslik dahil). Öğrenci
+        // tarafındaki ExpandSchedulesToSlots ile aynı şekillendirme.
         var myScheduleBlockMap = mySectionSchedules
             .GroupBy(ss => ss.CourseSectionId)
-            .ToDictionary(g => g.Key, g => ScheduleHelper.BuildScheduleBlocks(g));
+            .ToDictionary(g => g.Key, g => g
+                .OrderBy(ss => ss.TimeSlot.DayOfWeek)
+                .ThenBy(ss => ss.TimeSlot.StartTime)
+                .Select(ss => new ScheduleBlockDto
+                {
+                    Day = (int)ss.TimeSlot.DayOfWeek,
+                    StartTime = ss.TimeSlot.StartTime,
+                    EndTime = ss.TimeSlot.EndTime,
+                    BlockType = ss.BlockType,
+                    ClassroomId = ss.ClassroomId,
+                    ClassroomName = ss.Classroom?.Name,
+                    ClassroomType = ss.Classroom?.Type.ToString(),
+                })
+                .ToList());
 
         var result = sections.Select(s => new
         {
@@ -334,14 +350,127 @@ public class InstructorController : ControllerBase
         .OrderBy(s => s.CourseCode)
         .ToList();
 
+        var (lunchStart, lunchEnd) = await GetLunchBreakAsync();
+        var slots = await GetTermSlotsAsync(term.Id);
+
         return Ok(new
         {
             Term = term.Name,
             TermId = term.Id,
             TotalSections = result.Count,
             TotalStudents = result.Sum(s => s.ActiveStudents),
-            Sections = result
+            Sections = result,
+            LunchBreakStart = lunchStart,
+            LunchBreakEnd = lunchEnd,
+            Slots = slots
         });
+    }
+
+    /// <summary>
+    /// Term'in tanımlı ders saati pencerelerini (distinct start-end) döner; takvim
+    /// ızgarasının satır yapısını besler (öğrenci tarafıyla aynı mantık).
+    /// </summary>
+    private async Task<List<TimetableSlotDto>> GetTermSlotsAsync(int termId)
+    {
+        var raw = await _context.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .Select(ts => new { ts.StartTime, ts.EndTime })
+            .Distinct()
+            .ToListAsync();
+
+        return raw
+            .OrderBy(s => s.StartTime)
+            .ThenBy(s => s.EndTime)
+            .Select(s => new TimetableSlotDto(s.StartTime.ToString("HH:mm"), s.EndTime.ToString("HH:mm")))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Sistem ayarından öğle arası penceresini okur (Schedule.LunchBreakStart/End),
+    /// "HH:mm" formatına normalize eder. Ayar yoksa varsayılan 11:40-12:20.
+    /// </summary>
+    private async Task<(string Start, string End)> GetLunchBreakAsync()
+    {
+        var startRaw = await _systemConfig.GetStringAsync("Schedule.LunchBreakStart", "11:40");
+        var endRaw = await _systemConfig.GetStringAsync("Schedule.LunchBreakEnd", "12:20");
+        return (NormalizeLunchTime(startRaw, "11:40"), NormalizeLunchTime(endRaw, "12:20"));
+    }
+
+    private static string NormalizeLunchTime(string raw, string fallback)
+    {
+        return TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed.ToString("HH:mm", CultureInfo.InvariantCulture)
+            : fallback;
+    }
+
+    /// <summary>
+    /// GET api/instructor/my-timetable/pdf — öğretim elemanının kendi ders programı PDF'i.
+    /// Öğrenci PDF'iyle aynı ortak <see cref="TimetablePdfRenderer"/> kullanılır.
+    /// </summary>
+    [HttpGet("my-timetable/pdf")]
+    [RequirePermission("menu.ders-programim.view")]
+    public async Task<IActionResult> GetMyTimetablePdf([FromQuery] int? termId = null)
+    {
+        var instructor = await GetInstructorAsync();
+        if (instructor == null)
+            return NotFound(new { error = "Ogretim uyesi bilgisi bulunamadi." });
+
+        var term = termId.HasValue
+            ? await _context.AcademicTerms.FirstOrDefaultAsync(t => t.Id == termId.Value)
+            : await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
+        if (term == null)
+            return NotFound(new { error = termId.HasValue ? "Donem bulunamadi." : "Aktif donem bulunamadi." });
+
+        var sections = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == term.Id)
+            .ToListAsync();
+
+        var sectionIds = sections.Select(s => s.Id).ToList();
+        var schedules = await _context.SectionSchedules
+            .AsNoTracking()
+            .Include(ss => ss.TimeSlot)
+            .Include(ss => ss.Classroom!)
+            .Where(ss => sectionIds.Contains(ss.CourseSectionId))
+            .ToListAsync();
+
+        var blocksBySection = schedules
+            .GroupBy(ss => ss.CourseSectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<TimetablePdfBlock>)g
+                    .Select(ss => new TimetablePdfBlock(
+                        (int)ss.TimeSlot.DayOfWeek,
+                        ss.TimeSlot.StartTime,
+                        ss.TimeSlot.EndTime,
+                        ss.Classroom?.Name,
+                        ss.BlockType == ScheduleBlockType.Lab))
+                    .ToList());
+
+        var user = await _context.Users.FindAsync(instructor.UserId);
+        var instructorName = string.Join(" ", new[]
+        {
+            instructor.Title ?? string.Empty,
+            user?.FirstName ?? string.Empty,
+            user?.LastName ?? string.Empty,
+        }.Where(p => !string.IsNullOrWhiteSpace(p))).Trim();
+
+        var model = new TimetablePdfData(
+            Title: "Öğretim Elemanı Ders Programı",
+            SubjectName: instructorName,
+            TermName: term.Name,
+            Sections: sections
+                .OrderBy(s => s.Course.Code)
+                .Select(s => new TimetablePdfSection(
+                    s.SectionNumber.ToString(),
+                    s.Course.Code,
+                    blocksBySection.GetValueOrDefault(s.Id, new List<TimetablePdfBlock>())))
+                .ToList());
+
+        var bytes = new TimetablePdfRenderer().Render(model);
+        return File(bytes, "application/pdf", "ders-programi.pdf");
     }
 
     /// <summary>

@@ -239,10 +239,12 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                 CourseId:          cid,
                 CourseCode:        course.Code,
                 CourseName:        course.Name,
+                SectionNumber:     cr.CourseSection.SectionNumber,
                 IsCompulsory:      isCompulsory,
                 TheoryHours:       course.TheoryHours,
                 LabHours:          course.LabHours,
                 Ects:              ects,
+                NationalCredit:    cr.CreditSnapshot ?? course.NationalCredit, // snapshot-first
                 SuggestedSemester: sugSemester,
                 TakeType:          failedCourseIds.Contains(cid) ? "Alttan" : "IlkDefa",
                 Status:            cr.Status.ToString(),
@@ -377,6 +379,14 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             .GroupBy(p => p.CourseId)
             .ToDictionary(g => g.Key, g => g.Select(p => p.RequiredCourseId).ToHashSet());
 
+        // Önkoşul derslerinin kodları (tooltip'te gerçek kod gösterimi için; başka bölümden olabilir).
+        var prereqCourseIds = prereqMap.Values.SelectMany(ids => ids).Distinct().ToList();
+        var prereqCodeById = prereqCourseIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.Courses.AsNoTracking()
+                .Where(c => prereqCourseIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Code, ct);
+
         var equivMap = (await _context.CourseEquivalencies.AsNoTracking().ToListAsync(ct))
             .GroupBy(e => e.CourseId)
             .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
@@ -417,20 +427,23 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                     activeRegCourseIds.Add(cid);
         }
 
-        // ── Step 5b: HasOpenSections — load active-term sections once, then gate each ─
-        // Single batch load (no N+1). Gate call per section is acceptable: section count is
-        // bounded by curriculum size within one active term.
+        // ── Step 5b: HasOpenSections — yalnızca Active şubeleri tek seferde yükle, gate'i TOPLU değerlendir ─
+        // Status==Active DB'de filtrelenir (Draft/Cancelled gizli); gate (fakülte onayı/suspend) tek
+        // toplu sorguda değerlendirilir (N+1 yok). AsNoTracking — salt okuma.
         var curriculumCourseIds = curriculumCourses.Select(cc => cc.CourseId).ToList();
         var activeSections = await _context.CourseSections
+            .AsNoTracking()
             .Include(cs => cs.Course)
-            .Where(cs => cs.TermId == term.Id && curriculumCourseIds.Contains(cs.CourseId))
+            .Where(cs => cs.TermId == term.Id
+                && curriculumCourseIds.Contains(cs.CourseId)
+                && cs.Status == CourseSectionStatus.Active)
             .ToListAsync(ct);
 
         var coursesWithOpenSection = new HashSet<int>();
+        var gateResults = await _registrationGate.EvaluateSectionsAsync(activeSections, ct);
         foreach (var section in activeSections)
         {
-            var gateResult = await _registrationGate.EvaluateSectionAsync(section, ct);
-            if (gateResult.IsOpen)
+            if (gateResults[section.Id].IsOpen)
                 coursesWithOpenSection.Add(section.CourseId);
         }
 
@@ -488,6 +501,7 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
             // Skip check if student already passed (directly or via intibak)
             var coveredByPrevious = PreviousCourseResolver.IsCovered(cid, passedCourseIds, previousMap);
             bool prereqsMet = true;
+            var missingPrerequisites = new List<string>(); // karşılanmamış önkoşul ders kodları
             if (!coveredByPrevious && prereqMap.TryGetValue(cid, out var requiredIds))
             {
                 foreach (var reqId in requiredIds)
@@ -498,7 +512,11 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                         passed = equivIds.Any(eid => passedCourseIds.Contains(eid));
                     if (!passed && previousMap.TryGetValue(reqId, out var prevReqId))
                         passed = passedCourseIds.Contains(prevReqId);
-                    if (!passed) { prereqsMet = false; break; }
+                    if (!passed)
+                    {
+                        prereqsMet = false;
+                        missingPrerequisites.Add(prereqCodeById.GetValueOrDefault(reqId, $"#{reqId}"));
+                    }
                 }
             }
 
@@ -516,12 +534,15 @@ public sealed class StudentRegistrationCatalogService : IStudentRegistrationCata
                 Code:                  course.Code,
                 Name:                  course.Name,
                 IsCompulsory:          compulsoryMap.TryGetValue(cid, out var isComp) && isComp,
+                TheoryHours:           course.TheoryHours,
+                LabHours:              course.LabHours,
                 NationalCredit:        course.NationalCredit,
                 Ects:                  course.Ects,
                 SuggestedSemester:     sugSemester,
                 ClassYear:             rowClassYear,
                 TakeStatus:            takeStatus,
                 PrerequisitesMet:      prereqsMet,
+                MissingPrerequisites:  missingPrerequisites,
                 PreviousAttemptInfo:   previousAttemptInfo,
                 ActiveRegistrationStatus: activeRegStatus,
                 HasOpenSections:       coursesWithOpenSection.Contains(cid),

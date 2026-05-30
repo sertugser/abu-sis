@@ -813,6 +813,109 @@ public class RegistrationValidationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Validate_RetainedStudent_CanTakeCurrentSemesterCourse()
+    {
+        // Öğrenci 2 yarıyıl tamamlamış → şu an 3. yarıyılda (kendi dönemi).
+        // Şartlı öğrenci kendi döneminin (completedSemesters + 1) derslerini alabilmeli;
+        // yalnızca DAHA üst dönemler kısıtlı.
+        SetStudentCgpa(1.50m);
+        SetStudentCompletedSemesters(2);
+
+        var currentCourse = AddCourse(709, "CS709", "Current Semester", 5);
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumId,
+            CourseId = currentCourse.Id,
+            IsCompulsory = true,
+            SuggestedSemester = 3 // completedSemesters(2) + 1 = öğrencinin içinde bulunduğu dönem
+        });
+        _context.SaveChanges();
+
+        var section = AddSection(709, currentCourse.Id, TermId);
+
+        var result = await _service.ValidateRegistrationAsync(StudentId, new List<int> { section.Id });
+
+        result.Errors.Should().NotContain(e => e.Rule == "CGPARestriction");
+    }
+
+    [Fact]
+    public async Task Validate_RetainedStudent_CannotTakeNextSemesterCourse()
+    {
+        // 2 yarıyıl tamamlamış öğrenci 4. yarıyıl (bir üst) dersini alamamalı.
+        SetStudentCgpa(1.50m);
+        SetStudentCompletedSemesters(2);
+
+        var nextCourse = AddCourse(710, "CS710", "Next Semester", 5);
+        _context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = CurriculumId,
+            CourseId = nextCourse.Id,
+            IsCompulsory = true,
+            SuggestedSemester = 4 // completedSemesters(2) + 1 = 3'ten büyük → üst dönem
+        });
+        _context.SaveChanges();
+
+        var section = AddSection(710, nextCourse.Id, TermId);
+
+        var result = await _service.ValidateRegistrationAsync(StudentId, new List<int> { section.Id });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Rule == "CGPARestriction" && e.CourseSectionId == section.Id);
+    }
+
+    [Fact]
+    public async Task Validate_Corequisite_SatisfiedWhenTakenConcurrently()
+    {
+        // Lab dersi, teori dersini EŞ-KOŞUL (corequisite) olarak gerektirir.
+        // İkisi aynı dönem birlikte seçilirse eş-koşul karşılanmış sayılmalı (geçmiş olması gerekmez).
+        SetStudentCgpa(3.00m);
+        SetStudentCompletedSemesters(2);
+
+        var lecture = AddCourse(721, "CS721", "Teori", 4);
+        var lab = AddCourse(720, "CS720L", "Lab", 2);
+        _context.CoursePrerequisites.Add(new CoursePrerequisite
+        {
+            CourseId = lab.Id,
+            RequiredCourseId = lecture.Id,
+            IsCorequisite = true
+        });
+        _context.SaveChanges();
+
+        var lectureSection = AddSection(721, lecture.Id, TermId);
+        var labSection = AddSection(720, lab.Id, TermId);
+
+        var result = await _service.ValidateRegistrationAsync(
+            StudentId, new List<int> { lectureSection.Id, labSection.Id });
+
+        result.Errors.Should().NotContain(e => e.Rule == "Prerequisite");
+    }
+
+    [Fact]
+    public async Task Validate_Corequisite_BlockedWhenNotTakenTogether()
+    {
+        // Eş-koşul teori dersi ne geçilmiş ne de aynı dönem seçilmişse, lab tek başına bloke olmalı.
+        SetStudentCgpa(3.00m);
+        SetStudentCompletedSemesters(2);
+
+        var lecture = AddCourse(723, "CS723", "Teori2", 4);
+        var lab = AddCourse(722, "CS722L", "Lab2", 2);
+        _context.CoursePrerequisites.Add(new CoursePrerequisite
+        {
+            CourseId = lab.Id,
+            RequiredCourseId = lecture.Id,
+            IsCorequisite = true
+        });
+        _context.SaveChanges();
+
+        var labSection = AddSection(722, lab.Id, TermId);
+
+        var result = await _service.ValidateRegistrationAsync(StudentId, new List<int> { labSection.Id });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Rule == "Prerequisite" && e.CourseSectionId == labSection.Id);
+    }
+
+    [Fact]
     public async Task Validate_RetainedStudent_CanTakeNonDepartmentalCourse()
     {
         SetStudentCgpa(1.50m);

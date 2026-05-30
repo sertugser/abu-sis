@@ -14,6 +14,22 @@ public partial class CourseRegistrationService
     public async Task<RegistrationResponseDto> SubmitRegistrationAsync(int studentId, RegistrationSubmitDto dto)
     {
         var response = new RegistrationResponseDto();
+
+        // Sınır doğrulaması: boş gönderiyi reddet (aksi halde sessizce "başarılı" döner, hiçbir şey yapmaz).
+        if (dto.CourseSectionIds is null || dto.CourseSectionIds.Count == 0)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "EmptySelection", Message = "Kayit icin en az bir ders secmelisiniz." }
+                }
+            };
+            return response;
+        }
+
         // Validate the registration
         var validationResult = await _validationService.ValidateRegistrationAsync(studentId, dto.CourseSectionIds);
 
@@ -29,7 +45,22 @@ public partial class CourseRegistrationService
             .Where(cs => dto.CourseSectionIds.Contains(cs.Id))
             .ToListAsync();
 
-        var activeTermId = submittedSections.Select(section => (int?)section.TermId).Distinct().SingleOrDefault();
+        // Tüm şubeler aynı döneme ait olmalı (çapraz-dönem enjeksiyonu 500 yerine temiz hata).
+        var distinctTermIds = submittedSections.Select(section => section.TermId).Distinct().ToList();
+        if (distinctTermIds.Count > 1)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "MultipleTerms", Message = "Secilen subeler ayni akademik doneme ait olmalidir." }
+                }
+            };
+            return response;
+        }
+        var activeTermId = distinctTermIds.Count == 1 ? (int?)distinctTermIds[0] : null;
         var webModuleGate = await ValidateStudentRegistrationWebModuleAsync(studentId, activeTermId);
         if (webModuleGate is not null)
         {
@@ -38,26 +69,8 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        // Yayın kapısı (draft/publish): kesinleştirilen her şube Active + enrollment suspend değil +
-        // fakültesi onaylı olmalı. Tek kaynak: IRegistrationGate. Tüm hatalar toplanır (fail-all).
-        var gateErrors = new List<ValidationError>();
-        foreach (var s in submittedSections)
-        {
-            var gate = await _registrationGate.EvaluateSectionAsync(s);
-            if (!gate.IsOpen)
-                gateErrors.Add(new ValidationError
-                {
-                    Rule = gate.Rule!,
-                    Message = $"'{s.Course.Code} {s.Course.Name}' {gate.Message}",
-                    CourseSectionId = s.Id
-                });
-        }
-        if (gateErrors.Count > 0)
-        {
-            response.Success = false;
-            response.ValidationResult = new ValidationResultDto { IsValid = false, Errors = gateErrors };
-            return response;
-        }
+        // Yayın kapısı (draft/publish) artık tek kaynaktan ValidateRegistrationAsync içinde
+        // uygulanıyor (yukarıdaki validate çağrısı); burada ayrıca kontrol edilmez (ikibaşlılık yok).
 
         var advisorConstraintResult = await EvaluateAdvisorConstraintsAsync(
             studentId,
@@ -124,7 +137,9 @@ public partial class CourseRegistrationService
                 .Where(cr => cr.StudentId == studentId && missingSectionIds.Contains(cr.CourseSectionId))
                 .ToListAsync();
             var existingByDropped = existingAny
-                .Where(cr => cr.Status == RegistrationStatus.Dropped || cr.Status == RegistrationStatus.Withdrawn)
+                .Where(cr => cr.Status == RegistrationStatus.Dropped
+                    || cr.Status == RegistrationStatus.Withdrawn
+                    || cr.Status == RegistrationStatus.Rejected)
                 .ToDictionary(cr => cr.CourseSectionId);
 
             // === KRİTİK BÖLGE: Serializable transaction + ders başına fresh kapasite kontrolü + increment ===
@@ -137,18 +152,18 @@ public partial class CourseRegistrationService
             {
                 foreach (var section in missingSections)
                 {
-                    // Fresh reload — eş zamanlı başka kaydın etkisini gör
-                    await _context.Entry(section).ReloadAsync();
-                    if (section.EnrolledCount >= section.Capacity)
+                    // Tek kaynak: SeatLedger taze kapasite kontrolü + (cross-list grubu dahil) rezervasyon.
+                    if (!await SeatLedger.TryReserveAsync(_context, section))
                     {
                         if (tx != null) await tx.RollbackAsync();
+                        var effective = await SeatLedger.GetEffectiveEnrolledAsync(_context, section);
                         response.Success = false;
                         response.ValidationResult = new ValidationResultDto
                         {
                             IsValid = false,
                             Errors = new List<ValidationError>
                             {
-                                new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({section.EnrolledCount}/{section.Capacity}).", CourseSectionId = section.Id }
+                                new() { Rule = "Capacity", Message = $"'{section.Course.Code} {section.Course.Name}' dersinin kontenjanı bu esnada doldu ({effective}/{section.Capacity}).", CourseSectionId = section.Id }
                             }
                         };
                         return response;
@@ -191,11 +206,26 @@ public partial class CourseRegistrationService
                             reg.MandatoryAttendance = false;
                     }
 
-                    section.EnrolledCount++;
+                    // Koltuk rezervasyonu SeatLedger.TryReserveAsync içinde yapıldı.
                     registrations.Add(reg);
                 }
                 await _context.SaveChangesAsync();
                 if (tx != null) await tx.CommitAsync();
+            }
+            catch (Exception ex) when (SeatLedger.IsConcurrencyConflict(ex))
+            {
+                // Eş zamanlı kayıt çakışması (RowVersion / Serializable) → 500 yerine kullanıcı mesajı.
+                if (tx != null) await tx.RollbackAsync();
+                response.Success = false;
+                response.ValidationResult = new ValidationResultDto
+                {
+                    IsValid = false,
+                    Errors = new List<ValidationError>
+                    {
+                        new() { Rule = "Capacity", Message = "Seçtiğiniz şubelerden birinin kontenjanı bu esnada değişti. Lütfen tekrar deneyin." }
+                    }
+                };
+                return response;
             }
             catch
             {

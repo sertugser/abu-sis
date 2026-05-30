@@ -340,33 +340,36 @@ public partial class CourseRegistrationService
             }
         }
 
-        // Bug #15 fix: gate check before approval. Onay anında section artık kapalı/suspend/onaysız
-        // olabilir (program geri çekilmiş vb.). Tüm başarısız section'lar toplanıp birlikte döner.
-        var approvalGateErrors = new List<string>();
+        // Onay anında gate kapanmış (program geri çekilmiş/iptal/suspend) section'lar artık
+        // onaylanamaz. Süresiz Pending kalıp koltuk tutmamaları için OTOMATİK reddedilir
+        // (koltuk iade + öğrenciye bildirim). Gate'i açık olanlar onaya devam eder.
+        var gateRejected = new List<Domain.Entities.CourseRegistration>();
         foreach (var reg in registrations)
         {
             var gate = await _registrationGate.EvaluateSectionAsync(reg.CourseSection);
             if (!gate.IsOpen)
-                approvalGateErrors.Add($"'{reg.CourseSection.Course.Code}' {gate.Message}");
-        }
-        if (approvalGateErrors.Count > 0)
-            return new ApprovalResponseDto
             {
-                Success = false,
-                Message = string.Join("; ", approvalGateErrors),
-                AffectedRegistrations = 0
-            };
+                reg.Status = RegistrationStatus.Rejected;
+                reg.AdvisorNote = $"Dersin programı geri çekildiği için kayıt otomatik iptal edildi. ({gate.Message})";
+                reg.UpdatedAt = DateTime.UtcNow;
+                SeatLedger.Release(reg.CourseSection); // koltuk iade (tek kaynak)
+                gateRejected.Add(reg);
+            }
+        }
 
-        foreach (var reg in registrations)
+        var approved = registrations
+            .Where(reg => reg.Status == RegistrationStatus.PendingAdvisorApproval)
+            .ToList();
+        foreach (var reg in approved)
         {
             reg.Status = RegistrationStatus.Active;
             reg.UpdatedAt = DateTime.UtcNow;
         }
 
-        // Update RegistrationPlan status to Approved
+        // Update RegistrationPlan status to Approved (en az bir onay olduysa)
         var plan = await _context.RegistrationPlans
             .FirstOrDefaultAsync(rp => rp.StudentId == dto.StudentId && rp.TermId == activeTerm.Id);
-        if (plan != null)
+        if (plan != null && approved.Count > 0)
         {
             plan.Status = RegistrationPlanStatus.Approved;
             plan.UpdatedAt = DateTime.UtcNow;
@@ -374,24 +377,41 @@ public partial class CourseRegistrationService
 
         await _context.SaveChangesAsync();
 
-        // Bildirim: öğrenciye "kaydınız onaylandı".
-        if (_notifications is not null && registrations.Count > 0)
+        // Bildirim: öğrenciye onay.
+        if (_notifications is not null && approved.Count > 0)
         {
             await _notifications.NotifyAsync(
                 student.UserId,
                 NotificationType.RegistrationApproved,
                 "Ders kaydınız onaylandı",
-                $"{registrations.Count} dersiniz danışmanınız tarafından onaylandı.",
+                $"{approved.Count} dersiniz danışmanınız tarafından onaylandı.",
                 link: "/alinan-dersler",
                 severity: NotificationSeverity.Success,
                 entityRef: $"student:{student.Id}");
         }
+        // Bildirim: programı geri çekilen dersler otomatik iptal edildi.
+        if (_notifications is not null && gateRejected.Count > 0)
+        {
+            var codes = string.Join(", ", gateRejected.Select(reg => reg.CourseSection.Course.Code));
+            await _notifications.NotifyAsync(
+                student.UserId,
+                NotificationType.RegistrationRejected,
+                "Bazı dersleriniz otomatik iptal edildi",
+                $"Programı geri çekildiği için şu ders(ler)in kaydı iptal edildi: {codes}. Lütfen danışmanınızla görüşün.",
+                link: "/alinan-dersler",
+                severity: NotificationSeverity.Warning,
+                entityRef: $"student:{student.Id}");
+        }
+
+        var messageParts = new List<string>();
+        if (approved.Count > 0) messageParts.Add($"{approved.Count} kayit onaylandi");
+        if (gateRejected.Count > 0) messageParts.Add($"{gateRejected.Count} kayit programi geri cekildigi icin otomatik iptal edildi");
 
         return new ApprovalResponseDto
         {
             Success = true,
-            Message = $"{registrations.Count} kayit onaylandi.",
-            AffectedRegistrations = registrations.Count,
+            Message = messageParts.Count > 0 ? string.Join("; ", messageParts) + "." : "Onaylanacak kayit bulunamadi.",
+            AffectedRegistrations = approved.Count,
             ValidationResult = validation // uyarılar (varsa) bilgilendirme amaçlı taşınır
         };
     }
@@ -451,7 +471,7 @@ public partial class CourseRegistrationService
             reg.Status = RegistrationStatus.Rejected;
             reg.AdvisorNote = dto.Note;
             reg.UpdatedAt = DateTime.UtcNow;
-            reg.CourseSection.EnrolledCount = Math.Max(0, reg.CourseSection.EnrolledCount - 1);
+            SeatLedger.Release(reg.CourseSection); // tek kaynak, floor-0 korumalı
         }
 
         // Update RegistrationPlan status to Rejected with advisor note

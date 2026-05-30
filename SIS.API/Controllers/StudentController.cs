@@ -9,6 +9,7 @@ using SIS.Application.Common.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Application.StudentCard.Services;
+using SIS.Application.StudentCard.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Domain.ValueObjects;
@@ -31,6 +32,7 @@ public class StudentController : ControllerBase
     private readonly ICurriculumStatusService _curriculumStatusService;
     private readonly IStudentTranscriptService _transcriptService;
     private readonly IEctsLimitResolver _ectsLimitResolver;
+    private readonly ITranscriptScenarioService _transcriptScenarioService;
 
     public StudentController(
         AppDbContext context,
@@ -40,6 +42,7 @@ public class StudentController : ControllerBase
         ICurriculumStatusService curriculumStatusService,
         IStudentTranscriptService transcriptService,
         IEctsLimitResolver ectsLimitResolver,
+        ITranscriptScenarioService transcriptScenarioService,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
@@ -49,6 +52,7 @@ public class StudentController : ControllerBase
         _curriculumStatusService = curriculumStatusService;
         _transcriptService = transcriptService;
         _ectsLimitResolver = ectsLimitResolver;
+        _transcriptScenarioService = transcriptScenarioService;
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -361,12 +365,17 @@ public class StudentController : ControllerBase
         var componentStatistics = components
             .Select(component =>
             {
-                var componentScores = allGrades
-                    .Where(grade => grade.GradeComponentId == component.Id && grade.Score != null)
+                var componentGrades = allGrades
+                    .Where(grade => grade.GradeComponentId == component.Id)
+                    .ToList();
+                var componentScores = componentGrades
+                    .Where(grade => grade.Score != null)
                     .Select(grade => grade.Score!.Value)
                     .ToList();
-                var studentScore = gradesByRegistration.TryGetValue(registration.Id, out var ownGrades)
-                    ? ownGrades.FirstOrDefault(grade => grade.GradeComponentId == component.Id)?.Score
+                var absentCount = componentGrades
+                    .Count(grade => grade.ExamAttendance == ExamAttendance.Absent);
+                var ownGrade = gradesByRegistration.TryGetValue(registration.Id, out var ownGradesLocal)
+                    ? ownGradesLocal.FirstOrDefault(grade => grade.GradeComponentId == component.Id)
                     : null;
                 var isVisible = componentVisibility.GetValueOrDefault(component.Id, true);
 
@@ -378,13 +387,30 @@ public class StudentController : ControllerBase
                     TotalStudentCount = statisticRegistrations.Count,
                     EnteredStudentCount = componentScores.Count,
                     MissingStudentCount = statisticRegistrations.Count - componentScores.Count,
+                    AbsentByAttendanceCount = absentCount,
                     AverageScore = componentScores.Count > 0
                         ? Math.Round(componentScores.Average(), 2, MidpointRounding.AwayFromZero)
                         : null,
-                    StudentScore = isVisible ? studentScore : null
+                    StudentScore = isVisible ? ownGrade?.Score : null,
+                    PublishedAt = isVisible ? component.PublishedAt : null,
+                    StudentExamAttendance = isVisible
+                        ? (ownGrade?.ExamAttendance ?? ExamAttendance.NotMarked).ToString()
+                        : ExamAttendance.NotMarked.ToString()
                 };
             })
             .ToList();
+
+        // Bütünleme harf dağılımı: aynı GradingCriteria aralıkları (karar 2026-05-30),
+        // sadece bütünleme notuyla nihai harfe ulaşmış öğrencileri sayar.
+        // "Bütünlemeye giren" = bu section'ın herhangi bir bileşeninde MakeupScore != null.
+        var makeupRegistrationIds = allGrades
+            .Where(grade => grade.MakeupScore != null)
+            .Select(grade => grade.CourseRegistrationId)
+            .ToHashSet();
+        var makeupGradeCounts = statisticRegistrations
+            .Where(item => item.Grade != null && makeupRegistrationIds.Contains(item.Id))
+            .GroupBy(item => item.Grade!.Value.ToString())
+            .ToDictionary(group => group.Key, group => group.Count());
 
         var dto = new StudentGradeStatisticsDto
         {
@@ -415,6 +441,9 @@ public class StudentController : ControllerBase
             },
             GradeRanges = hasGradingCriteria
                 ? BuildGradeRanges(criteria!, isResultFinalized ? gradeCounts : new Dictionary<string, int>())
+                : new List<StudentGradeRangeDto>(),
+            MakeupGradeRanges = hasGradingCriteria
+                ? BuildGradeRanges(criteria!, isResultFinalized ? makeupGradeCounts : new Dictionary<string, int>())
                 : new List<StudentGradeRangeDto>(),
             Components = componentStatistics,
             Summary = new StudentSectionStatisticsSummaryDto
@@ -460,15 +489,38 @@ public class StudentController : ControllerBase
             : Ok(transcript);
     }
 
+    /// <summary>
+    /// POST api/student/transcript/scenario — Transkript Senaryosu (what-if) hesabı.
+    /// Öğrencinin ekranda simüle ettiği ders listesini alır, AGNO/ANO/AKTS'yi TEK kaynaktan
+    /// (GradePointMap + GpaMath kuralları) hesaplayıp döner. Sistemde HİÇBİR kalıcı değişiklik
+    /// yapılmaz — salt bilgilendirme. Hesap backend'de yapılır; frontend kopya hesap tutmaz.
+    /// </summary>
+    [HttpPost("transcript/scenario")]
+    [RequirePermission("menu.transkript-senaryosu.view")]
+    public IActionResult CalculateTranscriptScenario([FromBody] TranscriptScenarioRequestDto request)
+    {
+        if (request == null)
+            return BadRequest(new { error = "Senaryo verisi gönderilmedi." });
+
+        return Ok(_transcriptScenarioService.Calculate(request));
+    }
+
     private async Task<Dictionary<int, bool>> BuildComponentVisibilityMapAsync(int termId, IEnumerable<GradeComponent> components)
     {
+        // Tek-kaynak görünürlük kapısı (karar 2026-05-30):
+        //   (1) term-seviyesi admin: IWebModuleControlService.EvaluateAsync(...).IsOpen
+        //   (2) komponent-seviyesi hoca: GradeComponent.PublishedAt != null && <= now
+        // İkisi de gerekli — sadece biri açık değilse öğrenci notu/istatistiği göremez.
+        // Bu sayede "admin açtı ama hoca ilan etmedi" ve tersi durumlar net ayrışır.
+        var now = DateTime.UtcNow;
         var result = new Dictionary<int, bool>();
 
         foreach (var component in components)
         {
-            var controlCode = ResolvePublicationControlCode(component.Name);
+            var controlCode = SIS.Application.Grading.GradeComponentPublicationCode.Resolve(component.Name);
             var access = await _webModuleControls.EvaluateAsync(controlCode, termId);
-            result[component.Id] = access.IsOpen;
+            var publishedByInstructor = component.PublishedAt.HasValue && component.PublishedAt.Value <= now;
+            result[component.Id] = access.IsOpen && publishedByInstructor;
         }
 
         return result;
@@ -484,28 +536,9 @@ public class StudentController : ControllerBase
         return makeupAccess.IsOpen;
     }
 
-    private static string ResolvePublicationControlCode(string componentName)
-    {
-        var normalized = componentName.Trim().ToLowerInvariant();
-
-        if (normalized.Contains("mazeret") || normalized.Contains("excuse"))
-        {
-            return normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize")
-                ? "midterm-excuse-grade-publication"
-                : "makeup-grade-publication";
-        }
-
-        if (normalized.Contains("ara") || normalized.Contains("midterm") || normalized.Contains("vize"))
-            return "midterm-grade-publication";
-
-        if (normalized.Contains("bütünleme") || normalized.Contains("butunleme") || normalized.Contains("makeup") || normalized.Contains("yys"))
-            return "makeup-grade-publication";
-
-        if (normalized.Contains("yarıyıl") || normalized.Contains("yariyil") || normalized.Contains("final"))
-            return "final-grade-publication";
-
-        return "letter-grade-publication";
-    }
+    // Komponent → yayın kontrol kodu eşleme mantığı SIS.Application.Grading.GradeComponentPublicationCode
+    // içinde tek-kaynak. Burada referans tutmuyoruz; doğrudan oradan çağrılır (yukarıda
+    // BuildComponentVisibilityMapAsync). İkibaşlılık önlenir.
 
     private static List<StudentGradeRangeDto> BuildGradeRanges(
         GradingCriteria criteria,

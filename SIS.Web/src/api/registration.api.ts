@@ -69,16 +69,18 @@ export async function getCourseHistory(): Promise<CourseHistoryTermDto[]> {
 
 /**
  * "Alınan Dersler" PDF dosyasını indir. Backend QuestPDF ile resmî görünüm üretir.
+ * termId verilirse yalnız o dönem; verilmezse tüm geçmiş.
  * Browser yeni sekmede açar veya download tetikler.
  */
-export async function downloadCourseHistoryPdf(): Promise<Blob> {
+export async function downloadCourseHistoryPdf(termId?: number): Promise<Blob> {
   try {
     const response = await apiClient.get<Blob>('/registrations/history/pdf', {
       responseType: 'blob',
+      params: termId != null ? { termId } : undefined,
     });
     return response.data;
   } catch (error) {
-    throw toApiError(error, 'Alinan dersler PDF raporu olusturulamadi.');
+    throw toApiError(error, 'Alınan dersler PDF raporu oluşturulamadı.');
   }
 }
 

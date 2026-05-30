@@ -239,20 +239,20 @@ builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IElective
 builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.IStudentRegistrationCatalogService, SIS.Infrastructure.Services.StudentRegistrationCatalogService>();
 builder.Services.AddScoped<SIS.Application.CourseRegistration.Services.ISectionPickerService, SIS.Infrastructure.Services.SectionPickerService>();
 builder.Services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
+builder.Services.AddScoped<SIS.Application.StudentCard.Services.ITranscriptScenarioService, SIS.Infrastructure.Services.TranscriptScenarioService>();
 builder.Services.AddScoped<SIS.Application.Notifications.Services.INotificationService, SIS.Infrastructure.Services.NotificationService>();
 builder.Services.AddScoped<ICourseHistoryPdfService, CourseHistoryPdfService>();
 builder.Services.AddScoped<IRegistrationPlanPdfService, RegistrationPlanPdfService>();
-builder.Services.AddHostedService<DraftRegistrationCleanupService>(); // FR-44
-builder.Services.AddHostedService<RegistrationCleanupJob>();
+builder.Services.AddHostedService<RegistrationCleanupJob>(); // FR-44 (gece Draft) + add/drop (Draft+Pending) tek job
 builder.Services.AddHostedService<EvaluationPeriodOpenerJob>();
 builder.Services.AddHostedService<AcademicTermActivationReminderJob>();
 builder.Services.AddHostedService<AuditRetentionService>();
 
 // Register GPA Calculation service (+ shared grade-visibility used by GPA & transcript)
 builder.Services.AddScoped<SIS.Application.Common.Services.IGradeVisibilityService, SIS.Infrastructure.Services.GradeVisibilityService>();
-builder.Services.AddScoped<SIS.Application.Common.Services.IGradeVisibilityResolver, SIS.Infrastructure.Services.GradeVisibilityResolver>();
 builder.Services.AddScoped<IGpaCalculationService, GpaCalculationService>();
 builder.Services.AddScoped<SIS.Application.Grading.IExamRegulationResolver, SIS.Infrastructure.Services.ExamRegulationResolver>();
+builder.Services.AddScoped<SIS.Application.Grading.IAttendancePolicyResolver, SIS.Infrastructure.Services.AttendancePolicyResolver>();
 builder.Services.AddScoped<EnrollmentForecastService>();
 builder.Services.AddScoped<IEnrollmentForecastService>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
 builder.Services.AddScoped<IEnrollmentForecastCacheInvalidator>(serviceProvider => serviceProvider.GetRequiredService<EnrollmentForecastService>());
@@ -260,6 +260,7 @@ builder.Services.AddSchedulingConstraints();
 builder.Services.AddScoped<SchedulingService>();
 builder.Services.AddScoped<ISchedulingService>(sp => sp.GetRequiredService<SchedulingService>());
 builder.Services.AddScoped<SIS.Application.Scheduling.Services.IStudentTimetableService, SIS.Infrastructure.Services.Scheduling.StudentTimetableService>();
+builder.Services.AddScoped<SIS.Application.Scheduling.Services.IDepartmentScheduleService, SIS.Infrastructure.Services.Scheduling.DepartmentScheduleService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ClassroomSuggestionService>();
 builder.Services.AddScoped<IFacultyPlanningService, FacultyPlanningService>();

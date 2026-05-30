@@ -39,12 +39,15 @@ export interface CatalogCourseRow {
   code: string;
   name: string;
   isCompulsory: boolean;
+  theoryHours: number;
+  labHours: number;
   nationalCredit: number;
   ects: number;
   suggestedSemester: number;
   classYear: number;
   takeStatus: string;
   prerequisitesMet: boolean;
+  missingPrerequisites: string[];
   previousAttemptInfo: string | null;
   activeRegistrationStatus: string | null;
   hasOpenSections: boolean;
@@ -83,10 +86,12 @@ export interface SelectedCourse {
   courseId: number;
   courseCode: string;
   courseName: string;
+  sectionNumber: number;
   isCompulsory: boolean;
   theoryHours: number;
   labHours: number;
   ects: number;
+  nationalCredit: number;
   suggestedSemester: number;
   takeType: string;
   status: string;

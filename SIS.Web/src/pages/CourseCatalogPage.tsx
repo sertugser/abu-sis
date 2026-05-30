@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { prolizPrimaryButtonClass } from '@/lib/prolizButton';
+import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +25,6 @@ import { RegistrationSummaryBar } from '../components/registration/v2/Registrati
 import { useStudentRegistration } from '../hooks/useStudentRegistration';
 import { useAddToPlan } from '../hooks/useAddToPlan';
 import { useDropCourse } from '../hooks/useDropCourse';
-import { useDownloadRegistrationPlanPdf } from '../hooks/useDownloadRegistrationPlanPdf';
 import { useValidateRegistration } from '../hooks/useValidateRegistration';
 import { useSubmitRegistration } from '../hooks/useSubmitRegistration';
 import { ApiError } from '../lib/apiError';
@@ -55,13 +54,14 @@ export default function CourseCatalogPage() {
   const [emptySlotsConfirmOpen, setEmptySlotsConfirmOpen] = useState(false);
 
   const validate = useValidateRegistration();
-  const pdf = useDownloadRegistrationPlanPdf();
   const submit = useSubmitRegistration();
 
   const addToPlanMutation = useAddToPlan();
   const [addError, setAddError] = useState<string | null>(null);
   const handleAddSection = useCallback(async (sectionId: number): Promise<void> => {
     setAddError(null);
+    setSubmitSuccess(false);   // plan değişti → eski başarı mesajı geçersiz
+    validate.reset();          // plan değişti → eski "Kontrol Et" sonucu geçersiz
     return new Promise<void>((resolve, reject) => {
       addToPlanMutation.mutate(sectionId, {
         onSuccess: () => resolve(),
@@ -79,6 +79,8 @@ export default function CourseCatalogPage() {
   const handleRemove = useCallback(async (registrationId: number): Promise<void> => {
     setRemovingId(registrationId);
     setRemoveError(null);
+    setSubmitSuccess(false);   // plan değişti → eski başarı mesajı geçersiz
+    validate.reset();          // plan değişti → eski "Kontrol Et" sonucu geçersiz
     try {
       await new Promise<void>((resolve, reject) => {
         dropMutation.mutate(registrationId, {
@@ -203,7 +205,7 @@ export default function CourseCatalogPage() {
   );
   const totalEcts = selectedCourses.reduce((sum, s) => sum + s.ects, 0);
   const totalHours = selectedCourses.reduce((sum, s) => sum + s.theoryHours + s.labHours, 0);
-  const totalCredit = 0; // SelectedCourse doesn't carry nationalCredit
+  const totalCredit = selectedCourses.reduce((sum, s) => sum + s.nationalCredit, 0);
   const courseCount = selectedCourses.length;
 
   const registeredSectionIds = selectedCourses.map((s) => s.courseSectionId);
@@ -291,93 +293,90 @@ export default function CourseCatalogPage() {
       {/* Top banner lives OUTSIDE the white card */}
       {topBanner && <div className="mb-2">{topBanner}</div>}
 
-      {/* Single outer white card wrapping everything */}
-      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
-        {/* Header with Ek İşlemler dropdown built-in */}
-        <RegistrationHeaderBar
-          student={student}
-          onDownloadPdf={() => pdf.mutate()}
-          pdfLoading={pdf.isPending}
-        />
+      <div className="space-y-4">
+        {/* ── Kart 1: Öğrenci başlığı ── */}
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <RegistrationHeaderBar student={student} />
+        </div>
 
-        {/* Inline alerts — below header, above tabs */}
+        {/* Inline alerts */}
         {submitSuccess && (
-          <div className="px-3 py-1">
-            <Alert variant="success">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
-            </Alert>
-          </div>
+          <Alert variant="success">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertDescription>Kayıt başarıyla kesinleştirildi.</AlertDescription>
+          </Alert>
         )}
-
         {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-          <div className="px-3 py-1">
-            <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
-          </div>
+          <ValidationErrors errors={validationErrors} warnings={validationWarnings} />
         )}
 
-        <SemesterClassTabs
-          classYears={classYearList}
-          selectedClassYear={effectiveClassYear}
-          onClassYearChange={setSelectedClassYear}
-          parity={parity}
-          onParityChange={setParity}
-        />
-
-        <CurriculumCourseGrid
-          classYearData={selectedYearData}
-          parityFilter={parity}
-          onPickSection={setPickerCourse}
-          registrationActionsOpen={registrationActionsOpen}
-        />
-
-        {retakeCourses.length > 0 && (
-          <RetakeCoursesPanel
-            retakeCourses={retakeCourses}
-            onCheck={() =>
-              validate.mutate(selectedCourses.map((s) => s.courseSectionId))
-            }
-            checkLoading={validate.isPending}
-            validationSummary={validationSummary}
+        {/* ── Kart 2: Müfredat dersleri ── */}
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <SemesterClassTabs
+            classYears={classYearList}
+            selectedClassYear={effectiveClassYear}
+            onClassYearChange={setSelectedClassYear}
+            parity={parity}
+            onParityChange={setParity}
           />
-        )}
 
-        <RegistrationStatusLine selectedCourses={selectedCourses} />
+          <CurriculumCourseGrid
+            classYearData={selectedYearData}
+            parityFilter={parity}
+            onPickSection={setPickerCourse}
+            registrationActionsOpen={registrationActionsOpen}
+          />
 
-        <SelectedCoursesGrid
-          selectedCourses={selectedCourses}
-          registrationActionsOpen={registrationActionsOpen}
-          onRemove={handleRemove}
-          removingId={removingId}
-          removeError={removeError}
-        />
+          {retakeCourses.length > 0 && (
+            <RetakeCoursesPanel
+              retakeCourses={retakeCourses}
+              onCheck={() =>
+                validate.mutate(selectedCourses.map((s) => s.courseSectionId))
+              }
+              checkLoading={validate.isPending}
+              validationSummary={validationSummary}
+            />
+          )}
+        </div>
 
-        <RegistrationSummaryBar
-          totalCredit={totalCredit}
-          totalEcts={totalEcts}
-          ectsLimit={student.ectsLimit}
-          totalHours={totalHours}
-          courseCount={courseCount}
-        />
+        {/* ── Kart 3: Seçilen dersler + kesinleştirme ── */}
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <RegistrationStatusLine selectedCourses={selectedCourses} />
 
-        {/* Bottom action bar — inside the card */}
-        {planItems.length > 0 && (
-          <div className="border-t border-slate-200 bg-slate-50 px-4 py-1.5 flex justify-end">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submit.isPending || !registrationActionsOpen}
-              className={prolizPrimaryButtonClass}
-            >
-              {submit.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-              Kaydı Kesinleştir
-            </button>
-          </div>
-        )}
+          <SelectedCoursesGrid
+            selectedCourses={selectedCourses}
+            registrationActionsOpen={registrationActionsOpen}
+            onRemove={handleRemove}
+            removingId={removingId}
+            removeError={removeError}
+          />
+
+          <RegistrationSummaryBar
+            totalCredit={totalCredit}
+            totalEcts={totalEcts}
+            ectsLimit={student.ectsLimit}
+            totalHours={totalHours}
+            courseCount={courseCount}
+          />
+
+          {planItems.length > 0 && (
+            <div className="border-t bg-muted/30 px-5 py-3 flex justify-end">
+              <Button
+                type="button"
+                size="lg"
+                onClick={handleSubmit}
+                disabled={submit.isPending || !registrationActionsOpen}
+              >
+                {submit.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Send className="h-5 w-5" />
+                )}
+                Kaydı Kesinleştir
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Section picker dialog */}
@@ -426,7 +425,7 @@ export default function CourseCatalogPage() {
 
           <AlertDialogFooter>
             <AlertDialogCancel>İptal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmSubmitDespiteEmptySlots}>
+            <AlertDialogAction onClick={confirmSubmitDespiteEmptySlots} disabled={submit.isPending}>
               Yine de gönder
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -57,6 +57,8 @@ export interface StudentGradeStatisticsDto {
   isCommonEvaluation: boolean;
   result: StudentResultInfoDto;
   gradeRanges: StudentGradeRangeDto[];
+  /** Bütünleme harf dağılımı (aynı GradingCriteria aralıkları, sadece sayım büt notu üzerinden). */
+  makeupGradeRanges: StudentGradeRangeDto[];
   components: StudentComponentStatisticsDto[];
   summary: StudentSectionStatisticsSummaryDto;
 }
@@ -81,8 +83,14 @@ export interface StudentComponentStatisticsDto {
   totalStudentCount: number;
   enteredStudentCount: number;
   missingStudentCount: number;
+  /** Sınava devamsızlık nedeniyle giremedi işaretli öğrenci sayısı (ExamAttendance.Absent). */
+  absentByAttendanceCount: number;
   averageScore: number | null;
   studentScore: number | null;
+  /** Hocanın bu komponenti "ilan ettiği" an (UTC ISO). null = öğrenci için gizli. */
+  publishedAt: string | null;
+  /** Öğrencinin sınav katılımı — UI'da "G" (Girmedi) / "M" (Mazeret) gösterimi için. */
+  studentExamAttendance: 'NotMarked' | 'Present' | 'Absent' | 'Excused';
 }
 
 export interface StudentSectionStatisticsSummaryDto {

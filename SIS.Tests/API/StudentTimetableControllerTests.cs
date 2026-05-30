@@ -25,7 +25,10 @@ public sealed class StudentTimetableControllerTests
             StudentName: "Test Öğrenci",
             TermId: 10,
             TermName: "2025-2026 Bahar",
-            Sections: new List<StudentTimetableSectionDto>());
+            Sections: new List<StudentTimetableSectionDto>(),
+            LunchBreakStart: "11:40",
+            LunchBreakEnd: "12:20",
+            Slots: new List<TimetableSlotDto>());
 
         var serviceMock = new Mock<IStudentTimetableService>();
         serviceMock

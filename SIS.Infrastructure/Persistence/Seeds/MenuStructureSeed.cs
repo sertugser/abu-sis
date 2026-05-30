@@ -45,6 +45,7 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Danışman Bilgileri",     "/danisman-bilgileri",      "danisman-bilgileri",     3, "menu.danisman-bilgileri.view"),
             BuildItem(permissions, "Alınan Dersler",         "/alinan-dersler",          "alinan-dersler",         4, "menu.alinan-dersler.view"),
             BuildItem(permissions, "Açılan Bölüm Dersleri",  "/acilan-bolum-dersleri",   "acilan-bolum-dersleri",  5, "menu.acilan-bolum-dersleri.view"),
+            BuildItem(permissions, "Bölüm Ders Programı",    "/bolum-ders-programi",     "bolum-ders-programi",    6, "menu.bolum-ders-programi.view"),
         };
 
         // ─── Modül 2: Sık Kullanılanlar (favori-odaklı, sadece Ana Sayfa default) ─

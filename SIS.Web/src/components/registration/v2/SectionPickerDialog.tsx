@@ -15,13 +15,31 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { prolizButtonClass } from '@/lib/prolizButton';
 import { useSectionPicker } from '@/hooks/useSectionPicker';
+import {
+  useFacultyLookup,
+  useAdminPrograms,
+  useAdminAdvisors,
+} from '@/hooks/useAdminLookup';
 import { SectionPickerRow } from './SectionPickerRow';
 import type { CatalogCourseRow, SectionPickerQuery } from '@/types/registrationCatalog';
+
+const ALL = 'all';
+/** Select string değerini opsiyonel sayıya çevirir ("all" → undefined). */
+function toId(value: string): number | undefined {
+  return value === ALL ? undefined : Number(value);
+}
 
 const PAGE_SIZE = 20;
 
@@ -61,13 +79,21 @@ export function SectionPickerDialog({
   addError,
   onAdded,
 }: Props) {
-  const [pendingInstructorId, setPendingInstructorId] = useState('');
-  const [pendingFacultyId, setPendingFacultyId] = useState('');
-  const [pendingProgramId, setPendingProgramId] = useState('');
+  // Select değerleri "all" | "<id>" string'i tutar (shadcn Select string ister).
+  const [pendingInstructorId, setPendingInstructorId] = useState(ALL);
+  const [pendingFacultyId, setPendingFacultyId] = useState(ALL);
+  const [pendingProgramId, setPendingProgramId] = useState(ALL);
   const [pendingSearch, setPendingSearch] = useState('');
 
   const [appliedQuery, setAppliedQuery] = useState<SectionPickerQuery>(EMPTY_QUERY);
   const [page, setPage] = useState(1);
+
+  // Lookup'lar (lookup.* — her authenticated kullanıcıya açık, scope-filtreli).
+  const { data: faculties = [] } = useFacultyLookup();
+  const { data: advisors = [] } = useAdminAdvisors();
+  // Programlar fakülteye göre daraltılmaz (bölüm zinciri gerektirir); tümünü çek, fakülte
+  // seçilince istemci tarafında filtrelemeye gerek yok — backend zaten scope koruyor.
+  const { data: programs = [] } = useAdminPrograms();
 
   const { data, isLoading, isError, error } = useSectionPicker(
     course?.courseId ?? null,
@@ -78,9 +104,9 @@ export function SectionPickerDialog({
   // Reset all state when dialog closes
   useEffect(() => {
     if (!open) {
-      setPendingInstructorId('');
-      setPendingFacultyId('');
-      setPendingProgramId('');
+      setPendingInstructorId(ALL);
+      setPendingFacultyId(ALL);
+      setPendingProgramId(ALL);
       setPendingSearch('');
       setAppliedQuery(EMPTY_QUERY);
       setPage(1);
@@ -89,9 +115,9 @@ export function SectionPickerDialog({
 
   function handleSearch() {
     setAppliedQuery({
-      instructorId: pendingInstructorId ? Number(pendingInstructorId) : undefined,
-      facultyId: pendingFacultyId ? Number(pendingFacultyId) : undefined,
-      programId: pendingProgramId ? Number(pendingProgramId) : undefined,
+      instructorId: toId(pendingInstructorId),
+      facultyId: toId(pendingFacultyId),
+      programId: toId(pendingProgramId),
       search: pendingSearch || undefined,
       page: 1,
       pageSize: PAGE_SIZE,
@@ -100,9 +126,9 @@ export function SectionPickerDialog({
   }
 
   function handleClear() {
-    setPendingInstructorId('');
-    setPendingFacultyId('');
-    setPendingProgramId('');
+    setPendingInstructorId(ALL);
+    setPendingFacultyId(ALL);
+    setPendingProgramId(ALL);
     setPendingSearch('');
     setAppliedQuery(EMPTY_QUERY);
     setPage(1);
@@ -138,67 +164,67 @@ export function SectionPickerDialog({
         </DialogHeader>
 
         {/* Filter form */}
-        <div className="border rounded-md p-3 space-y-2 shrink-0">
-          <p className="text-xs text-muted-foreground">Filtreleri girip Ara&apos;ya basın.</p>
-          <div className="flex flex-wrap gap-2 items-end">
+        <div className="rounded-lg border bg-muted/30 p-3 shrink-0">
+          <div className="flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Öğretim Elemanı ID
-              </label>
-              <Input
-                type="number"
-                className="h-8 w-36 text-xs"
-                placeholder="ID girin"
-                value={pendingInstructorId}
-                onChange={(e) => setPendingInstructorId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
+              <label className="text-[11px] font-medium text-muted-foreground">Öğretim Elemanı</label>
+              <Select value={pendingInstructorId} onValueChange={setPendingInstructorId}>
+                <SelectTrigger className="h-11 w-48 text-xs">
+                  <SelectValue placeholder="Tümü" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Tümü</SelectItem>
+                  {advisors.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.fullName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Fakülte ID
-              </label>
-              <Input
-                type="number"
-                className="h-8 w-28 text-xs"
-                placeholder="ID girin"
-                value={pendingFacultyId}
-                onChange={(e) => setPendingFacultyId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
+              <label className="text-[11px] font-medium text-muted-foreground">Fakülte</label>
+              <Select value={pendingFacultyId} onValueChange={setPendingFacultyId}>
+                <SelectTrigger className="h-11 w-44 text-xs">
+                  <SelectValue placeholder="Tümü" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Tümü</SelectItem>
+                  {faculties.map((f) => (
+                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Program ID
-              </label>
-              <Input
-                type="number"
-                className="h-8 w-28 text-xs"
-                placeholder="ID girin"
-                value={pendingProgramId}
-                onChange={(e) => setPendingProgramId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
+              <label className="text-[11px] font-medium text-muted-foreground">Program</label>
+              <Select value={pendingProgramId} onValueChange={setPendingProgramId}>
+                <SelectTrigger className="h-11 w-44 text-xs">
+                  <SelectValue placeholder="Tümü" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Tümü</SelectItem>
+                  {programs.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Ara
-              </label>
+              <label className="text-[11px] font-medium text-muted-foreground">Ara</label>
               <Input
-                className="h-8 w-48 text-xs"
+                className="h-11 w-48 text-xs"
                 placeholder="Ders kodu veya adı"
                 value={pendingSearch}
                 onChange={(e) => setPendingSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            <button type="button" className={prolizButtonClass} onClick={handleSearch}>
-              <Search className="h-3.5 w-3.5" />
+            <Button type="button" size="sm" onClick={handleSearch}>
+              <Search className="h-4 w-4" />
               Ara
-            </button>
-            <button type="button" className={prolizButtonClass} onClick={handleClear}>
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={handleClear}>
               Temizle
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -231,20 +257,20 @@ export function SectionPickerDialog({
             <Table>
               <TableHeader>
                 <TableRow className="text-[10px] uppercase tracking-wide">
-                  <TableHead className="w-12 py-2 px-2 text-center">Şube</TableHead>
-                  <TableHead className="w-24 py-2 px-2">Ders Kodu</TableHead>
-                  <TableHead className="py-2 px-2">Ders Adı</TableHead>
-                  <TableHead className="w-10 py-2 px-2 text-center">Z/S</TableHead>
-                  <TableHead className="w-12 py-2 px-2 text-center">T+U</TableHead>
-                  <TableHead className="w-10 py-2 px-2 text-center">KRD</TableHead>
-                  <TableHead className="w-12 py-2 px-2 text-center">AKTS</TableHead>
-                  <TableHead className="py-2 px-2">Öğretim Üyesi</TableHead>
-                  <TableHead className="hidden md:table-cell w-12 py-2 px-2 text-center">Sınıf</TableHead>
-                  <TableHead className="hidden lg:table-cell py-2 px-2">AcNeden</TableHead>
-                  <TableHead className="hidden lg:table-cell py-2 px-2">Alma Tipi</TableHead>
-                  <TableHead className="w-20 py-2 px-2 text-center">Kontenjan</TableHead>
-                  <TableHead className="hidden xl:table-cell w-20 py-2 px-2">Grup Kod</TableHead>
-                  <TableHead className="w-28 py-2 px-2 text-right">Aksiyon</TableHead>
+                  <TableHead className="w-12 py-3 px-3 text-center">Şube</TableHead>
+                  <TableHead className="w-24 py-3 px-3">Ders Kodu</TableHead>
+                  <TableHead className="py-3 px-3">Ders Adı</TableHead>
+                  <TableHead className="w-10 py-3 px-3 text-center">Z/S</TableHead>
+                  <TableHead className="w-12 py-3 px-3 text-center">T+U</TableHead>
+                  <TableHead className="w-10 py-3 px-3 text-center">KRD</TableHead>
+                  <TableHead className="w-12 py-3 px-3 text-center">AKTS</TableHead>
+                  <TableHead className="py-3 px-3">Öğretim Üyesi</TableHead>
+                  <TableHead className="hidden md:table-cell w-12 py-3 px-3 text-center">Sınıf</TableHead>
+                  <TableHead className="hidden lg:table-cell py-3 px-3">AcNeden</TableHead>
+                  <TableHead className="hidden lg:table-cell py-3 px-3">Alma Tipi</TableHead>
+                  <TableHead className="w-20 py-3 px-3 text-center">Kontenjan</TableHead>
+                  <TableHead className="hidden xl:table-cell w-20 py-3 px-3">Grup Kod</TableHead>
+                  <TableHead className="w-28 py-3 px-3 text-right">Aksiyon</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -269,14 +295,14 @@ export function SectionPickerDialog({
             {totalCount} sonuç · Sayfa {page} / {totalPages}
           </span>
           <div className="flex items-center gap-1">
-            <button type="button" className={prolizButtonClass}
+            <Button type="button" size="icon" variant="outline" className="h-11 w-8"
               disabled={page <= 1 || isLoading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-            </button>
-            <button type="button" className={prolizButtonClass}
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+            <Button type="button" size="icon" variant="outline" className="h-11 w-8"
               disabled={page >= totalPages || isLoading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
           </div>
         </div>
       </DialogContent>

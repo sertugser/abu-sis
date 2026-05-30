@@ -25,14 +25,14 @@ export function SemesterClassTabs({
 }: SemesterClassTabsProps) {
   if (classYears.length === 0) {
     return (
-      <div className="border-b border-slate-200 bg-white px-3 pt-2 flex items-center">
-        <p className="text-[12px] text-slate-500 italic">Müfredat dersi yok.</p>
+      <div className="border-b bg-card px-3 pt-2 flex items-center">
+        <p className="text-xs text-muted-foreground italic">Müfredat dersi yok.</p>
       </div>
     );
   }
 
   return (
-    <div className="border-b border-slate-200 bg-white px-3 pt-2 flex items-center justify-between gap-4 flex-wrap">
+    <div className="border-b bg-card px-3 pt-2 flex items-center justify-between gap-4 flex-wrap">
       {/* Parity underline tabs — LEFT */}
       <div className="flex items-center gap-4">
         {PARITY_OPTIONS.map((opt) => {
@@ -43,10 +43,10 @@ export function SemesterClassTabs({
               type="button"
               onClick={() => onParityChange(opt.value)}
               className={cn(
-                'pb-1.5 text-[12px] transition-colors',
+                'pb-1.5 text-xs transition-colors',
                 active
-                  ? 'border-b-2 border-blue-600 text-blue-700 font-semibold'
-                  : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300',
+                  ? 'border-b-2 border-primary text-primary font-semibold'
+                  : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground hover:border-border',
               )}
             >
               {opt.label}
@@ -65,10 +65,10 @@ export function SemesterClassTabs({
               type="button"
               onClick={() => onClassYearChange(year)}
               className={cn(
-                'pb-1.5 text-[12px] transition-colors',
+                'pb-1.5 text-xs transition-colors',
                 active
-                  ? 'border-b-2 border-blue-600 text-blue-700 font-semibold'
-                  : 'border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300',
+                  ? 'border-b-2 border-primary text-primary font-semibold'
+                  : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground hover:border-border',
               )}
             >
               {year}. Sınıf

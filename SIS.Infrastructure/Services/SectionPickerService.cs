@@ -44,12 +44,31 @@ public sealed class SectionPickerService : ISectionPickerService
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
 
-        // 3. Base query: sections for this course in the active term
+        // 2b. Yayın kapısı (publish gate): dersin programı (fakülte takvimi) henüz onaylanmadıysa
+        // şubeler tamamen GİZLENİR (yayın öncesi gizli — taslak şube/program sızdırılmaz).
+        var courseDeptId = await _context.Courses
+            .Where(c => c.Id == query.CourseId)
+            .Select(c => c.DepartmentId)
+            .FirstOrDefaultAsync(ct);
+        if (courseDeptId.HasValue)
+        {
+            var courseFacultyId = await _context.Departments
+                .Where(d => d.Id == courseDeptId.Value)
+                .Select(d => d.FacultyId)
+                .FirstOrDefaultAsync(ct);
+            var facultyApproved = await _context.FacultyScheduleApprovals
+                .AnyAsync(a => a.FacultyId == courseFacultyId && a.TermId == activeTerm.Id, ct);
+            if (!facultyApproved)
+                return new SectionPickerResultDto([], 0, page, pageSize);
+        }
+
+        // 3. Base query: yalnızca Active (Draft/Cancelled gizli) şubeler, bu ders + aktif dönem
         var baseQuery = _context.CourseSections
             .Include(cs => cs.Course)
             .Include(cs => cs.Instructor)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.CourseId == query.CourseId && cs.TermId == activeTerm.Id);
+            .Where(cs => cs.CourseId == query.CourseId && cs.TermId == activeTerm.Id
+                && cs.Status == CourseSectionStatus.Active);
 
         // 3. Apply optional filters
         if (query.InstructorId.HasValue)
@@ -119,6 +138,23 @@ public sealed class SectionPickerService : ISectionPickerService
         if (pagedSections.Count == 0)
             return new SectionPickerResultDto([], totalCount, page, pageSize);
 
+        // 5b. Gate değerlendirmesi tek toplu sorguda (N+1 yok; kural tek kaynak IRegistrationGate).
+        var gateResults = await _registrationGate.EvaluateSectionsAsync(pagedSections, ct);
+
+        // 5c. Cross-list grup kapasitesi: gösterim write-path ile tutarlı olsun diye grup toplamı.
+        var crossListGroupIds = pagedSections
+            .Where(s => s.CrossListGroupId.HasValue)
+            .Select(s => s.CrossListGroupId!.Value)
+            .Distinct()
+            .ToList();
+        var crossListEnrolled = crossListGroupIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await _context.CourseSections
+                .Where(cs => cs.CrossListGroupId != null && crossListGroupIds.Contains(cs.CrossListGroupId.Value))
+                .GroupBy(cs => cs.CrossListGroupId!.Value)
+                .Select(g => new { GroupId = g.Key, Sum = g.Sum(x => x.EnrolledCount) })
+                .ToDictionaryAsync(x => x.GroupId, x => x.Sum, ct);
+
         // 6. Load schedules in one query (no N+1)
         var sectionIds = pagedSections.Select(s => s.Id).ToList();
         var scheduleRecords = await _context.SectionSchedules
@@ -152,7 +188,10 @@ public sealed class SectionPickerService : ISectionPickerService
         var items = new List<SectionPickerRowDto>(pagedSections.Count);
         foreach (var section in pagedSections)
         {
-            var gate = await _registrationGate.EvaluateSectionAsync(section, ct);
+            var gate = gateResults[section.Id];
+            var effectiveEnrolled = section.CrossListGroupId.HasValue
+                ? crossListEnrolled.GetValueOrDefault(section.CrossListGroupId.Value, section.EnrolledCount)
+                : section.EnrolledCount;
 
             var instructorName = section.Instructor is { } instr
                 && userNameMap.TryGetValue(instr.UserId, out var uName)
@@ -180,8 +219,8 @@ public sealed class SectionPickerService : ISectionPickerService
                 OpeningReasonName: null,       // optional: not available without curriculum context
                 TakeTypeLabel: takeType,
                 Capacity: hideQuota ? 0 : section.Capacity,
-                EnrolledCount: hideQuota ? 0 : section.EnrolledCount,
-                AvailableSeats: hideQuota ? 0 : Math.Max(0, section.Capacity - section.EnrolledCount),
+                EnrolledCount: hideQuota ? 0 : effectiveEnrolled,
+                AvailableSeats: hideQuota ? 0 : Math.Max(0, section.Capacity - effectiveEnrolled),
                 QuotaVisible: !hideQuota,
                 GroupCode: null,               // optional: not loaded without curriculum pool context
                 IsEnrollmentSuspended: section.IsEnrollmentSuspended,

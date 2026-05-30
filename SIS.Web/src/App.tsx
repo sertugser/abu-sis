@@ -14,6 +14,7 @@ import CourseCatalogPage from './pages/CourseCatalogPage';
 import MyCoursesPage from './pages/MyCoursesPage';
 import AdvisorInfoPage from './pages/AdvisorInfoPage';
 import OpenedDepartmentCoursesPage from './pages/OpenedDepartmentCoursesPage';
+import DepartmentScheduleViewPage from './pages/DepartmentScheduleViewPage';
 import GradeListPage from './pages/GradeListPage';
 import AttendanceStatusPage from './pages/AttendanceStatusPage';
 import CurriculumStatusPage from './pages/CurriculumStatusPage';
@@ -157,6 +158,9 @@ export default function App() {
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.acilan-bolum-dersleri.view" />}>
                     <Route path="acilan-bolum-dersleri" element={<OpenedDepartmentCoursesPage />} />
+                  </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.bolum-ders-programi.view" />}>
+                    <Route path="bolum-ders-programi" element={<DepartmentScheduleViewPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.not-listesi.view" />}>
                     <Route path="not-listesi" element={<GradeListPage />} />

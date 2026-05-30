@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, CheckCircle2, Download, Pencil, Search, Upload } from 'lucide-react';
 import ConfigHistoryDrawer from '@/components/system-config/ConfigHistoryDrawer';
+import AttendancePolicyPanel from '@/components/system-config/AttendancePolicyPanel';
 import { exportSystemConfigsFile } from '../api/systemConfig.api';
 import { useConfigLimits, useImportSystemConfigs, useSystemConfigs, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import { useDebounce } from '../hooks/useDebounce';
@@ -197,6 +198,8 @@ export default function SystemConfigPage() {
           <AlertDescription>{notice.message}</AlertDescription>
         </Alert>
       )}
+
+      <AttendancePolicyPanel />
 
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
         <div className="border-b border-slate-200 px-6 py-5">

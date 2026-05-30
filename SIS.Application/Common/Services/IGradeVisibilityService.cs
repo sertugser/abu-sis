@@ -5,8 +5,9 @@ namespace SIS.Application.Common.Services;
 /// durumuna bağlıdır: aktif dönemde henüz ilan edilmemiş notlar öğrenci/yönetici
 /// görünümlerinde gizlenir. Geçmiş (sonuçlanmış) dönemlerin notları her zaman görünür.
 ///
-/// Hem transkript hem Dönem Ortalamaları bu servisten okur — böylece "biri gizliyor,
-/// diğeri göstermiyor" sapması (ikibaşlılık) ortadan kalkar.
+/// Transkript, Dönem Ortalamaları, Müfredat Durumu ve Seçmeli Havuz İlerlemesi — hepsi
+/// bu TEK servisten okur. Böylece "biri gizliyor, diğeri göstermiyor" sapması (ikibaşlılık)
+/// ortadan kalkar; bir ders her ekranda aynı şekilde "alındı/görünür" sayılır.
 /// </summary>
 public interface IGradeVisibilityService
 {

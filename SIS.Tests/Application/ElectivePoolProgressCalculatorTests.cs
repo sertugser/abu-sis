@@ -217,64 +217,98 @@ public class ElectivePoolProgressCalculatorTests
         result[800].EarnedEcts.Should().Be(6);
     }
 
-    // ─── Fix 2: Grade-visibility gate ────────────────────────────────────────────
+    // ─── Grade-visibility gate (tek kaynak: IGradeVisibilityService) ─────────────
+    // Kanonik kural: geçmiş dönem her zaman görünür; yalnızca AKTİF dönemin ilan
+    // edilmemiş notu gizlenir. Transkript / müfredat-durum / pool-progress aynı kural.
+
+    private static void AddTerm(AppDbContext ctx, int id, bool isActivated, int year)
+    {
+        if (!ctx.AcademicTerms.Any(t => t.Id == id))
+            ctx.AcademicTerms.Add(new AcademicTerm
+            {
+                Id = id,
+                Name = $"T{id}",
+                Year = year,
+                IsActivated = isActivated,
+                TermStart = new DateTime(year, 9, 1),
+            });
+    }
 
     [Fact]
-    public async Task Calculate_ExcludesPassingGrade_WhenTermGradeIsNotVisible()
+    public async Task Calculate_HidesActiveTermGrade_WhenNotPublished_ButCountsPastTerm()
     {
         using var ctx = CreateContext();
-        // Term 10 → grade NOT published yet; Term 11 → published
+        // Term 10 = AKTİF dönem, ilan KAPALI → gizli. Term 11 = geçmiş → her zaman görünür.
+        AddTerm(ctx, 10, isActivated: true, year: 2025);
+        AddTerm(ctx, 11, isActivated: false, year: 2024);
         AddReg(ctx, 1, 5, 900, 1, RegistrationStatus.Active, GradeCode.BB, 6, termId: 10);
         AddReg(ctx, 2, 5, 900, 2, RegistrationStatus.Active, GradeCode.AA, 5, termId: 11);
         await ctx.SaveChangesAsync();
 
-        // Fake service: term 10 → not visible; term 11 → visible
-        var fakeWebModule = new FakeWebModuleControlService(visibleTermIds: new HashSet<int> { 11 });
-        var resolver = new GradeVisibilityResolver(fakeWebModule);
-        var calc = new ElectivePoolProgressCalculator(ctx, resolver);
+        // Hiçbir dönem ilanı açık değil; ama 11 geçmiş dönem olduğu için yine görünür.
+        var fakeWebModule = new FakeWebModuleControlService(visibleTermIds: new HashSet<int>());
+        var calc = new ElectivePoolProgressCalculator(ctx, new GradeVisibilityService(ctx, fakeWebModule));
 
         var result = await calc.CalculateAsync(5, new[] { 900 }, EmptyOverrides);
 
-        result[900].CompletedCourseCount.Should().Be(1, "Term 10 grade is not published, must not count");
+        result[900].CompletedCourseCount.Should().Be(1, "Aktif dönemin ilan edilmemiş notu gizli; geçmiş dönem görünür");
         result[900].EarnedEcts.Should().Be(5);
     }
 
     [Fact]
-    public async Task Calculate_DefaultsToVisible_WhenTermIdUnknownToVisibilityMap()
+    public async Task Calculate_CountsPastTermGrade_EvenWhenPublicationClosed()
     {
-        // NullWebModuleControlService (default when none injected) always returns IsOpen=true
-        // so any term is considered visible — this matches CurriculumStatusService's GetValueOrDefault(termId, true) default
+        // KANONİK KURAL + çift-sayım düzeltmesinin kanıtı: geçmiş dönemin notu, ilan modülü
+        // kapalı olsa bile transkriptle aynı şekilde görünür sayılır. Eski resolver bunu
+        // gizleyip dersi "alınmadı" gösteriyor ve senaryoda çift saydırıyordu.
+        using var ctx = CreateContext();
+        AddTerm(ctx, 30, isActivated: true, year: 2025);  // aktif dönem (başka bir dönem)
+        AddTerm(ctx, 31, isActivated: false, year: 2024); // geçmiş dönem — dersin alındığı dönem
+        AddReg(ctx, 1, 5, 990, 1, RegistrationStatus.Active, GradeCode.BB, 6, termId: 31);
+        await ctx.SaveChangesAsync();
+
+        var fakeWebModule = new FakeWebModuleControlService(visibleTermIds: new HashSet<int>());
+        var calc = new ElectivePoolProgressCalculator(ctx, new GradeVisibilityService(ctx, fakeWebModule));
+
+        var result = await calc.CalculateAsync(5, new[] { 990 }, EmptyOverrides);
+
+        result[990].CompletedCourseCount.Should().Be(1, "Geçmiş dönem notu ilan modülünden bağımsız görünür");
+        result[990].EarnedEcts.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task Calculate_DefaultsToVisible_WhenNoActiveTermExists()
+    {
+        // Aktif dönem yoksa hiçbir not gizlenmez (NullWebModuleControlService fallback).
         using var ctx = CreateContext();
         AddReg(ctx, 1, 5, 950, 1, RegistrationStatus.Active, GradeCode.CC, 6, termId: 999);
         await ctx.SaveChangesAsync();
-        var calc = new ElectivePoolProgressCalculator(ctx); // no resolver → NullWebModuleControlService fallback
+        var calc = new ElectivePoolProgressCalculator(ctx); // resolver yok → GradeVisibilityService default
 
         var result = await calc.CalculateAsync(5, new[] { 950 }, EmptyOverrides);
 
-        result[950].CompletedCourseCount.Should().Be(1, "Unknown terms default to visible (same as CurriculumStatusService)");
+        result[950].CompletedCourseCount.Should().Be(1, "Aktif dönem yoksa tüm dönemler görünür");
     }
 
-    // ─── Makeup OR branch: letter-grade-publication closed, makeup open → grade IS visible ───
+    // ─── Makeup OR branch: aktif dönem letter kapalı ama makeup açık → not görünür ───
 
     [Fact]
-    public async Task Calculate_CountsGrade_WhenLetterGradeClosedButMakeupOpen()
+    public async Task Calculate_CountsActiveTermGrade_WhenLetterClosedButMakeupOpen()
     {
-        // letter-grade-publication closed, makeup-letter-grade-publication open for term 20
-        // → grade must be visible and counted
         using var ctx = CreateContext();
+        AddTerm(ctx, 20, isActivated: true, year: 2025); // aktif dönem
         AddReg(ctx, 1, 5, 980, 1, RegistrationStatus.Active, GradeCode.BB, 6, termId: 20);
         await ctx.SaveChangesAsync();
 
         var fakeWebModule = new FakeWebModuleControlService(
             letterGradeVisibleTermIds: new HashSet<int>(),
             makeupVisibleTermIds: new HashSet<int> { 20 });
-        var resolver = new GradeVisibilityResolver(fakeWebModule);
-        var calc = new ElectivePoolProgressCalculator(ctx, resolver);
+        var calc = new ElectivePoolProgressCalculator(ctx, new GradeVisibilityService(ctx, fakeWebModule));
 
         var result = await calc.CalculateAsync(5, new[] { 980 }, EmptyOverrides);
 
         result[980].CompletedCourseCount.Should().Be(1,
-            "makeup-letter-grade-publication open must make the grade visible");
+            "Aktif dönemde makeup-letter-grade-publication açık → not görünür");
         result[980].EarnedEcts.Should().Be(6);
     }
 }

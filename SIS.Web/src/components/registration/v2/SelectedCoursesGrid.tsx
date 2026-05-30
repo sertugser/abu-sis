@@ -7,12 +7,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { prolizDangerButtonClass } from '@/lib/prolizButton';
 import RegistrationStatusBadge from '@/components/registration/RegistrationStatusBadge';
 import type { SelectedCourse } from '@/types/registrationCatalog';
+import { REG_COL } from './registrationColumns';
 
 interface Props {
   selectedCourses: SelectedCourse[];
@@ -39,9 +39,11 @@ export function SelectedCoursesGrid({
   return (
     <div>
       {/* Section title strip */}
-      <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 flex items-center justify-between">
-        <h3 className="text-[12px] font-semibold text-slate-700">Seçilen Dersler</h3>
-        <span className="text-[12px] text-slate-500">Toplam: {selectedCourses.length} ders</span>
+      <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <span className="h-4 w-1 rounded-full bg-green-500" />
+          Seçilen Dersler
+        </h3>
       </div>
 
       {removeError && (
@@ -58,25 +60,24 @@ export function SelectedCoursesGrid({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[900px] table-fixed">
             <TableHeader>
-              {/* Dark navy column headers */}
-              <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
-                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">Çıkar</TableHead>
-                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">Şube</TableHead>
-                <TableHead className="h-8 w-24 px-2 text-[12px] font-semibold text-white">Kod</TableHead>
-                <TableHead className="h-8 px-2 text-[12px] font-semibold text-white">Ad</TableHead>
-                <TableHead className="h-8 w-10 px-2 text-center text-[12px] font-semibold text-white">Z/S</TableHead>
-                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">T+U</TableHead>
-                <TableHead className="h-8 w-10 px-2 text-center text-[12px] font-semibold text-white">KRD</TableHead>
-                <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">AKTS</TableHead>
-                <TableHead className="hidden md:table-cell h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">
+              <TableRow className="border-b bg-muted/60 hover:bg-muted/60">
+                <TableHead className="h-11 w-12 px-2 text-center text-sm font-semibold">Çıkar</TableHead>
+                <TableHead className="h-11 w-12 px-2 text-center text-sm font-semibold">Şube</TableHead>
+                <TableHead className="h-11 w-20 px-2 text-sm font-semibold">Ders Kodu</TableHead>
+                <TableHead className={`h-11 ${REG_COL.name} px-3 text-sm font-semibold`}>Ders Adı</TableHead>
+                <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">Z/S</TableHead>
+                <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">T+U</TableHead>
+                <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">KRD</TableHead>
+                <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">AKTS</TableHead>
+                <TableHead className="hidden md:table-cell h-11 w-16 px-2 text-center text-sm font-semibold">
                   Sınıf
                 </TableHead>
-                <TableHead className="hidden lg:table-cell h-8 px-2 text-[12px] font-semibold text-white">Alış</TableHead>
-                <TableHead className="hidden lg:table-cell h-8 px-2 text-[12px] font-semibold text-white">AcNeden</TableHead>
-                <TableHead className="h-8 w-32 px-2 text-center text-[12px] font-semibold text-white">Durum</TableHead>
-                <TableHead className="hidden xl:table-cell h-8 w-20 px-2 text-[12px] font-semibold text-white">Grup Kod</TableHead>
+                <TableHead className="hidden lg:table-cell h-11 px-3 text-center text-sm font-semibold">Alış</TableHead>
+                <TableHead className="hidden lg:table-cell h-11 px-3 text-center text-sm font-semibold">AcNeden</TableHead>
+                <TableHead className="h-11 w-32 px-2 text-center text-sm font-semibold">Durum</TableHead>
+                <TableHead className="hidden xl:table-cell h-11 w-20 px-2 text-center text-sm font-semibold">Grup Kod</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -88,91 +89,101 @@ export function SelectedCoursesGrid({
                   <TableRow
                     key={row.registrationId}
                     className={cn(
-                      'border-b border-slate-200 transition-colors hover:bg-[#dce9ff]',
-                      index % 2 === 1 && 'bg-slate-50/60',
+                      'group border-b border-l-[3px] border-l-transparent transition-all duration-150',
+                      'hover:bg-primary/5 hover:shadow-[inset_2px_0_0_0_hsl(var(--primary))]',
+                      index % 2 === 1 && 'bg-muted/20',
+                      row.takeType === 'Alttan' && 'border-l-destructive/50',
                     )}
                   >
                     {/* Çıkar */}
-                    <TableCell className="w-12 py-1 px-2 text-center">
-                      <button
+                    <TableCell className="w-12 py-2.5 px-3 text-center">
+                      <Button
                         type="button"
-                        className={prolizDangerButtonClass}
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={!canDrop(row.status) || removingId !== null}
                         title={canDrop(row.status) ? 'Dersi çıkar' : 'Bu ders çıkarılamaz'}
                         onClick={() => onRemove(row.registrationId)}
                       >
                         {isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-4 w-4" />
                         )}
-                      </button>
+                      </Button>
                     </TableCell>
 
                     {/* Şube */}
-                    <TableCell className="w-12 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
-                      —
+                    <TableCell className="w-12 py-2.5 px-3 text-center text-sm tabular-nums text-foreground">
+                      {row.sectionNumber > 0 ? row.sectionNumber : '—'}
                     </TableCell>
 
                     {/* Kod */}
-                    <TableCell className="w-24 py-1 px-2 font-mono text-xs font-semibold text-primary whitespace-nowrap">
+                    <TableCell className="w-20 py-2.5 px-3 font-mono text-sm font-semibold text-primary whitespace-nowrap">
                       {row.courseCode}
                     </TableCell>
 
                     {/* Ad */}
-                    <TableCell className="py-1 px-2 text-xs text-slate-700">
+                    <TableCell className={`${REG_COL.name} py-2.5 px-3 text-sm text-foreground`}>
                       {row.courseName}
                     </TableCell>
 
-                    {/* Z/S */}
-                    <TableCell className="w-10 py-1 px-2 text-center text-xs font-bold">
-                      <span className={row.isCompulsory ? 'text-primary' : 'text-muted-foreground'}>
+                    {/* Z/S — Zorunlu=primary, Seçmeli=amber */}
+                    <TableCell className="w-16 py-2.5 px-2 text-center">
+                      <span
+                        className={cn(
+                          'inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold',
+                          row.isCompulsory
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-amber-100 text-amber-700',
+                        )}
+                        title={row.isCompulsory ? 'Zorunlu' : 'Seçmeli'}
+                      >
                         {row.isCompulsory ? 'Z' : 'S'}
                       </span>
                     </TableCell>
 
                     {/* T+U */}
-                    <TableCell className="w-12 py-1 px-2 text-center text-xs font-mono tabular-nums text-slate-700">
+                    <TableCell className="w-16 py-2.5 px-2 text-center text-sm font-mono tabular-nums text-muted-foreground">
                       {row.theoryHours}+{row.labHours}
                     </TableCell>
 
                     {/* KRD */}
-                    <TableCell className="w-10 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
-                      —
+                    <TableCell className="w-16 py-2.5 px-2 text-center text-sm tabular-nums text-muted-foreground">
+                      {row.nationalCredit}
                     </TableCell>
 
-                    {/* AKTS */}
-                    <TableCell className="w-12 py-1 px-2 text-center text-xs text-slate-700">
-                      <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 h-5">
-                        {row.ects}
-                      </Badge>
+                    {/* AKTS — primary vurgulu */}
+                    <TableCell className="w-16 py-2.5 px-2 text-center">
+                      <span className="font-semibold tabular-nums text-primary">{row.ects}</span>
                     </TableCell>
 
                     {/* Sınıf */}
-                    <TableCell className="hidden md:table-cell w-12 py-1 px-2 text-center text-xs tabular-nums text-slate-700">
-                      {row.suggestedSemester > 0 ? row.suggestedSemester : '—'}
+                    <TableCell className="hidden md:table-cell w-16 py-2.5 px-2 text-center text-sm tabular-nums text-muted-foreground">
+                      {row.suggestedSemester > 0 ? row.suggestedSemester : <span className="text-muted-foreground/30">—</span>}
                     </TableCell>
 
-                    {/* Alış */}
-                    <TableCell className="hidden lg:table-cell py-1 px-2 text-xs text-slate-700">
-                      <span className={row.takeType === 'Alttan' ? 'text-destructive' : undefined}>
+                    {/* Alış — Alttan=kırmızı (olumsuz), İlkDefa=nötr */}
+                    <TableCell className="hidden lg:table-cell py-2.5 px-3 text-center text-sm">
+                      <span className={row.takeType === 'Alttan' ? 'font-medium text-destructive' : 'text-muted-foreground'}>
                         {row.takeType}
                       </span>
                     </TableCell>
 
                     {/* AcNeden */}
-                    <TableCell className="hidden lg:table-cell py-1 px-2 text-xs text-slate-700">
-                      {row.openingReasonName ?? '—'}
+                    <TableCell className="hidden lg:table-cell py-2.5 px-3 text-center text-sm text-foreground">
+                      {row.openingReasonName ?? <span className="text-muted-foreground/30">—</span>}
                     </TableCell>
 
                     {/* Durum */}
-                    <TableCell className="w-32 py-1 px-2 text-center">
+                    <TableCell className="w-32 py-2.5 px-3 text-center">
                       <RegistrationStatusBadge status={row.status} />
                     </TableCell>
 
                     {/* Grup Kod */}
-                    <TableCell className="hidden xl:table-cell w-20 py-1 px-2 text-xs font-mono text-orange-700">
-                      {row.electiveGroupCode ?? '—'}
+                    <TableCell className="hidden xl:table-cell w-20 py-2.5 px-3 text-center text-sm font-mono text-orange-700">
+                      {row.electiveGroupCode ?? <span className="font-sans text-muted-foreground/30">—</span>}
                     </TableCell>
                   </TableRow>
                 );

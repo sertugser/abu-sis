@@ -166,14 +166,14 @@ export const STATUS_LABELS: Record<string, string> = {
   Rejected: 'Reddedildi',
 };
 
-export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'> = {
-  Draft: 'secondary',
-  PendingAdvisorApproval: 'warning',
-  Active: 'success',
-  Completed: 'default',
-  Dropped: 'destructive',
-  Withdrawn: 'outline',
-  Rejected: 'destructive',
+export const STATUS_VARIANT: Record<string, 'neutralSoft' | 'successSoft' | 'warningSoft' | 'dangerSoft' | 'infoSoft'> = {
+  Draft: 'neutralSoft',
+  PendingAdvisorApproval: 'warningSoft',
+  Active: 'successSoft',
+  Completed: 'infoSoft',
+  Dropped: 'dangerSoft',
+  Withdrawn: 'neutralSoft',
+  Rejected: 'dangerSoft',
 };
 
 /** Routes that have actual page implementations in App.tsx */
@@ -185,6 +185,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/alinan-dersler',
   '/danisman-bilgileri',
   '/acilan-bolum-dersleri',
+  '/bolum-ders-programi',
   '/not-listesi',
   '/devamsizlik-durumu',
   '/donem-ortalamalari',

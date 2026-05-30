@@ -24,7 +24,11 @@ public interface ICourseRegistrationService
     Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId);
     Task<StudentAttendanceStatusDto?> GetStudentAttendanceStatusAsync(int studentId, int? termId = null);
     Task<List<CourseHistoryTermDto>> GetCourseHistoryAsync(int studentId);
-    Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId);
+    /// <summary>
+    /// "Alınan Dersler" PDF raporu. <paramref name="termId"/> verilirse yalnız o dönemi
+    /// basar ve üst bloktaki "Dönemi" alanını o döneme göre yazar; null ise tüm dönemler.
+    /// </summary>
+    Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId, int? termId = null);
     /// <summary>
     /// Plandan/kayıttan ders çıkarır. <paramref name="asAdvisor"/> = true iken danışman öğrenci
     /// adına çıkarır: kesinleştirilmiş (PendingAdvisorApproval) ve onaylı (Active) kayıtlar kayıt

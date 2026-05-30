@@ -6,6 +6,7 @@ using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.CourseRegistration.Validators;
 using SIS.Infrastructure.Persistence;
 
 namespace SIS.API.Controllers;
@@ -42,6 +43,10 @@ public class RegistrationController : ControllerBase
     [RequirePermission("menu.ders-kayit.plan")]
     public async Task<IActionResult> AddToPlan([FromBody] RegistrationPlanItemDto dto)
     {
+        var planValidation = new RegistrationPlanItemDtoValidator().Validate(dto);
+        if (!planValidation.IsValid)
+            return BadRequest(new ApiErrorResponse(planValidation.Errors[0].ErrorMessage, "ValidationError"));
+
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
             return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
@@ -76,6 +81,10 @@ public class RegistrationController : ControllerBase
     [RequirePermission("menu.ders-kayit.submit")]
     public async Task<IActionResult> SubmitRegistration([FromBody] RegistrationSubmitDto dto)
     {
+        var submitValidation = new RegistrationSubmitDtoValidator().Validate(dto);
+        if (!submitValidation.IsValid)
+            return BadRequest(new ApiErrorResponse(submitValidation.Errors[0].ErrorMessage, "ValidationError"));
+
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
             return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
@@ -92,6 +101,10 @@ public class RegistrationController : ControllerBase
     [RequirePermission("menu.ders-kayit.plan")]
     public async Task<IActionResult> Validate([FromBody] RegistrationSubmitDto dto)
     {
+        var validateDtoResult = new RegistrationSubmitDtoValidator().Validate(dto);
+        if (!validateDtoResult.IsValid)
+            return BadRequest(new ApiErrorResponse(validateDtoResult.Errors[0].ErrorMessage, "ValidationError"));
+
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
             return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
@@ -164,16 +177,17 @@ public class RegistrationController : ControllerBase
 
     /// <summary>
     /// GET api/registrations/history/pdf — "Alınan Dersler" resmî PDF raporu.
+    /// termId verilirse yalnız o dönem basılır; verilmezse tüm geçmiş.
     /// </summary>
     [HttpGet("history/pdf")]
     [RequirePermission("menu.alinan-dersler.view")]
-    public async Task<IActionResult> GetCourseHistoryPdf(CancellationToken ct)
+    public async Task<IActionResult> GetCourseHistoryPdf([FromQuery] int? termId, CancellationToken ct)
     {
         var studentId = await GetStudentIdAsync();
         if (studentId == null)
             return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
-        var pdfBytes = await _courseHistoryPdfService.GenerateAsync(studentId.Value, ct);
+        var pdfBytes = await _courseHistoryPdfService.GenerateAsync(studentId.Value, termId, ct);
         var fileName = $"alinan-dersler-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pdf";
         return File(pdfBytes, "application/pdf", fileName);
     }

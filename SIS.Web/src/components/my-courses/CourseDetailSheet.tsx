@@ -82,8 +82,13 @@ export function CourseDetailSheet({ registrationId, fallbackTitle, onOpenChange 
                   />
                   <StatBox
                     label="Harf Notu"
-                    value={data.studentLetterGrade ?? '—'}
-                    badgeClass={data.studentLetterGrade ? getGradeBadgeClass(data.studentLetterGrade) : undefined}
+                    value={data.studentLetterGrade === 'W' ? 'Çekildi' : (data.studentLetterGrade ?? '—')}
+                    badgeClass={
+                      // 'W' bir not değil, çekilme durumudur — rozetsiz düz metin göster.
+                      data.studentLetterGrade && data.studentLetterGrade !== 'W'
+                        ? getGradeBadgeClass(data.studentLetterGrade)
+                        : undefined
+                    }
                   />
                   <StatBox
                     label="Sınıf Ortalaması"

@@ -90,8 +90,10 @@ public class OpenedDepartmentCourseService : IOpenedDepartmentCourseService
         }
 
         // ── 4. Öğrencinin müfredatındaki dersler (cross-dept dahil) ────────
-        // Proliz davranışı: bölüm değil müfredat sınırı belirler. CENG446 gibi
-        // başka bölümün dersi de ISE müfredatında varsa listede yer alır.
+        // Bölüm değil müfredat sınırı belirler — CENG446 gibi başka bölümün dersi
+        // de ISE müfredatında varsa listede yer alır. TermType ↔ SuggestedSemester
+        // parity'si BURADA filtrelenmez: section'ın o dönemde açılması admin
+        // kararıdır (Bahar'da güz dersi tekrar/bütünleme için açılabilir).
         var curriculumCourses = await _context.CurriculumCourses
             .AsNoTracking()
             .Where(cc => cc.CurriculumId == curriculumId)

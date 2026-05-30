@@ -127,8 +127,8 @@ public sealed class RegistrationPlanPdfService : IRegistrationPlanPdfService
             StudentNumber: student.StudentNumber,
             FullName:      fullName,
             ClassYear:     (student.CompletedSemesters / 2) + 1,
-            FacultyName:   activeProgram?.Program.Department.Faculty.Name ?? "—",
-            ProgramName:   activeProgram?.Program.Name ?? "—",
+            FacultyName:   activeProgram?.Program?.Department?.Faculty?.Name ?? "—",
+            ProgramName:   activeProgram?.Program?.Name ?? "—",
             TermName:      activeTerm.Name,
             AdvisorName:   advisorName ?? "—"
         );

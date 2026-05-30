@@ -1,5 +1,14 @@
 import type { StudentTranscriptDto } from '../types/transcript';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Transkript Senaryosu (what-if) — FRONTEND yalnızca düzenlenebilir GİRDİ state'ini
+// hazırlar ve dropdown etiketlerini üretir. AGNO/ANO/AKTS/geçti HESABI backend'de
+// TEK kaynaktan (GradePointMap + GpaMath) yapılır; bu dosyada GPA hesabı YOKTUR.
+//
+// GRADE_OPTIONS yalnızca not seçim dropdown'ı ve katsayı etiketini gösterir; hesabı
+// SÜRÜKLEMEZ (sonuç backend'den gelir). Akademik katsayılar (AA=4.0 …) statik sabittir.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const GRADE_OPTIONS = [
   { value: 'AA', label: 'AA', point: 4.0, passed: true, countsTowardsGpa: true },
   { value: 'BA', label: 'BA', point: 3.5, passed: true, countsTowardsGpa: true },
@@ -10,14 +19,20 @@ export const GRADE_OPTIONS = [
   { value: 'DD', label: 'DD', point: 1.0, passed: true, countsTowardsGpa: true },
   { value: 'FF', label: 'FF', point: 0.0, passed: false, countsTowardsGpa: true },
   { value: 'NA', label: 'NA', point: 0.0, passed: false, countsTowardsGpa: true },
+  // NI: kredili ama GPA-dışı tanınan ders → GEÇER sayılır (backend ile aynı: GpaMath.IsPassedGrade).
+  { value: 'NI', label: 'NI', point: null, passed: true, countsTowardsGpa: false },
   { value: 'S', label: 'S', point: null, passed: true, countsTowardsGpa: false },
   { value: 'U', label: 'U', point: null, passed: false, countsTowardsGpa: false },
   { value: 'W', label: 'W', point: null, passed: false, countsTowardsGpa: false },
   { value: 'I', label: 'I', point: null, passed: false, countsTowardsGpa: false },
-  { value: 'NI', label: 'NI', point: null, passed: false, countsTowardsGpa: false },
 ] as const;
 
 export type ScenarioGrade = (typeof GRADE_OPTIONS)[number]['value'];
+
+// Boş harf = "not henüz girilmedi/sonuçlandırılmadı". Bu durumda ders ortalamaya katılmaz
+// ve tabloda "—" gösterilir; öğrenci elle harf seçince hesaba girer. Aktif dönemin notsuz
+// (projeksiyon) dersleri bu değerle başlar — varsayılan bir not ATANMAZ.
+const EMPTY_GRADE_META = { value: '', label: '—', point: null, passed: false, countsTowardsGpa: false } as const;
 
 export interface ScenarioTerm {
   termId: number;
@@ -38,7 +53,8 @@ export interface ScenarioCourse {
   ects: number;
   equivalentCourseIds: number[];
   averageScore: number | null;
-  grade: ScenarioGrade;
+  // '' = not henüz girilmedi (projeksiyon/yeni ders); ortalamaya katılmaz, "—" gösterilir.
+  grade: ScenarioGrade | '';
   originalGrade: ScenarioGrade | null;
   excludeFromAverage: boolean;
   continuationCourseId: string;
@@ -48,52 +64,33 @@ export interface ScenarioCourse {
   sortOrder: number;
 }
 
-export interface ScenarioComputedCourse extends ScenarioCourse {
-  gradePoint: number | null;
-  countsTowardsGpa: boolean;
-  isPassed: boolean;
-  weightedEcts: number | null;
-  chainId: string;
-  isRepeated: boolean;
-}
-
-export interface ScenarioTermReport {
-  termId: number;
-  termName: string;
-  year: number;
-  semester: string;
-  attemptedCredits: number;
-  attemptedEcts: number;
-  earnedCredits: number;
-  earnedEcts: number;
-  gpaEcts: number;
-  gpaPoints: number;
-  cumulativeGpaEcts: number;
-  cumulativeGpaPoints: number;
-  sgpa: number;
-  cgpa: number;
-  courses: ScenarioComputedCourse[];
-}
-
-export interface ScenarioReport {
-  currentCgpa: number;
-  totalAttemptedCredits: number;
-  totalAttemptedEcts: number;
-  totalEarnedCredits: number;
-  totalEarnedEcts: number;
-  totalGpaEcts: number;
-  totalGpaPoints: number;
-  terms: ScenarioTermReport[];
-}
-
 export function buildScenarioTerms(transcript: StudentTranscriptDto): ScenarioTerm[] {
-  return transcript.terms.map((term, index) => ({
+  const terms: ScenarioTerm[] = transcript.terms.map((term, index) => ({
     termId: term.termId,
     termName: term.termName,
     year: term.year,
     semester: term.semester,
     order: index,
   }));
+
+  // Aktif dönemin notsuz dersleri ayrı bir terimde olabilir (henüz transkriptte değil).
+  // O dönem transkriptte yoksa senaryo terim listesine ekle (en sona — en güncel dönem).
+  const existingTermIds = new Set(terms.map(term => term.termId));
+  for (const course of transcript.inProgressCourses) {
+    if (existingTermIds.has(course.termId)) {
+      continue;
+    }
+    existingTermIds.add(course.termId);
+    terms.push({
+      termId: course.termId,
+      termName: course.termName,
+      year: course.year,
+      semester: course.semester,
+      order: terms.length,
+    });
+  }
+
+  return terms;
 }
 
 export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): ScenarioCourse[] {
@@ -101,7 +98,7 @@ export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): S
   const transcriptChainKeyByCourseId = buildTranscriptChainKeyByCourseId(transcript);
   let sortOrder = 0;
 
-  return transcript.terms.flatMap(term =>
+  const gradedCourses = transcript.terms.flatMap(term =>
     term.courses.map(course => {
       const scenarioId = `reg-${course.registrationId}`;
       const chainKey = getTranscriptChainKey(course.courseId, course.courseCode, transcriptChainKeyByCourseId);
@@ -123,7 +120,7 @@ export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): S
         equivalentCourseIds: course.equivalentCourseIds,
         averageScore: course.averageScore,
         grade: normalizeGrade(course.grade),
-        originalGrade: normalizeGrade(course.grade),
+        originalGrade: normalizeGrade(course.grade) || null,
         excludeFromAverage: !course.countsTowardsGpa,
         continuationCourseId,
         isAdded: false,
@@ -133,114 +130,44 @@ export function buildInitialScenarioCourses(transcript: StudentTranscriptDto): S
       } satisfies ScenarioCourse;
     })
   );
-}
 
-export function calculateScenarioReport(
-  terms: ScenarioTerm[],
-  courses: ScenarioCourse[],
-): ScenarioReport {
-  const sortedTerms = [...terms].sort((left, right) => left.order - right.order);
-  const sortedCourses = [...courses].sort((left, right) => left.sortOrder - right.sortOrder);
-  const coursesById = new Map(sortedCourses.map(course => [course.scenarioId, course]));
-  const chainIdByCourseId = new Map(sortedCourses.map(course => [course.scenarioId, resolveChainId(course, coursesById)]));
-  const repeatedChainCounts = new Map<string, number>();
-  const failedAttemptRepairByChainId = new Map<string, number>();
+  // Aktif dönemin notsuz dersleri: projeksiyon satırı olarak eklenir. grade = '' (not henüz
+  // girilmedi) → varsayılan bir not ATANMAZ, ortalamaya katılmaz, tabloda "—" gösterilir.
+  // Öğrenci harf seçince hesaba girer. originalGrade = null (gerçek not yok) → backend
+  // "başarısız denemeyi onarma" tetiklenmez. Tekrar zinciri varsa (aynı/eşdeğer ders daha önce
+  // alınmış) ona bağlanır → öğrenci not seçtiğinde "son deneme geçerli" kuralı uygulanır.
+  const inProgressCourses = transcript.inProgressCourses.map(course => {
+    const scenarioId = `reg-${course.registrationId}`;
+    const chainKey = getTranscriptChainKey(course.courseId, course.courseCode, transcriptChainKeyByCourseId);
+    const continuationCourseId = rootScenarioIdByChainKey.get(chainKey) ?? scenarioId;
 
-  for (const course of sortedCourses) {
-    const chainId = chainIdByCourseId.get(course.scenarioId) ?? course.scenarioId;
-    repeatedChainCounts.set(chainId, (repeatedChainCounts.get(chainId) ?? 0) + 1);
-
-    const originalGradeMeta = course.originalGrade ? getGradeMeta(course.originalGrade) : null;
-    const currentGradeMeta = getGradeMeta(course.grade);
-    if (
-      course.sourceRegistrationId != null
-      && originalGradeMeta
-      && !originalGradeMeta.passed
-      && currentGradeMeta.passed
-      && currentGradeMeta.countsTowardsGpa
-      && !failedAttemptRepairByChainId.has(chainId)
-    ) {
-      failedAttemptRepairByChainId.set(chainId, course.sortOrder);
-    }
-  }
-
-  const latestByChainId = new Map<string, ScenarioComputedCourse>();
-  const termReports: ScenarioTermReport[] = [];
-
-  for (const term of sortedTerms) {
-    const termCourses = sortedCourses
-      .filter(course => course.termId === term.termId)
-      .map(course => {
-        const gradeMeta = getGradeMeta(course.grade);
-        const chainId = chainIdByCourseId.get(course.scenarioId) ?? course.scenarioId;
-        const repairedFailedAttemptOrder = failedAttemptRepairByChainId.get(chainId);
-        const isSupersededOriginalRetake = course.sourceRegistrationId != null
-          && repairedFailedAttemptOrder != null
-          && course.sortOrder > repairedFailedAttemptOrder;
-        const countsTowardsGpa = !isSupersededOriginalRetake && !course.excludeFromAverage && gradeMeta.countsTowardsGpa;
-
-        return {
-          ...course,
-          gradePoint: countsTowardsGpa ? gradeMeta.point : null,
-          countsTowardsGpa,
-          isPassed: gradeMeta.passed,
-          weightedEcts: countsTowardsGpa && gradeMeta.point != null
-            ? round2(course.ects * gradeMeta.point)
-            : null,
-          chainId,
-          isRepeated: course.wasRepeated || (repeatedChainCounts.get(chainId) ?? 0) > 1,
-        } satisfies ScenarioComputedCourse;
-      });
-
-    for (const course of termCourses) {
-      if (!course.countsTowardsGpa && wasSupersededByRepairedFailure(course, failedAttemptRepairByChainId)) {
-        continue;
-      }
-
-      latestByChainId.set(course.chainId, course);
+    if (!rootScenarioIdByChainKey.has(chainKey)) {
+      rootScenarioIdByChainKey.set(chainKey, continuationCourseId);
     }
 
-    const cumulativeCourses = Array.from(latestByChainId.values());
-    const sgpa = calculateAverage(termCourses);
-    const cgpa = calculateAverage(cumulativeCourses);
-    const gpaEcts = termCourses.filter(course => course.countsTowardsGpa).reduce((sum, course) => sum + course.ects, 0);
-    const gpaPoints = round2(termCourses.reduce((sum, course) => sum + (course.weightedEcts ?? 0), 0));
-    const cumulativeGpaEcts = cumulativeCourses.filter(course => course.countsTowardsGpa).reduce((sum, course) => sum + course.ects, 0);
-    const cumulativeGpaPoints = round2(cumulativeCourses.reduce((sum, course) => sum + (course.weightedEcts ?? 0), 0));
+    return {
+      scenarioId,
+      sourceRegistrationId: course.registrationId,
+      courseId: course.courseId,
+      termId: course.termId,
+      courseCode: course.courseCode,
+      courseName: course.courseName,
+      credits: course.credits,
+      ects: course.ects,
+      equivalentCourseIds: course.equivalentCourseIds,
+      averageScore: null,
+      grade: '',
+      originalGrade: null,
+      excludeFromAverage: false,
+      continuationCourseId,
+      isAdded: false,
+      isPlannedFromCurriculum: false,
+      wasRepeated: continuationCourseId !== scenarioId,
+      sortOrder: sortOrder++,
+    } satisfies ScenarioCourse;
+  });
 
-    termReports.push({
-      termId: term.termId,
-      termName: term.termName,
-      year: term.year,
-      semester: term.semester,
-      attemptedCredits: termCourses.reduce((sum, course) => sum + course.credits, 0),
-      attemptedEcts: termCourses.reduce((sum, course) => sum + course.ects, 0),
-      earnedCredits: termCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.credits, 0),
-      earnedEcts: termCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.ects, 0),
-      gpaEcts,
-      gpaPoints,
-      cumulativeGpaEcts,
-      cumulativeGpaPoints,
-      sgpa,
-      cgpa,
-      courses: termCourses,
-    });
-  }
-
-  const latestCourses = Array.from(latestByChainId.values());
-  const totalGpaEcts = latestCourses.filter(course => course.countsTowardsGpa).reduce((sum, course) => sum + course.ects, 0);
-  const totalGpaPoints = round2(latestCourses.reduce((sum, course) => sum + (course.weightedEcts ?? 0), 0));
-
-  return {
-    currentCgpa: calculateAverage(latestCourses),
-    totalAttemptedCredits: latestCourses.reduce((sum, course) => sum + course.credits, 0),
-    totalAttemptedEcts: latestCourses.reduce((sum, course) => sum + course.ects, 0),
-    totalEarnedCredits: latestCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.credits, 0),
-    totalEarnedEcts: latestCourses.filter(course => course.isPassed).reduce((sum, course) => sum + course.ects, 0),
-    totalGpaEcts,
-    totalGpaPoints,
-    terms: termReports,
-  };
+  return [...gradedCourses, ...inProgressCourses];
 }
 
 export function createScenarioId() {
@@ -283,8 +210,14 @@ export function areScenarioCoursesEqual(left: ScenarioCourse[], right: ScenarioC
   return JSON.stringify(serialize(left)) === JSON.stringify(serialize(right));
 }
 
+// Dropdown etiketi/katsayı gösterimi (display-only) — hesabı sürüklemez.
+// Boş/geçersiz harf → "henüz girilmedi" meta'sı (point null, GPA-dışı, geçmedi).
 export function getGradeMeta(grade: string) {
-  return GRADE_OPTIONS.find(option => option.value === normalizeGrade(grade)) ?? GRADE_OPTIONS[0];
+  if (!grade || !grade.trim()) {
+    return EMPTY_GRADE_META;
+  }
+  const normalized = grade.toUpperCase();
+  return GRADE_OPTIONS.find(option => option.value === normalized) ?? EMPTY_GRADE_META;
 }
 
 export function formatGradeOptionLabel(grade: ScenarioGrade) {
@@ -292,9 +225,14 @@ export function formatGradeOptionLabel(grade: ScenarioGrade) {
   return `${meta.label} -> Katsayı:${meta.point == null ? 'GPA Dışı' : trimNumber(meta.point)}`;
 }
 
-export function normalizeGrade(grade: string): ScenarioGrade {
+// Boş → '' (not girilmedi); bilinen harf → kendisi; tanınmayan dolu değer → '' (sessizce
+// FF'e düşürmek yerine "girilmedi" say — kullanıcı bilerek seçmedikçe ortalamayı bozmaz).
+export function normalizeGrade(grade: string): ScenarioGrade | '' {
+  if (!grade || !grade.trim()) {
+    return '';
+  }
   const normalized = grade.toUpperCase() as ScenarioGrade;
-  return GRADE_OPTIONS.some(option => option.value === normalized) ? normalized : 'FF';
+  return GRADE_OPTIONS.some(option => option.value === normalized) ? normalized : '';
 }
 
 export function normalizeCourseCode(courseCode: string) {
@@ -305,50 +243,20 @@ export function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function calculateAverage(courses: ScenarioComputedCourse[]) {
-  const gpaEcts = courses.filter(course => course.countsTowardsGpa).reduce((sum, course) => sum + course.ects, 0);
-  if (gpaEcts === 0) {
-    return 0;
-  }
-
-  const gpaPoints = courses.reduce((sum, course) => sum + (course.weightedEcts ?? 0), 0);
-  return round2(gpaPoints / gpaEcts);
-}
-
-function wasSupersededByRepairedFailure(
-  course: ScenarioComputedCourse,
-  failedAttemptRepairByChainId: Map<string, number>,
-) {
-  const repairedFailedAttemptOrder = failedAttemptRepairByChainId.get(course.chainId);
-  return course.sourceRegistrationId != null
-    && repairedFailedAttemptOrder != null
-    && course.sortOrder > repairedFailedAttemptOrder;
-}
-
-function resolveChainId(course: ScenarioCourse, coursesById: Map<string, ScenarioCourse>, visited = new Set<string>()): string {
-  if (!course.continuationCourseId || course.continuationCourseId === course.scenarioId) {
-    return course.scenarioId;
-  }
-
-  if (visited.has(course.scenarioId)) {
-    return course.scenarioId;
-  }
-
-  const targetCourse = coursesById.get(course.continuationCourseId);
-  if (!targetCourse) {
-    return course.scenarioId;
-  }
-
-  visited.add(course.scenarioId);
-  return resolveChainId(targetCourse, coursesById, visited);
-}
-
 function trimNumber(value: number) {
   return value.toString().replace(/\.0$/, '');
 }
 
+// Başlangıç tekrar-zinciri kurulumu: transkriptteki eşdeğer/aynı dersleri tek zincire
+// bağlar (continuationCourseId). Bu yalnızca GİRDİ hazırlığıdır; nihai zincir/GPA hesabı
+// backend'de yeniden yapılır.
 function buildTranscriptChainKeyByCourseId(transcript: StudentTranscriptDto) {
-  const transcriptCourses = transcript.terms.flatMap(term => term.courses);
+  // Zincir haritası hem notlu (terms) hem aktif dönem notsuz (inProgressCourses) dersleri
+  // kapsar; böylece şu an alınan ders, daha önce alınmış aynı/eşdeğer derse zincirlenir.
+  const transcriptCourses = [
+    ...transcript.terms.flatMap(term => term.courses),
+    ...transcript.inProgressCourses,
+  ];
   const courseIdsInTranscript = new Set(transcriptCourses.map(course => course.courseId));
   const adjacency = new Map<number, Set<number>>();
 

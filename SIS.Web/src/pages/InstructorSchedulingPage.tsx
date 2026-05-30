@@ -1,119 +1,67 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ROUTES } from '@/lib/constants';
-import { AlertTriangle, Calendar, RefreshCcw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { getSchedulingErrorMessage } from '../api/instructorScheduling.api';
-import type { InstructorSection } from '../api/instructor.api';
-import WeeklyTimetableGrid, { type TimetableEntry } from '../components/scheduling/WeeklyTimetableGrid';
-import { useInstructorSections } from '../hooks/useInstructorSections';
+import { useEffect, useMemo, useState } from 'react';
+import { TimetableView, type TimetableTermOption } from '@/components/scheduling/TimetableView';
+import type { WeekTimetableSection } from '@/components/scheduling/WeekTimetableGrid';
+import { downloadInstructorTimetablePdf } from '../api/instructor.api';
+import { useInstructorSections, useInstructorTerms } from '../hooks/useInstructorSections';
 
 export default function InstructorSchedulingPage() {
-  const navigate = useNavigate();
-  const {
-    data: sectionsData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useInstructorSections();
+  const { data: terms } = useInstructorTerms();
+  const [selectedTermId, setSelectedTermId] = useState<number | undefined>(undefined);
 
-  const sections = sectionsData?.sections ?? [];
+  useEffect(() => {
+    if (selectedTermId === undefined && terms && terms.length > 0) {
+      const defaultTerm = terms.find((t) => t.isActive) ?? terms[0];
+      setSelectedTermId(defaultTerm.id);
+    }
+  }, [terms, selectedTermId]);
 
-  const errorMessage = isError
-    ? getSchedulingErrorMessage(error, 'Ders programı bilgileri yüklenemedi.')
-    : null;
+  const { data, isLoading, isError } = useInstructorSections(selectedTermId);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-[500px] rounded-xl" />
-      </div>
-    );
-  }
+  const termOptions: TimetableTermOption[] = useMemo(
+    () => (terms ?? []).map((t) => ({ termId: t.id, label: t.name })),
+    [terms],
+  );
 
-  if (errorMessage) {
-    return (
-      <div className="space-y-6">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Program ekranı yüklenemedi</AlertTitle>
-          <AlertDescription className="space-y-4">
-            <p>{errorMessage}</p>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={() => refetch()}>
-                <RefreshCcw className="h-4 w-4" />
-                Yeniden Dene
-              </Button>
-              <Button variant="ghost" onClick={() => navigate(ROUTES.INSTRUCTOR_SECTIONS)}>
-                Derslerime Dön
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  const sections: WeekTimetableSection[] = useMemo(
+    () =>
+      (data?.sections ?? []).map((s) => ({
+        sectionId: s.sectionId,
+        sectionNumber: String(s.sectionNumber),
+        courseCode: s.courseCode,
+        courseName: s.courseName,
+        // Kendi programı — meta satırında hoca adı gereksiz; sadece derslik gösterilir.
+        instructorDisplay: '',
+        blocks: s.schedules,
+      })),
+    [data],
+  );
 
-  if (!sectionsData || sections.length === 0) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-14 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-              <Calendar className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="font-heading text-xl font-semibold text-foreground">
-                Atanmış ders bulunamadı
-              </h2>
-              <p className="max-w-xl text-sm text-muted-foreground">
-                Bu dönem size atanmış ders bulunamadı. Ders programınız burada görüntülenecektir.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const entries = buildTimetableEntries(sections);
+  const handlePrint = async () => {
+    if (!selectedTermId) return;
+    try {
+      const blob = await downloadInstructorTimetablePdf(selectedTermId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      alert('PDF oluşturulamadı. Lütfen tekrar deneyin.');
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <WeeklyTimetableGrid
-        entries={entries}
-        title="Ders Programım"
-      />
-    </div>
+    <TimetableView
+      sections={sections}
+      slots={data?.slots}
+      lunchBreakStart={data?.lunchBreakStart}
+      lunchBreakEnd={data?.lunchBreakEnd}
+      terms={termOptions}
+      selectedTermId={selectedTermId}
+      onTermChange={setSelectedTermId}
+      onPrint={handlePrint}
+      isLoading={isLoading}
+      isError={isError}
+      errorTitle="Ders programı yüklenemedi"
+      errorDescription="Dönemi değiştirip tekrar deneyin."
+    />
   );
-}
-
-function buildTimetableEntries(sections: InstructorSection[]): TimetableEntry[] {
-  // 2026-05-10 — Plan E: backend'in yapısal `schedules` array'ini kullan, string parse etme.
-  // Eski parseScheduleSummary helper'ı silindi (tek source-of-truth: backend BuildScheduleBlocks).
-  const entries: TimetableEntry[] = [];
-
-  for (const section of sections) {
-    const slots = (section.schedules ?? []).map(b => ({
-      day: b.day,
-      startTime: b.startTime.slice(0, 5),
-      endTime: b.endTime.slice(0, 5),
-    }));
-    if (slots.length === 0) continue;
-
-    entries.push({
-      id: String(section.sectionId),
-      label: section.courseName,
-      courseCode: section.courseCode,
-      classroomName: section.classroomName || undefined,
-      slots,
-      hasConflict: false,
-    });
-  }
-
-  return entries;
 }

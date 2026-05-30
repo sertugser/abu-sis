@@ -9,15 +9,15 @@ namespace SIS.Infrastructure.Services;
 public sealed class ElectivePoolProgressCalculator : IElectivePoolProgressCalculator
 {
     private readonly AppDbContext _context;
-    private readonly IGradeVisibilityResolver _gradeVisibilityResolver;
+    private readonly IGradeVisibilityService _gradeVisibility;
 
     public ElectivePoolProgressCalculator(
         AppDbContext context,
-        IGradeVisibilityResolver? gradeVisibilityResolver = null)
+        IGradeVisibilityService? gradeVisibility = null)
     {
         _context = context;
-        _gradeVisibilityResolver = gradeVisibilityResolver
-            ?? new GradeVisibilityResolver(new NullWebModuleControlService());
+        _gradeVisibility = gradeVisibility
+            ?? new GradeVisibilityService(context, new NullWebModuleControlService());
     }
 
     public async Task<IReadOnlyDictionary<int, PoolProgress>> CalculateAsync(
@@ -36,9 +36,11 @@ public sealed class ElectivePoolProgressCalculator : IElectivePoolProgressCalcul
                 && poolIds.Contains(cr.AppliedElectivePoolId.Value))
             .ToListAsync(ct);
 
-        // Grade-visibility gate — IGradeVisibilityResolver is the single source of truth.
-        // Default when TermId is absent from map = true (visible), matching GetValueOrDefault(..., true) in CurriculumStatusService.
-        var gradeVisibilityByTerm = await _gradeVisibilityResolver.BuildMapAsync(
+        // Grade-visibility gate — IGradeVisibilityService is the single source of truth
+        // (transcript, curriculum-status ve pool-progress aynı servisten okur → ikibaşlılık yok).
+        // Kural: geçmiş dönem her zaman görünür, yalnızca aktif dönemin ilan edilmemiş notu gizlenir.
+        // Default when TermId is absent from map = true (visible).
+        var gradeVisibilityByTerm = await _gradeVisibility.BuildTermGradeVisibilityAsync(
             regs.Select(r => r.CourseSection.TermId).Distinct().ToList(), ct);
 
         bool IsPassedWithVisibleGrade(SIS.Domain.Entities.CourseRegistration r) =>

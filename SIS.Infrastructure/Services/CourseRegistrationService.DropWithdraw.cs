@@ -169,10 +169,10 @@ public partial class CourseRegistrationService
         registration.Status = RegistrationStatus.Dropped;
         registration.UpdatedAt = DateTime.UtcNow;
 
-        // Decrement section.EnrolledCount
+        // Koltuğu serbest bırak (tek kaynak: SeatLedger, floor-0 korumalı)
         var section = registration.CourseSection;
-        if (shouldReleaseSeat && section.EnrolledCount > 0)
-            section.EnrolledCount--;
+        if (shouldReleaseSeat)
+            SeatLedger.Release(section);
 
         await _context.SaveChangesAsync();
 
@@ -305,7 +305,7 @@ public partial class CourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !term.IsWithdrawalOpen(DateTime.UtcNow))
+        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !term.IsWithdrawalOpen(_clock.UtcNow))
         {
             errors.Add(new ValidationError
             {

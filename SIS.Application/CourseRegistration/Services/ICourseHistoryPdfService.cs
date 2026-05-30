@@ -9,5 +9,7 @@ namespace SIS.Application.CourseRegistration.Services;
 /// </summary>
 public interface ICourseHistoryPdfService
 {
-    Task<byte[]> GenerateAsync(int studentId, CancellationToken cancellationToken = default);
+    /// <param name="termId">Belirtilirse yalnız o döneme ait dersler basılır ve üst bloktaki
+    /// "Dönemi" alanı o dönemi gösterir; null ise tüm geçmiş + global aktif dönem.</param>
+    Task<byte[]> GenerateAsync(int studentId, int? termId = null, CancellationToken cancellationToken = default);
 }

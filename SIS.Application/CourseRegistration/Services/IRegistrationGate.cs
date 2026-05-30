@@ -8,6 +8,13 @@ namespace SIS.Application.CourseRegistration.Services;
 public interface IRegistrationGate
 {
     Task<RegistrationGateResult> EvaluateSectionAsync(CourseSection section, CancellationToken ct = default);
+
+    /// <summary>
+    /// Birden çok section'ı tek toplu sorguyla değerlendirir (katalog/şube-picker N+1'i önler).
+    /// Section.Course yüklenmiş olmalı (DepartmentId okunur). Anahtar: SectionId.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, RegistrationGateResult>> EvaluateSectionsAsync(
+        IReadOnlyCollection<CourseSection> sections, CancellationToken ct = default);
 }
 
 public sealed record RegistrationGateResult(bool IsOpen, string? Rule = null, string? Message = null)

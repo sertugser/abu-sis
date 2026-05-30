@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { prolizButtonClass, prolizPrimaryButtonClass } from '@/lib/prolizButton';
+import { Button } from '@/components/ui/button';
 import { RegistrationHeaderBar } from '../components/registration/v2/RegistrationHeaderBar';
 import { SemesterClassTabs } from '../components/registration/v2/SemesterClassTabs';
 import type { ParityFilter } from '../components/registration/v2/SemesterClassTabs';
@@ -31,6 +31,8 @@ import {
   useRejectStudent,
 } from '../hooks/useAdvisor';
 import type { CatalogCourseRow } from '../types/registrationCatalog';
+import { useToast } from '@/components/ui/global-toast';
+import { ApiError } from '@/lib/apiError';
 
 function deriveDefaultParity(termType: string): ParityFilter {
   const t = termType.toLowerCase();
@@ -75,6 +77,7 @@ export default function CourseRegistrationEditPage() {
   }, [selectedStudentId]);
 
   // Advisor mutations
+  const { showSuccess, showError } = useToast();
   const advisorAdd = useAdvisorAddCourse();
   const advisorDrop = useAdvisorDropCourse();
   const approve = useApproveStudent();
@@ -137,8 +140,8 @@ export default function CourseRegistrationEditPage() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3 p-3">
       {/* LEFT: advisee list */}
-      <aside className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm self-start">
-        <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-700">
+      <aside className="overflow-hidden rounded-lg border bg-card shadow-sm self-start">
+        <div className="border-b bg-muted/40 px-3 py-1.5 text-xs font-semibold text-foreground">
           Danışmanlık Öğrencileri
         </div>
         {studentsLoading ? (
@@ -148,21 +151,21 @@ export default function CourseRegistrationEditPage() {
             <Skeleton className="h-10 w-full" />
           </div>
         ) : students.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-slate-500 italic">Danışmanlık öğrenciniz bulunmuyor.</div>
+          <div className="px-3 py-4 text-xs text-muted-foreground italic">Danışmanlık öğrenciniz bulunmuyor.</div>
         ) : (
-          <ul className="divide-y divide-slate-200 max-h-[80vh] overflow-y-auto">
+          <ul className="divide-y max-h-[80vh] overflow-y-auto">
             {students.map((s) => (
               <li key={s.studentId}>
                 <button
                   type="button"
                   onClick={() => setSelectedStudentId(s.studentId)}
                   className={cn(
-                    'w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors',
-                    selectedStudentId === s.studentId && 'bg-blue-50',
+                    'w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors',
+                    selectedStudentId === s.studentId && 'bg-accent',
                   )}
                 >
-                  <div className="text-[12px] font-medium text-slate-900">{s.studentName}</div>
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-xs font-medium text-foreground">{s.studentName}</div>
+                  <div className="text-[11px] text-muted-foreground">
                     {s.studentNumber} · {s.planStatus ?? '—'}
                   </div>
                 </button>
@@ -175,7 +178,7 @@ export default function CourseRegistrationEditPage() {
       {/* RIGHT: catalog (reuses v2 components) */}
       <main>
         {selectedStudentId === null ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 text-sm">
+          <div className="rounded-lg border bg-card p-10 text-center text-muted-foreground text-sm">
             Soldan bir öğrenci seçin.
           </div>
         ) : catalogLoading ? (
@@ -186,12 +189,8 @@ export default function CourseRegistrationEditPage() {
           </div>
         ) : catalog ? (
           <>
-            <div className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
-              <RegistrationHeaderBar
-                student={catalog.student}
-                onDownloadPdf={() => { /* TODO: advisor PDF */ }}
-                pdfLoading={false}
-              />
+            <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+              <RegistrationHeaderBar student={catalog.student} />
 
               <SemesterClassTabs
                 classYears={classYearList}
@@ -236,25 +235,32 @@ export default function CourseRegistrationEditPage() {
               />
 
               {/* Advisor action bar: Onayla + Reddet */}
-              <div className="border-t border-slate-200 bg-slate-50 px-4 py-1.5 flex justify-end gap-2">
-                <button
+              <div className="border-t bg-muted/40 px-5 py-3 flex justify-end gap-2">
+                <Button
                   type="button"
-                  className={prolizButtonClass}
+                  size="lg"
+                  variant="outline"
                   onClick={() => setRejectOpen(true)}
                   disabled={reject.isPending}
                 >
-                  <X className="h-3 w-3 text-rose-600" />
+                  <X className="h-5 w-5 text-destructive" />
                   Reddet
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className={prolizPrimaryButtonClass}
-                  onClick={() => approve.mutate({ studentId: selectedStudentId })}
+                  size="lg"
+                  onClick={() => approve.mutate({ studentId: selectedStudentId }, {
+                    onSuccess: () => showSuccess('Kayıt onaylandı'),
+                    onError: (err) => showError(
+                      'Onay başarısız',
+                      err instanceof ApiError || err instanceof Error ? err.message : 'Bir hata oluştu.',
+                    ),
+                  })}
                   disabled={approve.isPending}
                 >
-                  <Check className="h-3 w-3" />
+                  <Check className="h-5 w-5" />
                   Onayla
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -289,7 +295,13 @@ export default function CourseRegistrationEditPage() {
                   <AlertDialogCancel>İptal</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
-                      reject.mutate({ studentId: selectedStudentId, note: rejectNote });
+                      reject.mutate({ studentId: selectedStudentId, note: rejectNote }, {
+                        onSuccess: () => showSuccess('Kayıt reddedildi'),
+                        onError: (err) => showError(
+                          'Reddetme başarısız',
+                          err instanceof ApiError || err instanceof Error ? err.message : 'Bir hata oluştu.',
+                        ),
+                      });
                       setRejectOpen(false);
                       setRejectNote('');
                     }}

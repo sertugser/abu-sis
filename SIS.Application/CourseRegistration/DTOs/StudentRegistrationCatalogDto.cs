@@ -32,10 +32,11 @@ public sealed record CatalogSemesterDto(
 
 public sealed record CatalogCourseRowDto(
     int CourseId, string Code, string Name,
-    bool IsCompulsory, int NationalCredit, int Ects,
+    bool IsCompulsory, int TheoryHours, int LabHours, int NationalCredit, int Ects,
     int SuggestedSemester, int ClassYear,
     string TakeStatus,
     bool PrerequisitesMet,
+    IReadOnlyList<string> MissingPrerequisites,
     string? PreviousAttemptInfo,
     string? ActiveRegistrationStatus,
     bool HasOpenSections,
@@ -51,7 +52,7 @@ public sealed record CatalogPoolSlotDto(
 
 public sealed record SelectedCourseDto(
     int RegistrationId, int CourseSectionId, int CourseId,
-    string CourseCode, string CourseName,
-    bool IsCompulsory, int TheoryHours, int LabHours, int Ects, int SuggestedSemester,
+    string CourseCode, string CourseName, int SectionNumber,
+    bool IsCompulsory, int TheoryHours, int LabHours, int Ects, int NationalCredit, int SuggestedSemester,
     string TakeType, string Status,
     string? OpeningReasonName, string? ElectiveGroupCode);

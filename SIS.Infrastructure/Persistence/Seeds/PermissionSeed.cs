@@ -36,6 +36,8 @@ public static class PermissionSeed
         ("menu.alinan-dersler.statistics",               PermissionCategory.Menu, "Alınan ders not istatistikleri"),
         ("menu.danisman-bilgileri.view",                 PermissionCategory.Menu, "Danışman bilgileri sayfası (öğrenci görünümü)"),
         ("menu.acilan-bolum-dersleri.view",              PermissionCategory.Menu, "Açılan bölüm dersleri sayfası (aktif dönem section listesi)"),
+        ("menu.bolum-ders-programi.view",                PermissionCategory.Menu, "Bölüm ders programı (program × sınıf haftalık görünüm) görüntüleme"),
+        ("menu.bolum-ders-programi.export",              PermissionCategory.Menu, "Bölüm ders programı PDF indirme"),
 
         // ═══════════════════════════════════════════════════════════════════════════
         // Modül 2: Akademik İşlemler
@@ -270,6 +272,7 @@ public static class PermissionSeed
         ("menu.not-girisi.import",                       PermissionCategory.Menu, "Excel import (preview + apply)"),
         ("menu.not-girisi.finalize",                     PermissionCategory.Menu, "Section sonuçlandırma"),
         ("menu.not-girisi.unfinalize",                   PermissionCategory.Menu, "Sonuçlandırmayı geri alma"),
+        ("menu.not-girisi.publish",                      PermissionCategory.Menu, "Komponent ilanı (öğrenciye yayın aç/kapa)"),
 
         // Danışman Ders Kısıtları
         ("menu.danisman-ders-kisitlari.view",            PermissionCategory.Menu, "Advisor ders kısıtları görüntüleme"),

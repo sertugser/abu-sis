@@ -305,11 +305,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
               </div>
             ) : catalog ? (
               <>
-                <RegistrationHeaderBar
-                  student={catalog.student}
-                  onDownloadPdf={() => { /* TODO: advisor PDF */ }}
-                  pdfLoading={false}
-                />
+                <RegistrationHeaderBar student={catalog.student} />
 
                 <SemesterClassTabs
                   classYears={classYearList}

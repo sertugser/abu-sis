@@ -38,6 +38,14 @@ public class GradeComponent
 
     public GradeComponent? PrerequisiteGradeComponent { get; set; }
 
+    /// <summary>
+    /// Hoca bu komponentin notlarını öğrenciye "İlan Et" dediği an. UTC.
+    /// null = ilan edilmedi; öğrenci notunu/sınıf istatistiklerini göremez.
+    /// Görünürlük kapısı: <c>IWebModuleControlService</c> (term-seviyesi admin kapısı) AND <see cref="PublishedAt"/> != null
+    /// — ikisi de gerekli (tek-kaynak, ikibaşlılık yok).
+    /// </summary>
+    public DateTime? PublishedAt { get; set; }
+
     public ICollection<GradeComponent> DependentComponents { get; set; } = new List<GradeComponent>();
     public ICollection<StudentGrade> StudentGrades { get; set; } = new List<StudentGrade>();
 }

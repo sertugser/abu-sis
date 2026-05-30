@@ -16,6 +16,7 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
     private readonly IEctsLimitResolver _ectsLimitResolver;
+    private readonly IRegistrationGate? _registrationGate;
     private readonly bool _useCalendarFallbackForRegistrationWindow;
 
     public RegistrationValidationService(
@@ -23,13 +24,15 @@ public class RegistrationValidationService : IRegistrationValidationService
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
         IWebModuleControlService? webModuleControls = null,
-        IEctsLimitResolver? ectsLimitResolver = null)
+        IEctsLimitResolver? ectsLimitResolver = null,
+        IRegistrationGate? registrationGate = null)
     {
         _context = context;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
         _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
+        _registrationGate = registrationGate;
         _useCalendarFallbackForRegistrationWindow = webModuleControls is null;
     }
 
@@ -180,44 +183,85 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
             .Sum(r => r.CourseSection.Course.NationalCredit);
 
+        // === Yayın kapısı (publish gate) — tek kaynak IRegistrationGate ===
+        // Öğrenci yalnızca Active + fakülte-onaylı + suspend-değil section seçebilir. validate ve
+        // submit yolunda uygulanır; onay (skipGateChecks=true) yolunda atlanır — orada ayrıca
+        // değerlendirilip gate-fail kayıtlar otomatik reddedilir.
+        if (!skipGateChecks && _registrationGate is not null && sections.Count > 0)
+        {
+            var gateResults = await _registrationGate.EvaluateSectionsAsync(sections);
+            foreach (var section in sections)
+            {
+                if (gateResults.TryGetValue(section.Id, out var gate) && !gate.IsOpen)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Rule = gate.Rule ?? "PublishGate",
+                        Message = $"'{section.Course.Code} {section.Course.Name}' {gate.Message}",
+                        CourseSectionId = section.Id
+                    });
+                }
+            }
+        }
+
+        // ── Önkoşul/eş-koşul değerlendirme verisi (tek kaynak: PrerequisiteEvaluator) ──
+        var passedSet = passedCourseIds.ToHashSet();
+
+        // İntibak (PreviousCourse) haritası — öğrencinin aktif müfredatından.
+        var studentCurriculumId = await _context.StudentPrograms
+            .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
+            .Select(sp => (int?)sp.CurriculumId)
+            .FirstOrDefaultAsync();
+        var previousMap = studentCurriculumId is null
+            ? new Dictionary<int, int>()
+            : PreviousCourseResolver.BuildMap(await _context.CurriculumCourses
+                .Where(cc => cc.CurriculumId == studentCurriculumId && cc.PreviousCourseId != null)
+                .ToListAsync());
+
+        // İlgili önkoşul ders id'leri için filtreli (tüm tabloyu değil) simetrik eşdeğerlik haritası.
+        var requiredCourseIds = sections
+            .SelectMany(s => s.Course.Prerequisites.Select(p => p.RequiredCourseId))
+            .Distinct()
+            .ToList();
+        var equivalencyMap = requiredCourseIds.Count == 0
+            ? new Dictionary<int, HashSet<int>>()
+            : PrerequisiteEvaluator.BuildEquivalencyMap(await _context.CourseEquivalencies
+                .Where(ce => requiredCourseIds.Contains(ce.CourseId) || requiredCourseIds.Contains(ce.EquivalentCourseId))
+                .ToListAsync());
+
+        // Eş-koşul için "aynı dönem birlikte alınan" ders kümesi: talep edilenler + mevcut aktif/pending/draft.
+        var concurrentCourseIds = sections.Select(s => s.Course.Id)
+            .Concat(existingRegistrations.Select(r => r.CourseSection.Course.Id))
+            .ToHashSet();
+
         // Per-section checks
         foreach (var section in sections)
         {
             var course = section.Course;
 
-            // === CHECK 4: Prerequisite Check (FR-29/FR-45) ===
-            // Skip if student already passed this course (retake for grade improvement)
-            if (course.Prerequisites.Any() && !passedCourseIds.Contains(course.Id))
+            // === CHECK 4: Önkoşul / Eş-koşul (FR-29/FR-45) — tek kaynak: PrerequisiteEvaluator ===
+            // Öğrenci dersi zaten geçtiyse (not yükseltme amaçlı tekrar) önkoşul aranmaz.
+            if (course.Prerequisites.Any() && !passedSet.Contains(course.Id))
             {
                 foreach (var prereq in course.Prerequisites)
                 {
-                    var passedPrereq = allPastRegistrations.Any(r =>
-                        r.CourseSection.Course.Id == prereq.RequiredCourseId &&
-                        RegistrationRulePolicy.IsPassedGrade(r.Grade));
+                    var met = PrerequisiteEvaluator.IsSatisfied(
+                        prereq.RequiredCourseId,
+                        prereq.IsCorequisite,
+                        passedSet,
+                        previousMap,
+                        equivalencyMap,
+                        concurrentCourseIds);
 
-                    // Also check course equivalencies
-                    if (!passedPrereq)
-                    {
-                        var equivalencies = await _context.CourseEquivalencies
-                            .Where(ce => ce.CourseId == prereq.RequiredCourseId || ce.EquivalentCourseId == prereq.RequiredCourseId)
-                            .ToListAsync();
-
-                        var equivalentCourseIds = equivalencies
-                            .Select(e => e.CourseId == prereq.RequiredCourseId ? e.EquivalentCourseId : e.CourseId)
-                            .ToList();
-
-                        passedPrereq = allPastRegistrations.Any(r =>
-                            equivalentCourseIds.Contains(r.CourseSection.Course.Id) &&
-                            RegistrationRulePolicy.IsPassedGrade(r.Grade));
-                    }
-
-                    if (!passedPrereq)
+                    if (!met)
                     {
                         var reqCourse = await _context.Courses.FindAsync(prereq.RequiredCourseId);
                         errors.Add(new ValidationError
                         {
                             Rule = "Prerequisite",
-                            Message = $"'{course.Code} {course.Name}' dersi icin on kosul '{reqCourse?.Code} {reqCourse?.Name}' tamamlanmamis.",
+                            Message = prereq.IsCorequisite
+                                ? $"'{course.Code} {course.Name}' dersi icin es kosul '{reqCourse?.Code} {reqCourse?.Name}' ayni donemde alinmali veya gecilmis olmali."
+                                : $"'{course.Code} {course.Name}' dersi icin on kosul '{reqCourse?.Code} {reqCourse?.Name}' tamamlanmamis.",
                             CourseSectionId = section.Id
                         });
                     }

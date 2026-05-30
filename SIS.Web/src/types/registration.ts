@@ -56,8 +56,10 @@ export interface CourseHistoryItemDto {
   applicationHours: number | null;
   /** Dersin müfredattaki sınıfı (1-4). Aktif curriculum'da yoksa null. */
   classYear: number | null;
-  /** "Zorunlu" / "Seçmeli" / "Alttan FF" / "Devamlı Alttan NA" gibi. */
+  /** "Zorunlu" / "Seçmeli" / "Alttan FF" / "Devamlı Alttan NA" gibi. PDF "Alış Şekli" sütunu için detaylı değer. */
   acquisitionType: string;
+  /** Dersin müfredatta zorunlu olup olmadığı. UI "Z/S" sütunu için (Z=true, S=false). */
+  isCompulsory: boolean;
   /** Dersi sahiplenen birim adı (örn. "Ortak Dersler", "Bilgisayar Müh."). */
   ownerDepartmentName: string | null;
   /** "Türkçe" / "İngilizce" / "Fransızca" / "Almanca" / "Arapça" */
@@ -146,5 +148,8 @@ export interface StudentAttendanceCourseDto {
   totalLabHours: number;
   theoryAbsenceLimitHours: number;
   labAbsenceLimitHours: number;
+  totalAbsenceLimitHours: number;
+  attendanceTracked: boolean;
+  isFailedByAbsence: boolean;
   attendanceStatusLabel: string;
 }

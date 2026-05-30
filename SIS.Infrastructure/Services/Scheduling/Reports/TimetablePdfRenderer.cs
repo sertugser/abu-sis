@@ -1,16 +1,21 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using SIS.Application.Scheduling.DTOs;
-using SIS.Domain.Enums;
 
 namespace SIS.Infrastructure.Services.Scheduling.Reports;
 
-public sealed class StudentTimetablePdfRenderer
+/// <summary>
+/// Öğrenci + öğretim elemanı ders programı için ortak PDF renderer (A4 landscape, gün-bazlı tablolar).
+/// Tek kaynak — <see cref="TimetablePdfData"/> alır.
+/// </summary>
+public sealed class TimetablePdfRenderer
 {
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTimeZone();
 
-    public byte[] Render(StudentTimetableDto data)
+    // Gün sırası: Pzt–Cuma her zaman aday; Cmt (6) ve Paz (0) yalnızca o güne ders varsa basılır.
+    private static readonly int[] DayOrder = { 1, 2, 3, 4, 5, 6, 0 };
+
+    public byte[] Render(TimetablePdfData data)
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
@@ -33,7 +38,7 @@ public sealed class StudentTimetablePdfRenderer
                             .Background(Colors.Grey.Lighten3)
                             .Padding(4)
                             .AlignCenter()
-                            .Text($"Öğrenci Ders Programı / {data.StudentName} - {data.TermName} Ders Programı")
+                            .Text($"{data.Title} / {data.SubjectName} - {data.TermName}")
                             .Bold().FontSize(10);
                     });
                 });
@@ -41,7 +46,7 @@ public sealed class StudentTimetablePdfRenderer
                 page.Content().PaddingVertical(8).Row(row =>
                 {
                     var anyRendered = false;
-                    foreach (var day in Enumerable.Range(1, 5))
+                    foreach (var day in DayOrder)
                     {
                         var dayRows = ExtractDayRows(data, day);
                         if (dayRows.Count == 0) continue;
@@ -68,7 +73,7 @@ public sealed class StudentTimetablePdfRenderer
         return document.GeneratePdf();
     }
 
-    private static List<DayRow> ExtractDayRows(StudentTimetableDto data, int day)
+    private static List<DayRow> ExtractDayRows(TimetablePdfData data, int day)
     {
         var rows = new List<DayRow>();
         foreach (var section in data.Sections)
@@ -81,7 +86,7 @@ public sealed class StudentTimetablePdfRenderer
                     ClassroomLabel: block.ClassroomName ?? "Çevrimiçi",
                     Start: block.StartTime.ToString("HH:mm"),
                     End: block.EndTime.ToString("HH:mm"),
-                    IsLab: block.BlockType == ScheduleBlockType.Lab));
+                    IsLab: block.IsLab));
             }
         }
         return rows.OrderBy(r => r.Start).ToList();
@@ -133,6 +138,8 @@ public sealed class StudentTimetablePdfRenderer
         3 => "Çarşamba",
         4 => "Perşembe",
         5 => "Cuma",
+        6 => "Cumartesi",
+        0 => "Pazar",
         _ => string.Empty,
     };
 

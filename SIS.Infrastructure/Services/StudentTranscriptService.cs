@@ -72,9 +72,33 @@ public class StudentTranscriptService : IStudentTranscriptService
             .Where(registration => transcriptGradeVisibility.GetValueOrDefault(registration.CourseSection.TermId, true))
             .ToList();
 
+        // Aktif dönemde kayıtlı olup henüz notu girilmemiş dersler (Transkript Senaryosu için).
+        // Resmî transkripte (Terms) GİRMEZ; ayrı alanda döner. Notsuz oldukları için görünürlük
+        // kapısına takılmazlar (gizlenecek not yok) — öğrencinin kendi güncel kayıtlarıdır.
+        var activeTermId = await _context.AcademicTerms
+            .AsNoTracking()
+            .ActiveTerm()
+            .Select(term => (int?)term.Id)
+            .FirstOrDefaultAsync(ct);
+        var inProgressRegistrations = activeTermId == null
+            ? new List<CourseRegistration>()
+            : await _context.CourseRegistrations
+                .AsNoTracking()
+                .Include(cr => cr.CourseSection)
+                    .ThenInclude(cs => cs.Course)
+                .Include(cr => cr.CourseSection)
+                    .ThenInclude(cs => cs.Term)
+                .Where(cr => cr.StudentId == student.Id
+                    && cr.CourseSection.TermId == activeTermId
+                    && cr.Grade == null
+                    && cr.Status != RegistrationStatus.Draft
+                    && cr.Status != RegistrationStatus.Dropped)
+                .ToListAsync(ct);
+
         var registrationIds = registrations.Select(registration => registration.Id).ToList();
         var courseIds = registrations
             .Select(registration => registration.CourseSection.CourseId)
+            .Concat(inProgressRegistrations.Select(registration => registration.CourseSection.CourseId))
             .Distinct()
             .ToList();
         var termIds = registrations
@@ -268,6 +292,32 @@ public class StudentTranscriptService : IStudentTranscriptService
         var totalGpaEcts = latestRegistrations.Sum(GpaMath.GetGpaEcts);
         var totalGpaPoints = latestRegistrations.Sum(GpaMath.GetWeightedEcts);
 
+        var inProgressCourses = inProgressRegistrations
+            .OrderBy(registration => registration.CourseSection.Course.Code)
+            .ThenBy(registration => registration.Id)
+            .Select(registration =>
+            {
+                var course = registration.CourseSection.Course;
+                var term = registration.CourseSection.Term;
+                return new StudentTranscriptInProgressCourseDto
+                {
+                    RegistrationId = registration.Id,
+                    CourseId = course.Id,
+                    CourseCode = course.Code,
+                    CourseName = course.Name,
+                    Credits = GpaMath.GetCredit(registration),
+                    Ects = GpaMath.GetEcts(registration),
+                    EquivalentCourseIds = equivalentCourseIdsByCourseId.TryGetValue(course.Id, out var equivalentIds)
+                        ? equivalentIds.OrderBy(id => id).ToList()
+                        : new List<int>(),
+                    TermId = term.Id,
+                    TermName = term.Name,
+                    Year = term.Year,
+                    Semester = term.TermType.ToString(),
+                };
+            })
+            .ToList();
+
         var transcript = new StudentTranscriptDto
         {
             StudentId = student.Id,
@@ -286,7 +336,8 @@ public class StudentTranscriptService : IStudentTranscriptService
             TotalEarnedEcts = latestRegistrations.Where(reg => GpaMath.IsPassedGrade(reg.Grade!.Value)).Sum(GpaMath.GetEcts),
             TotalGpaEcts = totalGpaEcts,
             TotalGpaPoints = Math.Round(totalGpaPoints, 2, MidpointRounding.AwayFromZero),
-            Terms = transcriptTerms
+            Terms = transcriptTerms,
+            InProgressCourses = inProgressCourses
         };
 
         return transcript;

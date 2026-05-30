@@ -3,6 +3,7 @@ import {
 } from '@/components/ui/table';
 import type { CatalogClassYear, CatalogCourseRow, CatalogSemester } from '@/types/registrationCatalog';
 import { CurriculumCourseRow } from './CurriculumCourseRow';
+import { REG_COL } from './registrationColumns';
 
 export type ParityFilter = 'Tumu' | 'Guz' | 'Bahar';
 
@@ -44,7 +45,7 @@ export function CurriculumCourseGrid({
 }: Props) {
   if (classYearData == null) {
     return (
-      <div className="px-3 py-6 text-center text-xs text-muted-foreground border-b border-slate-200">
+      <div className="px-3 py-6 text-center text-xs text-muted-foreground border-b">
         Sınıf seçin.
       </div>
     );
@@ -54,7 +55,7 @@ export function CurriculumCourseGrid({
 
   if (visibleSemesters.length === 0) {
     return (
-      <div className="px-3 py-6 text-center text-xs text-muted-foreground border-b border-slate-200">
+      <div className="px-3 py-6 text-center text-xs text-muted-foreground border-b">
         Bu dönemde ders bulunmuyor.
       </div>
     );
@@ -65,25 +66,35 @@ export function CurriculumCourseGrid({
   const allCourses = sortCourses(sorted.flatMap(s => s.courses));
 
   return (
-    <div className="border-b border-slate-200">
+    <div className="border-b">
+      {/* Section title strip — "Seçilen Dersler" ile simetrik */}
+      <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <span className="h-4 w-1 rounded-full bg-primary" />
+          Müfredat Dersleri
+        </h3>
+        <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {allCourses.length} ders
+        </span>
+      </div>
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="min-w-[900px] table-fixed">
           <TableHeader>
-            {/* Dark navy column headers */}
-            <TableRow className="border-b-0 bg-[#003366] hover:bg-[#003366]">
-              <TableHead className="h-8 w-10 px-2 text-[12px] font-semibold text-white" />
-              <TableHead className="h-8 w-28 px-2 text-[12px] font-semibold text-white">Ders Kodu</TableHead>
-              <TableHead className="h-8 px-2 text-[12px] font-semibold text-white">Ders Adı</TableHead>
-              <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">Z/S</TableHead>
-              <TableHead className="h-8 w-12 px-2 text-center text-[12px] font-semibold text-white">KRD</TableHead>
-              <TableHead className="h-8 w-14 px-2 text-center text-[12px] font-semibold text-white">AKTS</TableHead>
-              <TableHead className="hidden md:table-cell h-8 w-14 px-2 text-center text-[12px] font-semibold text-white">
+            <TableRow className="border-b bg-muted/60 hover:bg-muted/60">
+              <TableHead className="h-11 w-12 px-2 text-sm font-semibold" />
+              <TableHead className="h-11 w-32 px-2 text-sm font-semibold">Ders Kodu</TableHead>
+              <TableHead className={`h-11 ${REG_COL.name} px-3 text-sm font-semibold`}>Ders Adı</TableHead>
+              <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">Z/S</TableHead>
+              <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">T+U</TableHead>
+              <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">KRD</TableHead>
+              <TableHead className="h-11 w-16 px-2 text-center text-sm font-semibold">AKTS</TableHead>
+              <TableHead className="hidden md:table-cell h-11 w-16 px-2 text-center text-sm font-semibold">
                 Sınıf
               </TableHead>
-              <TableHead className="hidden lg:table-cell h-8 px-2 text-[12px] font-semibold text-white">
+              <TableHead className="hidden lg:table-cell h-11 px-3 text-center text-sm font-semibold">
                 Önceki Tekrar Durumu
               </TableHead>
-              <TableHead className="h-8 w-32 px-2 text-center text-[12px] font-semibold text-white">
+              <TableHead className="h-11 w-32 px-2 text-center text-sm font-semibold">
                 Aktif Kayıt Durumu
               </TableHead>
             </TableRow>

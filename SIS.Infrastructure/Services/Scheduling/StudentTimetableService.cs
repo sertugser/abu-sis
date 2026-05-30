@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.FacultyPlanning.DTOs;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Application.Scheduling.Services;
@@ -11,10 +13,12 @@ namespace SIS.Infrastructure.Services.Scheduling;
 public sealed class StudentTimetableService : IStudentTimetableService
 {
     private readonly AppDbContext _db;
+    private readonly ISystemConfigProvider _systemConfig;
 
-    public StudentTimetableService(AppDbContext db)
+    public StudentTimetableService(AppDbContext db, ISystemConfigProvider systemConfig)
     {
         _db = db;
+        _systemConfig = systemConfig;
     }
 
     public async Task<StudentTimetableDto> GetTimetableAsync(
@@ -23,6 +27,8 @@ public sealed class StudentTimetableService : IStudentTimetableService
         CancellationToken cancellationToken)
     {
         var effectiveTermId = termId ?? await ResolveDefaultTermIdAsync(studentId, cancellationToken);
+        var (lunchStart, lunchEnd) = await GetLunchBreakAsync(cancellationToken);
+        var slots = await GetTermSlotsAsync(effectiveTermId, cancellationToken);
 
         var student = await _db.Students
             .AsNoTracking()
@@ -43,7 +49,10 @@ public sealed class StudentTimetableService : IStudentTimetableService
                 StudentName: BuildStudentName(studentUser),
                 TermId: 0,
                 TermName: string.Empty,
-                Sections: new List<StudentTimetableSectionDto>());
+                Sections: new List<StudentTimetableSectionDto>(),
+                LunchBreakStart: lunchStart,
+                LunchBreakEnd: lunchEnd,
+                Slots: slots);
         }
 
         var registrations = await _db.CourseRegistrations
@@ -96,7 +105,48 @@ public sealed class StudentTimetableService : IStudentTimetableService
             StudentName: BuildStudentName(studentUser),
             TermId: term.Id,
             TermName: term.Name,
-            Sections: sections);
+            Sections: sections,
+            LunchBreakStart: lunchStart,
+            LunchBreakEnd: lunchEnd,
+            Slots: slots);
+    }
+
+    /// <summary>
+    /// Term'in tanımlı ders saati pencerelerini (distinct start-end) "HH:mm" olarak döner.
+    /// Takvim ızgarasının satır yapısı bundan kurulur (hardcoded saat yok).
+    /// </summary>
+    private async Task<List<TimetableSlotDto>> GetTermSlotsAsync(int termId, CancellationToken ct)
+    {
+        var raw = await _db.TimeSlots
+            .AsNoTracking()
+            .Where(ts => ts.TermId == termId)
+            .Select(ts => new { ts.StartTime, ts.EndTime })
+            .Distinct()
+            .ToListAsync(ct);
+
+        return raw
+            .OrderBy(s => s.StartTime)
+            .ThenBy(s => s.EndTime)
+            .Select(s => new TimetableSlotDto(s.StartTime.ToString("HH:mm"), s.EndTime.ToString("HH:mm")))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Sistem ayarından öğle arası penceresini okur (Schedule.LunchBreakStart/End),
+    /// "HH:mm" formatına normalize eder. Ayar yoksa Ankara Bilim varsayılanı 11:40-12:20.
+    /// </summary>
+    private async Task<(string Start, string End)> GetLunchBreakAsync(CancellationToken ct)
+    {
+        var startRaw = await _systemConfig.GetStringAsync("Schedule.LunchBreakStart", "11:40", ct);
+        var endRaw = await _systemConfig.GetStringAsync("Schedule.LunchBreakEnd", "12:20", ct);
+        return (NormalizeTime(startRaw, "11:40"), NormalizeTime(endRaw, "12:20"));
+    }
+
+    private static string NormalizeTime(string raw, string fallback)
+    {
+        return TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed.ToString("HH:mm", CultureInfo.InvariantCulture)
+            : fallback;
     }
 
     public async Task<List<StudentTimetableTermDto>> GetEnrolledTermsAsync(
@@ -129,8 +179,21 @@ public sealed class StudentTimetableService : IStudentTimetableService
     public async Task<byte[]> GeneratePdfAsync(int studentId, int termId, CancellationToken cancellationToken)
     {
         var data = await GetTimetableAsync(studentId, termId, cancellationToken);
-        var renderer = new Reports.StudentTimetablePdfRenderer();
-        return renderer.Render(data);
+        var model = new Reports.TimetablePdfData(
+            Title: "Öğrenci Ders Programı",
+            SubjectName: data.StudentName,
+            TermName: data.TermName,
+            Sections: data.Sections
+                .Select(s => new Reports.TimetablePdfSection(
+                    s.SectionNumber,
+                    s.CourseCode,
+                    s.Blocks
+                        .Select(b => new Reports.TimetablePdfBlock(
+                            b.Day, b.StartTime, b.EndTime, b.ClassroomName,
+                            b.BlockType == ScheduleBlockType.Lab))
+                        .ToList()))
+                .ToList());
+        return new Reports.TimetablePdfRenderer().Render(model);
     }
 
     private async Task<int> ResolveDefaultTermIdAsync(int studentId, CancellationToken cancellationToken)

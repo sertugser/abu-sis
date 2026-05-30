@@ -29,11 +29,11 @@ public class CourseHistoryPdfService : ICourseHistoryPdfService
         _clock = clock;
     }
 
-    public async Task<byte[]> GenerateAsync(int studentId, CancellationToken cancellationToken = default)
+    public async Task<byte[]> GenerateAsync(int studentId, int? termId = null, CancellationToken cancellationToken = default)
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
-        var report = await _registrationService.GetCourseHistoryReportAsync(studentId)
+        var report = await _registrationService.GetCourseHistoryReportAsync(studentId, termId)
             ?? throw new InvalidOperationException($"Öğrenci bulunamadı: {studentId}");
 
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(_clock.UtcNow, TurkeyTimeZone);

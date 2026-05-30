@@ -117,7 +117,7 @@ public class SectionPickerServiceTests
             CreatedAt = DateTime.UtcNow
         });
 
-        // Section B: Draft → gate blocks → IsEligible = false
+        // Section B: Draft → yayın öncesi GİZLİ (listede görünmez)
         ctx.CourseSections.Add(new CourseSection
         {
             Id = 2, CourseId = 10, TermId = 1, SectionNumber = 2,
@@ -145,8 +145,9 @@ public class SectionPickerServiceTests
             studentId: 42,
             new SectionPickerQuery(10, null, null, null, null, 1, 20));
 
-        result.TotalCount.Should().Be(3);
-        result.Items.Should().HaveCount(3);
+        // Draft (B) yayın öncesi gizlenir → yalnızca A + C listelenir.
+        result.TotalCount.Should().Be(2);
+        result.Items.Should().HaveCount(2);
         result.Page.Should().Be(1);
         result.PageSize.Should().Be(20);
 
@@ -155,10 +156,10 @@ public class SectionPickerServiceTests
         sectionA.IneligibleReason.Should().BeNull();
         sectionA.QuotaVisible.Should().BeTrue();
 
-        var sectionB = result.Items.Single(i => i.SectionId == 2);
-        sectionB.IsEligible.Should().BeFalse();
-        sectionB.IneligibleReason.Should().NotBeNullOrEmpty();
+        // Draft şube listede HİÇ görünmemeli (yayın öncesi gizli).
+        result.Items.Should().NotContain(i => i.SectionId == 2);
 
+        // Suspended şube görünür ama uygun değil (yayınlanmış, geçici kapalı).
         var sectionC = result.Items.Single(i => i.SectionId == 3);
         sectionC.IsEligible.Should().BeFalse();
         sectionC.IneligibleReason.Should().NotBeNullOrEmpty();

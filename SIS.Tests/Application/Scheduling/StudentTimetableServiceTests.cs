@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using SIS.Application.Common.Services;
 using SIS.Application.Scheduling.DTOs;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -32,7 +34,14 @@ public sealed class StudentTimetableServiceTests : IDisposable
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _db = new AppDbContext(options);
-        _sut = new StudentTimetableService(_db);
+
+        // Öğle arası configleri: mock fallback'i aynen döndürür → varsayılan 11:40-12:20.
+        var configMock = new Mock<ISystemConfigProvider>();
+        configMock
+            .Setup(c => c.GetStringAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string _, string fallback, CancellationToken _) => fallback);
+
+        _sut = new StudentTimetableService(_db, configMock.Object);
     }
 
     public void Dispose() => _db.Dispose();

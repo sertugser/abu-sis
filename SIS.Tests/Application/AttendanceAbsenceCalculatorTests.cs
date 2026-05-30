@@ -1,5 +1,6 @@
 using FluentAssertions;
 using SIS.Application.Grading;
+using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 
 namespace SIS.Tests.Application;
@@ -158,4 +159,97 @@ public sealed class AttendanceAbsenceCalculatorTests
         AttendanceMethodExtensions.ParseAttendanceMethod(input)
             .Should().Be(expected);
     }
+
+    // ── CalculateLimitHours (Math.Ceiling, strict-greater semantics) ─────────
+
+    [Theory]
+    [InlineData(42, 30, 13)]   // ceil(12.6) = 13
+    [InlineData(28, 20, 6)]    // ceil(5.6)  = 6
+    [InlineData(0, 30, 0)]     // sıfır toplam → sıfır limit
+    [InlineData(100, 0, 0)]    // sıfır yüzde → sıfır limit
+    [InlineData(70, 100, 70)]  // %100 → tam toplam
+    public void CalculateLimitHours_UsesCeiling(int totalHours, decimal percent, int expected)
+    {
+        AttendanceAbsenceCalculator.CalculateLimitHours(totalHours, percent)
+            .Should().Be(expected);
+    }
+
+    // ── CalculateAbsenceHours (slot projeksiyonu + teori/lab kovalama) ───────
+
+    [Fact]
+    public void CalculateAbsenceHours_AbsentRecord_CountsAllSlots_SplitByInferredBlock()
+    {
+        // theory=2, lab=1 → 3 slot; slot1-2 teori, slot3 lab (schedule yoksa çıkarım).
+        var records = new[] { Absent(totalSlotCount: 3) };
+
+        var (theory, lab) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
+            records, theoryHours: 2, labHours: 1, applicationHours: null, scheduleSlots: null);
+
+        theory.Should().Be(2);
+        lab.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateAbsenceHours_ApplicationHours_BucketedAsLab()
+    {
+        // theory=2, lab=0, application=1 → fallback slot sayısı 3; slot3 (teoriden büyük) Lab kovasına.
+        var records = new[] { Absent(totalSlotCount: 3) };
+
+        var (theory, lab) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
+            records, theoryHours: 2, labHours: 0, applicationHours: 1, scheduleSlots: null);
+
+        theory.Should().Be(2);
+        lab.Should().Be(1, "uygulama saatleri Lab kovasına yazılır");
+    }
+
+    [Fact]
+    public void CalculateAbsenceHours_PresentWithPartialSlots_CountsMissingOnly()
+    {
+        // 3 slotluk derste sadece 1. saate katılmış → 2 ve 3 devamsız (teori1 var, teori2 + lab eksik).
+        var records = new[] { Present(totalSlotCount: 3, presentCsv: "1") };
+
+        var (theory, lab) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
+            records, theoryHours: 2, labHours: 1, applicationHours: null, scheduleSlots: null);
+
+        theory.Should().Be(1, "2. teori saati eksik");
+        lab.Should().Be(1, "lab saati eksik");
+    }
+
+    [Theory]
+    [InlineData(AttendanceStatus.Late)]
+    [InlineData(AttendanceStatus.Excused)]
+    public void CalculateAbsenceHours_LateOrExcused_CountsZeroAbsence(AttendanceStatus status)
+    {
+        var records = new[] { new AttendanceRecord { Status = status, TotalSlotCount = 3 } };
+
+        var (theory, lab) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
+            records, theoryHours: 2, labHours: 1, applicationHours: null, scheduleSlots: null);
+
+        theory.Should().Be(0);
+        lab.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateAbsenceHours_UsesScheduleBlockType_WhenProvided()
+    {
+        // Schedule verilince blok tipi çıkarım yerine SectionSchedule'dan gelir.
+        var slots = new List<AttendanceAbsenceCalculator.AttendanceSlotInfo>
+        {
+            new(1, ScheduleBlockType.Lab),
+            new(2, ScheduleBlockType.Theory),
+        };
+        var records = new[] { Absent(totalSlotCount: 2) };
+
+        var (theory, lab) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
+            records, theoryHours: 1, labHours: 1, applicationHours: null, scheduleSlots: slots);
+
+        theory.Should().Be(1);
+        lab.Should().Be(1);
+    }
+
+    private static AttendanceRecord Absent(int totalSlotCount) =>
+        new() { Status = AttendanceStatus.Absent, TotalSlotCount = totalSlotCount };
+
+    private static AttendanceRecord Present(int totalSlotCount, string presentCsv) =>
+        new() { Status = AttendanceStatus.Present, TotalSlotCount = totalSlotCount, PresentSlotNumbersCsv = presentCsv };
 }

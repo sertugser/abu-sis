@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIS.Application.Admin.DTOs;
 using SIS.Application.Admin.Services;
+using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
 using SIS.Application.Scheduling.Services;
 using SIS.Domain.Entities;
@@ -14,15 +15,18 @@ public class AdminTermService : IAdminTermService
     private readonly AppDbContext _context;
     private readonly ITimeSlotService _timeSlotService;
     private readonly IDateTimeProvider _clock;
+    private readonly ISystemConfigProvider? _config;
 
     public AdminTermService(
         AppDbContext context,
         ITimeSlotService timeSlotService,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        ISystemConfigProvider? config = null)
     {
         _context = context;
         _timeSlotService = timeSlotService;
         _clock = clock;
+        _config = config;
     }
 
     public async Task<List<AdminTermDto>> GetAllTermsAsync()
@@ -90,10 +94,43 @@ public class AdminTermService : IAdminTermService
         _context.AcademicTerms.Add(term);
         await _context.SaveChangesAsync();
 
+        // Devamsızlık politikasını o anki global varsayılandan döneme snapshot'la (dönem geneli).
+        // Böylece dönem kendi limitini taşır; global sonradan değişse de bu dönem etkilenmez (donar).
+        await SnapshotAttendancePolicyAsync(term.Id);
+
         // TimeSlot grid'i oluşturuluyor — admin yeni term yarattıktan sonra hemen section atama yapabilsin
         await _timeSlotService.GenerateTimeSlotsForTermAsync(term.Id);
 
         return ToDto(term);
+    }
+
+    /// <summary>
+    /// Yeni döneme, o anki global devamsızlık ayarlarından bir "dönem geneli" (ProgramId == null)
+    /// politika satırı yazar. Zaten varsa dokunmaz (idempotent).
+    /// </summary>
+    private async Task SnapshotAttendancePolicyAsync(int termId)
+    {
+        var exists = await _context.TermAttendancePolicies
+            .AnyAsync(p => p.TermId == termId && p.ProgramId == null);
+        if (exists)
+            return;
+
+        var weekCount = _config != null ? await _config.GetIntAsync("Attendance.TermWeekCount", 14) : 14;
+        var theory = _config != null ? await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m) : 30m;
+        var lab = _config != null ? await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m) : 20m;
+        var method = _config != null ? await _config.GetStringAsync("Attendance.Method", "Separate") : "Separate";
+
+        _context.TermAttendancePolicies.Add(new TermAttendancePolicy
+        {
+            TermId = termId,
+            ProgramId = null,
+            TermWeekCount = Math.Clamp(weekCount, 1, 52),
+            TheoryAbsenceLimitPercent = theory,
+            LabAbsenceLimitPercent = lab,
+            Method = string.IsNullOrWhiteSpace(method) ? "Separate" : method.Trim(),
+            CreatedAt = _clock.UtcNow
+        });
+        await _context.SaveChangesAsync();
     }
 
     public async Task<AdminTermDto> UpdateTermAsync(int id, UpdateTermDto dto)

@@ -197,14 +197,14 @@ public sealed class OpenedDepartmentCourseServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         await AddCourseAsync(200, "CENG 446", "Deep Learning", departmentId: cengDeptId);
-        await AddCurriculumCourseAsync(200, suggestedSemester: 7, isCompulsory: false);
+        await AddCurriculumCourseAsync(200, suggestedSemester: 8, isCompulsory: false);
         await AddSectionAsync(2000, 200);
 
         var result = await BuildService().GetForStudentAsync(UserId);
 
         result.Items.Should().HaveCount(1);
         result.Items[0].CourseCode.Should().Be("CENG 446");
-        result.Items[0].ClassYear.Should().Be(4); // semester 7 → year 4
+        result.Items[0].ClassYear.Should().Be(4); // semester 8 → year 4
         result.Items[0].IsCompulsory.Should().BeFalse();
     }
 
@@ -225,9 +225,10 @@ public sealed class OpenedDepartmentCourseServiceTests : IDisposable
     [Fact]
     public async Task GetForStudent_HidesEnrollmentSuspendedSections()
     {
+        // Default seed Bahar — sem=4 (parity uyumlu) seç ki gerçekten suspended bayrağı test edilsin
         await SeedBaseAsync();
         await AddCourseAsync(400, "ISE 222", "Data Intelligence");
-        await AddCurriculumCourseAsync(400, suggestedSemester: 3);
+        await AddCurriculumCourseAsync(400, suggestedSemester: 4);
         await AddSectionAsync(4000, 400, suspended: true);
 
         var result = await BuildService().GetForStudentAsync(UserId);
@@ -239,9 +240,10 @@ public sealed class OpenedDepartmentCourseServiceTests : IDisposable
     [Fact]
     public async Task GetForStudent_HidesDraftAndCancelledSections()
     {
+        // sem=6 (Bahar uyumlu) — parity engellemesin, gerçek Status filtresi test edilsin
         await SeedBaseAsync();
         await AddCourseAsync(500, "ISE 350", "Data Warehousing and Mining");
-        await AddCurriculumCourseAsync(500, suggestedSemester: 5);
+        await AddCurriculumCourseAsync(500, suggestedSemester: 6);
         await AddSectionAsync(5000, 500, status: CourseSectionStatus.Draft);
         await AddSectionAsync(5001, 500, sectionNumber: 2, status: CourseSectionStatus.Cancelled);
 
@@ -262,6 +264,36 @@ public sealed class OpenedDepartmentCourseServiceTests : IDisposable
         var result = await BuildService().GetForStudentAsync(UserId);
 
         result.Items.Should().BeEmpty(); // müfredat tabanlı filtre
+    }
+
+    // ── Cross-semester (admin'in section açma kararı parity'yi ezer) ─────
+
+    [Fact]
+    public async Task GetForStudent_IncludesCrossSemesterCoursesAdminOpenedInActiveTerm()
+    {
+        // Default seed → TermType=Spring (Bahar)
+        await SeedBaseAsync();
+
+        // Güz dersi (sem=1) Bahar'da açılmış (tekrar/bütünleme) — görünmeli
+        await AddCourseAsync(800, "BIO101", "Molecular Biology");
+        await AddCurriculumCourseAsync(800, suggestedSemester: 1);
+        await AddSectionAsync(8000, 800);
+
+        // Bahar dersi (sem=2) — görünmeli
+        await AddCourseAsync(801, "MATH102", "Calculus II");
+        await AddCurriculumCourseAsync(801, suggestedSemester: 2);
+        await AddSectionAsync(8001, 801);
+
+        // SuggestedSemester=0 (parity belirsiz) — görünmeli
+        await AddCourseAsync(802, "FREE101", "Açma kuralı belirsiz ders");
+        await AddCurriculumCourseAsync(802, suggestedSemester: 0);
+        await AddSectionAsync(8002, 802);
+
+        var result = await BuildService().GetForStudentAsync(UserId);
+
+        result.Items.Should().HaveCount(3);
+        result.Items.Select(i => i.CourseCode).Should().BeEquivalentTo(
+            new[] { "BIO101", "MATH102", "FREE101" });
     }
 
     [Fact]
