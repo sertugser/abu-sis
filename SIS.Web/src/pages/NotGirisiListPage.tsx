@@ -1,0 +1,451 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, FolderOpen, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { useInstructorSections } from '../hooks/useInstructorSections';
+import { useExamsOverview } from '../hooks/useGradeData';
+import type { InstructorSection } from '../api/instructor.api';
+import type { ExamOverviewRow, ExamOverviewComponent } from '../types/grade';
+import { ROUTES } from '../lib/constants';
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+function formatExamDate(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function matchesSearch(code: string, name: string, q: string): boolean {
+  const lower = q.toLowerCase();
+  return `${code} ${name}`.toLowerCase().includes(lower);
+}
+
+// ── section list view (default) ────────────────────────────────────────────────
+
+interface SectionListProps {
+  sections: InstructorSection[];
+  totalCount: number;
+  isLoading: boolean;
+  isError: boolean;
+  onRowClick: (sectionId: number) => void;
+}
+
+function SectionList({ sections, totalCount, isLoading, isError, onRowClick }: SectionListProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-2 p-4">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-destructive">
+        Ders verileri yüklenemedi.
+      </div>
+    );
+  }
+
+  if (sections.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+        <FolderOpen className="mb-3 h-10 w-10 text-muted-foreground/30" />
+        <p className="text-sm font-medium text-muted-foreground">
+          {totalCount === 0
+            ? 'Bu dönem size atanmış ders bulunmamaktadır.'
+            : 'Filtreye uyan ders bulunamadı.'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <table className="w-full min-w-[560px]">
+      <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
+        <tr>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Şb.
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ders Kodu
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ders Adı
+          </th>
+          <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            AKTS
+          </th>
+          <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Öğrenci
+          </th>
+          <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Durum
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border/80">
+        {sections.map((s: InstructorSection) => (
+          <tr
+            key={s.sectionId}
+            className="cursor-pointer transition-colors hover:bg-primary/5"
+            onClick={() => onRowClick(s.sectionId)}
+          >
+            <td className="px-4 py-3 text-sm text-muted-foreground">{s.sectionNumber}</td>
+            <td className="px-4 py-3">
+              <span className="font-mono text-sm font-semibold text-primary">{s.courseCode}</span>
+            </td>
+            <td className="px-4 py-3 text-sm font-medium">{s.courseName}</td>
+            <td className="px-4 py-3 text-center text-sm">{s.ects}</td>
+            <td className="px-4 py-3 text-center text-sm">{s.enrolledCount}</td>
+            <td className="px-4 py-3 text-center">
+              <Badge
+                variant="outline"
+                className={
+                  s.isFinalized
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-slate-50 text-slate-600 border-slate-200'
+                }
+              >
+                {s.isFinalized ? 'Sonuçlandı' : 'Bekliyor'}
+              </Badge>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ── exam overview view ─────────────────────────────────────────────────────────
+
+interface ExamOverviewListProps {
+  rows: ExamOverviewRow[];
+  isLoading: boolean;
+  isError: boolean;
+  onRowClick: (sectionId: number) => void;
+}
+
+function ExamOverviewList({ rows, isLoading, isError, onRowClick }: ExamOverviewListProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-2 p-4">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-destructive">
+        Sınav verileri yüklenemedi.
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+        <FolderOpen className="mb-3 h-10 w-10 text-muted-foreground/30" />
+        <p className="text-sm font-medium text-muted-foreground">
+          Filtreye uyan sınav bulunamadı.
+        </p>
+      </div>
+    );
+  }
+
+  // Expand each row into display rows — one per component, or one placeholder if empty
+  type DisplayRow = {
+    key: string;
+    sectionId: number;
+    sectionNumber: number;
+    courseCode: string;
+    courseName: string;
+    isFinalized: boolean;
+    component: ExamOverviewComponent | null;
+  };
+
+  const displayRows: DisplayRow[] = [];
+
+  for (const row of rows) {
+    if (row.components.length === 0) {
+      displayRows.push({
+        key: `${row.sectionId}-none`,
+        sectionId: row.sectionId,
+        sectionNumber: row.sectionNumber,
+        courseCode: row.courseCode,
+        courseName: row.courseName,
+        isFinalized: row.isFinalized,
+        component: null,
+      });
+    } else {
+      for (const comp of row.components) {
+        displayRows.push({
+          key: `${row.sectionId}-${comp.id}`,
+          sectionId: row.sectionId,
+          sectionNumber: row.sectionNumber,
+          courseCode: row.courseCode,
+          courseName: row.courseName,
+          isFinalized: row.isFinalized,
+          component: comp,
+        });
+      }
+    }
+  }
+
+  return (
+    <table className="w-full min-w-[700px]">
+      <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
+        <tr>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Şb.
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ders Kodu
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ders Adı
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Sınav Adı
+          </th>
+          <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Etki Oranı
+          </th>
+          <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Durum
+          </th>
+          <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Tarih
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border/80">
+        {displayRows.map((dr) => {
+          const { component } = dr;
+
+          let statusBadge: React.ReactNode;
+          if (component === null) {
+            statusBadge = (
+              <Badge
+                variant="outline"
+                className="bg-slate-50 text-slate-500 border-slate-200 italic"
+              >
+                Sınav Tanımlı Değil
+              </Badge>
+            );
+          } else if (dr.isFinalized) {
+            statusBadge = (
+              <Badge
+                variant="outline"
+                className="bg-emerald-50 text-emerald-700 border-emerald-200"
+              >
+                Sonuçlandırıldı
+              </Badge>
+            );
+          } else if (component.publishedAt !== null) {
+            statusBadge = (
+              <Badge
+                variant="outline"
+                className="bg-blue-50 text-blue-700 border-blue-200"
+              >
+                İlan Edildi
+              </Badge>
+            );
+          } else {
+            statusBadge = (
+              <Badge
+                variant="outline"
+                className="bg-slate-50 text-slate-600 border-slate-200"
+              >
+                Bekliyor
+              </Badge>
+            );
+          }
+
+          return (
+            <tr
+              key={dr.key}
+              className="cursor-pointer transition-colors hover:bg-primary/5"
+              onClick={() => onRowClick(dr.sectionId)}
+            >
+              <td className="px-4 py-3 text-sm text-muted-foreground">{dr.sectionNumber}</td>
+              <td className="px-4 py-3">
+                <span className="font-mono text-sm font-semibold text-primary">
+                  {dr.courseCode}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-sm font-medium">{dr.courseName}</td>
+              <td className="px-4 py-3 text-sm">
+                {component !== null ? (
+                  component.name
+                ) : (
+                  <span className="text-muted-foreground italic">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-center text-sm">
+                {component !== null ? `%${component.weight}` : '—'}
+              </td>
+              <td className="px-4 py-3 text-center">{statusBadge}</td>
+              <td className="px-4 py-3 text-sm whitespace-nowrap">
+                {component !== null ? formatExamDate(component.examDate) : '—'}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+// ── main page ──────────────────────────────────────────────────────────────────
+
+export default function NotGirisiListPage() {
+  const navigate = useNavigate();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showUnfinalized, setShowUnfinalized] = useState(false);
+  const [showAllExams, setShowAllExams] = useState(false);
+
+  const sectionsQuery = useInstructorSections();
+  const overviewQuery = useExamsOverview();
+
+  const handleRowClick = (sectionId: number) => {
+    navigate(`${ROUTES.GRADE_ENTRY}/${sectionId}`);
+  };
+
+  // ── section list mode (default) ────────────────────────
+
+  const allSections = sectionsQuery.data?.sections ?? [];
+
+  const filteredSections = allSections.filter((s) => {
+    if (searchTerm.trim() && !matchesSearch(s.courseCode, s.courseName, searchTerm)) {
+      return false;
+    }
+    if (showUnfinalized && s.isFinalized) {
+      return false;
+    }
+    return true;
+  });
+
+  // ── exam overview mode ─────────────────────────────────
+
+  const allOverviewRows = overviewQuery.data ?? [];
+
+  const filteredOverviewRows = allOverviewRows.filter((r) => {
+    if (searchTerm.trim() && !matchesSearch(r.courseCode, r.courseName, searchTerm)) {
+      return false;
+    }
+    if (showUnfinalized && r.isFinalized) {
+      return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      {/* ── Toolbar / filters ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Ders kodu veya ders adı ile ara…"
+            className="pl-9 text-[15px]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-unfinalized"
+            checked={showUnfinalized}
+            onCheckedChange={setShowUnfinalized}
+          />
+          <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
+            Sonuçlanmayan Dersleri Göster
+          </Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-all-exams"
+            checked={showAllExams}
+            onCheckedChange={setShowAllExams}
+          />
+          <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
+            Tüm Sınavları Göster
+          </Label>
+        </div>
+      </div>
+
+      {/* ── Content card ── */}
+      <Card className="flex flex-col overflow-hidden">
+        <div className="flex items-center gap-3 border-b border-border/80 bg-muted/20 px-5 py-3">
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-semibold">
+              {showAllExams ? 'Sınav Listesi' : 'Derslerim'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {showAllExams
+                ? 'Not girişi yapmak için bir sınava tıklayın'
+                : 'Not girişi yapmak için bir derse tıklayın'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col overflow-auto">
+          {showAllExams ? (
+            <ExamOverviewList
+              rows={filteredOverviewRows}
+              isLoading={overviewQuery.isLoading}
+              isError={overviewQuery.isError}
+              onRowClick={handleRowClick}
+            />
+          ) : (
+            <SectionList
+              sections={filteredSections}
+              totalCount={allSections.length}
+              isLoading={sectionsQuery.isLoading}
+              isError={sectionsQuery.isError}
+              onRowClick={handleRowClick}
+            />
+          )}
+        </div>
+      </Card>
+
+      {/* ── Sınav Tanımlama hint (when in overview mode) ── */}
+      {showAllExams && (
+        <p className="text-xs text-muted-foreground">
+          Sınav eklemek veya düzenlemek için{' '}
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={() => navigate(ROUTES.SINAV_TANIMLAMA)}
+          >
+            Sınav Tanımlama
+          </Button>{' '}
+          sayfasını kullanın.
+        </p>
+      )}
+    </div>
+  );
+}
