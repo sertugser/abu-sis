@@ -5,17 +5,26 @@ export interface OpenedDepartmentCourseItem {
   sectionNumber: number;     // Şb
   courseCode: string;        // Ders Kodu
   courseName: string;        // Ders Adı
-  classYear: number | null;  // Sınıf (1-4); müfredat dışıysa null
+  classYear: number;         // Sınıf (1-4) — fallback ile her zaman dolu
   applicationHours: number;  // U
   labHours: number;          // L
   theoryHours: number;       // T
+  isCompulsory: boolean;     // Z (true=Zorunlu, false=Seçmeli)
   nationalCredit: number;    // KRD
   ects: number;              // AKTS
 }
 
+export type OpenedDepartmentCoursesEmptyReason =
+  | 'None'
+  | 'StudentNotFound'
+  | 'NoMainProgram'
+  | 'NoActiveTerm'
+  | 'Empty';
+
 export interface OpenedDepartmentCourses {
   termLabel: string | null;
   departmentName: string | null;
+  emptyReason: OpenedDepartmentCoursesEmptyReason;
   items: OpenedDepartmentCourseItem[];
 }
 

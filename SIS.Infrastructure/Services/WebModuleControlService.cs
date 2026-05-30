@@ -95,7 +95,7 @@ public class WebModuleControlService : IWebModuleControlService
 
         var selectedMode = NormalizeMode(
             definition,
-            await _settingsProvider.GetStringAsync(definition.SettingModuleKey, definition.ModeKey, definition.Options[0].Code, ct));
+            await _settingsProvider.GetStringAsync(definition.SettingModuleKey, definition.ModeKey, ResolveFallbackMode(definition), ct));
         var announcement = await _settingsProvider.GetStringAsync(definition.SettingModuleKey, definition.AnnouncementKey, string.Empty, ct);
 
         AcademicTerm? term = termId.HasValue
@@ -181,13 +181,14 @@ public class WebModuleControlService : IWebModuleControlService
                 "Aktif dönemin akademik takvimi tanımlı olmadığı için not girişi modülü açılamıyor.",
                 "Not girişi süreci şu anda not giriş süre tanımlarında açık değil."),
 
+            // Bilinmeyen/tanımsız mod → fail-closed (whitelist): açık değil.
             _ => new WebModuleAccessResult(
-                IsEnabled: true,
-                IsOpen: true,
+                IsEnabled: false,
+                IsOpen: false,
                 SelectedMode: selectedOption.Code,
                 SelectedModeLabel: selectedOption.Label,
-                EffectiveStateLabel: "Açık",
-                Message: null),
+                EffectiveStateLabel: "Kapalı",
+                Message: $"{definition.Title} modülü için geçerli bir kontrol modu tanımlı değil."),
         };
 
         if (selectedMode == WebModuleControlModes.TermEventBased
@@ -251,13 +252,14 @@ public class WebModuleControlService : IWebModuleControlService
             "social-transcript-application-evaluation" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Sosyal transkript değerlendirme akışı şu anda açık değil.", now),
             "social-transcript-student-objection" => EvaluatePublicationEvent(term, CalendarEventType.FinalGradePublication, selectedOption, announcement, "Sosyal transkript itiraz akışı şu anda açık değil.", now),
             "registration-freeze-application" => EvaluateDeadlineWindow(term, CalendarEventType.RegistrationFreezeDeadline, selectedOption, announcement, "Kayıt dondurma başvuru penceresi şu anda açık değil.", now),
+            // Takvim olayına eşlenmemiş tanım → fail-closed: açık değil.
             _ => new WebModuleAccessResult(
-                IsEnabled: true,
-                IsOpen: true,
+                IsEnabled: false,
+                IsOpen: false,
                 SelectedMode: selectedOption.Code,
                 SelectedModeLabel: selectedOption.Label,
-                EffectiveStateLabel: "Açık",
-                Message: null),
+                EffectiveStateLabel: "Kapalı",
+                Message: ResolveMessage(announcement, $"{definition.Title} için takvim olayı tanımlı değil.")),
         };
 
         return Task.FromResult(access);
@@ -490,16 +492,13 @@ public class WebModuleControlService : IWebModuleControlService
 
     private async Task<AcademicTerm?> LoadActiveTermAsync(CancellationToken ct)
     {
-        var now = _clock.UtcNow;
-        var terms = await _context.AcademicTerms
+        // Tek kaynak: AcademicTerms.ActiveTerm() extension (CLAUDE.md değişmezi).
+        return await _context.AcademicTerms
             .AsNoTracking()
             .Include(term => term.AcademicCalendar)
             .Include(term => term.CalendarEvents)
-            .Where(term => !term.IsCancelled)
-            .OrderByDescending(term => term.TermStart)
-            .ToListAsync(ct);
-
-        return terms.FirstOrDefault(term => term.IsActive(now));
+            .ActiveTerm()
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task<AcademicTerm?> LoadTermAsync(int termId, CancellationToken ct)
@@ -521,7 +520,28 @@ public class WebModuleControlService : IWebModuleControlService
                 return match.Code;
         }
 
-        return definition.Options[0].Code;
+        return ResolveFallbackMode(definition);
+    }
+
+    /// <summary>
+    /// Ayar eksik veya süresi dolmuşsa kullanılacak GÜVENLİ varsayılan mod.
+    /// Asla "Açık"a fail-open olmaz: takvime/olaya bağlı mod varsa onu, yoksa "Kapalı" döner.
+    /// (Karar: eksik/süresi dolmuş kayıt modülü → akademik takvime bağlı davranır.)
+    /// </summary>
+    private static string ResolveFallbackMode(WebModuleControlDefinition definition)
+    {
+        var calendarBound = definition.Options.FirstOrDefault(option =>
+            option.Code is WebModuleControlModes.AcademicCalendarRegistration
+                or WebModuleControlModes.AcademicCalendarAddDrop
+                or WebModuleControlModes.AcademicCalendarWithdrawal
+                or WebModuleControlModes.GradeEntryPeriod
+                or WebModuleControlModes.TermEventBased);
+        if (calendarBound is not null)
+            return calendarBound.Code;
+
+        var closed = definition.Options.FirstOrDefault(option =>
+            option.Code == WebModuleControlModes.Closed);
+        return closed?.Code ?? definition.Options[0].Code;
     }
 
     private static string? ResolveMessage(string? preferred, string fallback)

@@ -16,6 +16,23 @@ export interface StudentTranscriptDto {
   totalGpaEcts: number;
   totalGpaPoints: number;
   terms: StudentTranscriptTermDto[];
+  // Aktif dönemde kayıtlı olup henüz notu girilmemiş dersler. Resmî transkript bunları
+  // göstermez; Transkript Senaryosu düzenlenebilir "projeksiyon" satırı olarak ekler.
+  inProgressCourses: StudentTranscriptInProgressCourseDto[];
+}
+
+export interface StudentTranscriptInProgressCourseDto {
+  registrationId: number;
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  credits: number;
+  ects: number;
+  equivalentCourseIds: number[];
+  termId: number;
+  termName: string;
+  year: number;
+  semester: string;
 }
 
 export interface StudentTranscriptTermDto {

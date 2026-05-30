@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,7 +40,6 @@ import {
   areScenarioCoursesEqual,
   buildInitialScenarioCourses,
   buildScenarioTerms,
-  calculateScenarioReport,
   createScenarioId,
   formatGradeOptionLabel,
   getGradeMeta,
@@ -47,10 +47,15 @@ import {
   normalizeGrade,
   round2,
   type ScenarioCourse,
-  type ScenarioComputedCourse,
   type ScenarioGrade,
-  type ScenarioTermReport,
 } from '../lib/transcriptScenario';
+import { calculateTranscriptScenario } from '../api/student.api';
+import type {
+  ScenarioComputedCourse,
+  ScenarioCourseInput,
+  ScenarioTermReport,
+  TranscriptScenarioRequest,
+} from '../types/transcriptScenario';
 import type { CurriculumCourseStatusDto, CurriculumStatusDto } from '../types/curriculum';
 
 interface ScenarioCourseDraft {
@@ -64,7 +69,8 @@ interface ScenarioCourseDraft {
   ects: string;
   equivalentCourseIds: number[];
   averageScore: string;
-  grade: ScenarioGrade;
+  // '' = not henüz seçilmedi → ortalamaya katılmaz.
+  grade: ScenarioGrade | '';
   originalGrade: ScenarioGrade | null;
   excludeFromAverage: boolean;
   continuationCourseId: string;
@@ -111,6 +117,28 @@ export default function TranscriptScenarioPage() {
     setScenarioCourses(buildInitialScenarioCourses(transcript));
   }
 
+  // Senaryo hesabı backend'de TEK kaynaktan yapılır (GradePointMap + GpaMath). Her
+  // düzenlemede istek yenilenir; keepPreviousData ile ekran titremez.
+  const scenarioRequest: TranscriptScenarioRequest | null = scenarioCourses
+    ? {
+        terms: terms.map(term => ({
+          termId: term.termId,
+          termName: term.termName,
+          year: term.year,
+          semester: term.semester,
+          order: term.order,
+        })),
+        courses: scenarioCourses.map(toScenarioCourseInput),
+      }
+    : null;
+
+  const scenarioReportQuery = useQuery({
+    queryKey: ['transcriptScenario', scenarioRequest],
+    queryFn: () => calculateTranscriptScenario(scenarioRequest!),
+    enabled: scenarioRequest !== null && terms.length > 0,
+    placeholderData: keepPreviousData,
+  });
+
   if (transcriptQuery.isLoading || studentQuery.isLoading || (transcript && scenarioCourses === null)) {
     return <TranscriptScenarioLoadingState />;
   }
@@ -127,9 +155,26 @@ export default function TranscriptScenarioPage() {
     );
   }
 
-  const scenarioReport = calculateScenarioReport(terms, scenarioCourses);
+  const scenarioReport = scenarioReportQuery.data;
+  if (scenarioReportQuery.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Senaryo hesaplanamadı</AlertTitle>
+        <AlertDescription>
+          Senaryo ortalaması hesaplanırken bir hata oluştu. Lütfen tekrar deneyin.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (!scenarioReport) {
+    return <TranscriptScenarioLoadingState />;
+  }
+
   const hasScenarioChanges = !areScenarioCoursesEqual(scenarioCourses, initialCourses);
-  const scenarioDelta = round2(scenarioReport.currentCgpa - transcript.currentCgpa);
+  const scenarioDelta = scenarioReport.currentCgpa == null
+    ? null
+    : round2(scenarioReport.currentCgpa - transcript.currentCgpa);
   const plannedFutureCourses = curriculumStatus
     ? buildPlannedFutureCourses(curriculumStatus, scenarioCourses)
     : [];
@@ -163,7 +208,7 @@ export default function TranscriptScenarioPage() {
       ects: '5',
       equivalentCourseIds: [],
       averageScore: '',
-      grade: 'BB',
+      grade: '',
       originalGrade: null,
       excludeFromAverage: false,
       continuationCourseId: SELF_CONTINUATION,
@@ -187,7 +232,7 @@ export default function TranscriptScenarioPage() {
       ects: String(course.ects),
       equivalentCourseIds: [],
       averageScore: '',
-      grade: 'BB',
+      grade: '',
       originalGrade: null,
       excludeFromAverage: false,
       continuationCourseId: SELF_CONTINUATION,
@@ -196,6 +241,15 @@ export default function TranscriptScenarioPage() {
       wasRepeated: false,
       sortOrder: getNextSortOrder(scenarioCourses),
     });
+  };
+
+  // Satır backend'in hesapladığı (computed) veriyi gösterir; DÜZENLEME ise her zaman
+  // yerel girdi state'inden (scenarioCourses) okunur — tek kaynak ayrımı korunur.
+  const handleEditByScenarioId = (scenarioId: string) => {
+    const course = scenarioCourses?.find(item => item.scenarioId === scenarioId);
+    if (course) {
+      handleEditCourse(course);
+    }
   };
 
   const handleEditCourse = (course: ScenarioCourse) => {
@@ -328,72 +382,80 @@ export default function TranscriptScenarioPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-[#d14b51] px-5 py-4 text-white shadow-[0_18px_40px_rgba(209,75,81,0.24)]">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
-            <div className="font-heading text-xl font-extrabold">Bilgi Notu</div>
-            <p className="max-w-5xl text-sm leading-6 text-white/95">
+      <Card className="overflow-hidden border border-[#003366]/15 shadow-[0_10px_28px_rgba(15,23,42,0.10)]">
+        {/* ── İnce kırmızı bilgi şeridi (Proliz tarzı) + sağda AGNO özeti ── */}
+        <div className="flex flex-col gap-3 bg-[#d14b51] px-4 py-2.5 text-white lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[12.5px] leading-snug">
+              <span className="font-bold">Bilgi Notu</span>{' '}
               Bu ekrandaki işlemler sistem üzerinde herhangi bir değişiklik yapılmadan, sadece bilgilendirme amaçlı
               olarak yapılmaktadır. Veriler üzerinde herhangi bir etkisi yoktur. Gerçek not ortalamanızı transkript
               üzerinden kontrol ediniz.
             </p>
-            <div className="text-sm font-medium text-white/90">
-              Ortalama hesapları AKTS ağırlığına göre ve aynı dersin son denemesi esas alınarak yapılmaktadır.
-            </div>
+            <p className="mt-1 text-[12px] text-white/85">
+              Ortalamalar AKTS ağırlığına ve aynı dersin son denemesine göre hesaplanır. Aktif dönemde kayıtlı, notu
+              henüz girilmemiş dersler "Projeksiyon" etiketiyle eklenir; harf seçtikçe ortalama güncellenir.
+            </p>
           </div>
 
-          <div className="rounded-xl bg-white/10 px-4 py-3 text-sm">
-            <div className="font-semibold">Gerçek AGNO: {formatNumber(transcript.currentCgpa)}</div>
-            <div className="mt-1 font-semibold">Senaryo AGNO: {formatNumber(scenarioReport.currentCgpa)}</div>
-            <div className={cn('mt-1 font-semibold', scenarioDelta >= 0 ? 'text-emerald-100' : 'text-rose-100')}>
-              Fark: {scenarioDelta >= 0 ? '+' : ''}{formatNumber(scenarioDelta)}
+          {/* AGNO özeti — kompakt, kırmızı şeridin sağında (eski sade ayrı görünüm) */}
+          <div className="flex shrink-0 items-center gap-4 rounded-lg bg-white/10 px-3.5 py-2 text-[13px]">
+            <div className="text-center">
+              <div className="text-[10px] uppercase tracking-wide text-white/70">Gerçek</div>
+              <div className="font-bold tabular-nums">{formatNumber(transcript.currentCgpa)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] uppercase tracking-wide text-white/70">Senaryo</div>
+              <div className="font-bold tabular-nums">{formatNumber(scenarioReport.currentCgpa)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-[10px] uppercase tracking-wide text-white/70">Fark</div>
+              <div className={cn('font-bold tabular-nums', scenarioDelta == null ? 'text-white/80' : scenarioDelta >= 0 ? 'text-emerald-100' : 'text-rose-100')}>
+                {scenarioDelta == null ? '—' : `${scenarioDelta >= 0 ? '+' : ''}${formatNumber(scenarioDelta)}`}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <Card className="border border-[#003366]/15 shadow-[0_18px_36px_rgba(15,23,42,0.08)]">
-        <CardContent className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <ScenarioInfoRow label="Adı Soyadı" value={transcript.fullName} />
-            <ScenarioInfoRow label="Fakülte" value={transcript.facultyName} />
-            <ScenarioInfoRow label="Öğrenci No" value={transcript.studentNumber} />
-            <ScenarioInfoRow label="Program" value={transcript.programName} />
-            <ScenarioInfoRow label="Kayıt Tarihi" value={formatDate(transcript.enrollmentDate)} />
-            <ScenarioInfoRow label="Danışmanı" value={advisorName} />
-            <ScenarioInfoRow label="Hesaplanan Genel Ort." value={formatNumber(scenarioReport.currentCgpa)} emphasize />
-            <ScenarioInfoRow label="Durum" value={STUDENT_STATUS_LABELS[transcript.studentStatus] || transcript.studentStatus} />
-            <ScenarioInfoRow label="Toplam Geçilen AKTS" value={String(scenarioReport.totalEarnedEcts)} />
-          </div>
+        {/* ── Öğrenci bilgileri + aksiyonlar: TEK grid, her satır hizalı (bilgi satırı ↔ buton) ── */}
+        <CardContent className="grid items-center gap-x-8 gap-y-3.5 p-5 text-[13px] lg:grid-cols-[repeat(3,minmax(0,1fr))_240px]">
+          {/* Satır 1 */}
+          <ScenarioInfoRow label="Adı Soyadı" value={transcript.fullName} />
+          <ScenarioInfoRow label="Fakülte" value={transcript.facultyName} />
+          <ScenarioInfoRow label="Öğrenci No" value={transcript.studentNumber} />
+          <Button type="button" variant="outline" size="sm" className="w-full lg:border-l-0" onClick={handleReset} disabled={!hasScenarioChanges}>
+            <RefreshCcw className="h-4 w-4" />
+            Başlangıç Durumuna Getir
+          </Button>
 
-          <div className="flex flex-col gap-3">
-            <Button type="button" variant="outline" onClick={handleReset} disabled={!hasScenarioChanges}>
-              <RefreshCcw className="h-4 w-4" />
-              Başlangıç Durumuna Getir
-            </Button>
-            <Button
-              type="button"
-              variant={showFutureCourses ? 'default' : 'outline'}
-              onClick={() => setShowFutureCourses(value => !value)}
-              disabled={curriculumStatusQuery.isLoading || plannedFutureCourses.length === 0}
-            >
-              {showFutureCourses ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {curriculumStatusQuery.isLoading
-                ? 'Müfredat Yükleniyor'
-                : showFutureCourses
-                  ? 'Sonraki Dersleri Gizle'
-                  : `Sonraki Dersleri Aç (${plannedFutureCourses.length})`}
-            </Button>
-            <Button type="button" onClick={handleAddCourse} disabled={terms.length === 0}>
-              <Plus className="h-4 w-4" />
-              Yeni Ders Ekle
-            </Button>
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
-              {hasScenarioChanges
-                ? 'Senaryo güncel. Tüm hesaplamalar ekrandaki son değişikliklere göre yenilendi.'
-                : 'Transkript senaryosu başlangıç durumunda hazır. Notları dilediğiniz gibi simüle edebilirsiniz.'}
-            </div>
-          </div>
+          {/* Satır 2 */}
+          <ScenarioInfoRow label="Program" value={transcript.programName} />
+          <ScenarioInfoRow label="Kayıt Tarihi" value={formatDate(transcript.enrollmentDate)} />
+          <ScenarioInfoRow label="Danışmanı" value={advisorName} />
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            variant={showFutureCourses ? 'default' : 'outline'}
+            onClick={() => setShowFutureCourses(value => !value)}
+            disabled={curriculumStatusQuery.isLoading || plannedFutureCourses.length === 0}
+          >
+            {showFutureCourses ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {curriculumStatusQuery.isLoading
+              ? 'Müfredat Yükleniyor'
+              : showFutureCourses
+                ? 'Sonraki Dersleri Gizle'
+                : `Sonraki Dersleri Aç (${plannedFutureCourses.length})`}
+          </Button>
+
+          {/* Satır 3 */}
+          <ScenarioInfoRow label="Durum" value={STUDENT_STATUS_LABELS[transcript.studentStatus] || transcript.studentStatus} />
+          <ScenarioInfoRow label="Hesaplanan Genel Ort." value={formatNumber(scenarioReport.currentCgpa)} emphasize />
+          <ScenarioInfoRow label="Toplam Geçilen AKTS" value={String(scenarioReport.totalEarnedEcts)} />
+          <Button type="button" size="sm" className="w-full" onClick={handleAddCourse} disabled={terms.length === 0}>
+            <Plus className="h-4 w-4" />
+            Yeni Ders Ekle
+          </Button>
         </CardContent>
       </Card>
 
@@ -404,14 +466,14 @@ export default function TranscriptScenarioPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid items-stretch gap-5 xl:grid-cols-2">
           {visibleTermReports.map(term => (
-            <Card key={term.termId} className="overflow-hidden rounded-[10px] border border-slate-300 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.10)]">
+            <Card key={term.termId} className="flex h-full flex-col overflow-hidden rounded-[10px] border border-slate-300 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.10)]">
               <div className="bg-[#6f7073] px-3 py-2 text-[15px] font-bold text-white">
                 {term.termName}
               </div>
 
-              <CardContent className="p-0">
+              <CardContent className="flex flex-1 flex-col p-0">
                 <table className="w-full table-fixed text-[13px]">
                   <colgroup>
                     <col className="w-[17%]" />
@@ -442,7 +504,7 @@ export default function TranscriptScenarioPage() {
                           key={row.course.scenarioId}
                           course={row.course}
                           isStriped={index % 2 === 1}
-                          onEdit={() => handleEditCourse(row.course)}
+                          onEdit={() => handleEditByScenarioId(row.course.scenarioId)}
                         />
                       ) : (
                         <PlannedCourseRow
@@ -456,7 +518,7 @@ export default function TranscriptScenarioPage() {
                   </tbody>
                 </table>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 bg-slate-50/40 px-3 py-3 text-[13px] font-semibold text-[#5b84bf]">
+                <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 bg-slate-50/40 px-3 py-3 text-[13px] font-semibold text-[#5b84bf]">
                   <span>AGNO: {formatNumber(term.cgpa)}</span>
                   <span>Toplam AKTS: {term.cumulativeGpaEcts}</span>
                   <span>ANO: {formatNumber(term.sgpa)}</span>
@@ -607,7 +669,7 @@ function ScenarioEditorDialog({
                     })}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Not seçiniz" />
                     </SelectTrigger>
                     <SelectContent>
                       {GRADE_OPTIONS.map(option => (
@@ -702,6 +764,11 @@ function ScenarioCourseRow({
               {course.isPlannedFromCurriculum ? 'Plan' : 'Yeni'}
             </span>
           )}
+          {!course.isAdded && course.originalGrade == null && (
+            <span className="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.04em] text-sky-700">
+              Projeksiyon
+            </span>
+          )}
           {course.isRepeated && (
             <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700">
               Tekrar
@@ -721,7 +788,7 @@ function ScenarioCourseRow({
         'px-1 py-2 text-center align-top font-mono font-bold',
         course.isPassed ? 'text-emerald-700' : course.countsTowardsGpa ? 'text-destructive' : 'text-slate-600',
       )}>
-        {course.grade}
+        {course.grade || '—'}
       </td>
       <td className="px-1 py-2 text-center align-top text-[12px] font-semibold text-slate-600">
         {course.countsTowardsGpa ? 'D' : '-'}
@@ -789,9 +856,8 @@ function PlannedCourseRow({
 function TranscriptScenarioLoadingState() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-32 rounded-2xl" />
-      <Skeleton className="h-40 rounded-2xl" />
-      <div className="grid gap-6 xl:grid-cols-2">
+      <Skeleton className="h-64 rounded-2xl" />
+      <div className="grid gap-5 xl:grid-cols-2">
         <Skeleton className="h-[420px] rounded-2xl" />
         <Skeleton className="h-[420px] rounded-2xl" />
       </div>
@@ -801,9 +867,9 @@ function TranscriptScenarioLoadingState() {
 
 function ScenarioInfoRow({ label, value, emphasize = false }: { label: string; value: string; emphasize?: boolean }) {
   return (
-    <div className="grid grid-cols-[132px_minmax(0,1fr)] gap-3 text-sm">
-      <div className="font-medium text-muted-foreground">{label}</div>
-      <div className={cn('font-semibold text-foreground', emphasize && 'text-primary')}>{value}</div>
+    <div className="flex items-baseline gap-2 leading-tight">
+      <span className="shrink-0 text-muted-foreground">{label}:</span>
+      <span className={cn('truncate font-semibold text-foreground', emphasize && 'text-primary')} title={value}>{value}</span>
     </div>
   );
 }
@@ -903,7 +969,11 @@ function getFutureTermId(semesterNumber: number) {
   return FUTURE_TERM_ID_OFFSET + semesterNumber;
 }
 
-function formatNumber(value: number) {
+function formatNumber(value: number | null | undefined) {
+  // GPA'ya giren ders yoksa backend null döner → "—" (sahte 0,00 değil).
+  if (value == null) {
+    return '—';
+  }
   return value.toLocaleString('tr-TR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -919,6 +989,30 @@ function formatCompactNumber(value: number) {
 
 function getNextSortOrder(courses: ScenarioCourse[]) {
   return courses.length === 0 ? 0 : Math.max(...courses.map(course => course.sortOrder)) + 1;
+}
+
+// Düzenlenebilir yerel ders → backend istek girdisi. equivalentCourseIds backend hesabında
+// kullanılmaz (zincir continuationCourseId üzerinden çözülür); bilinçli olarak gönderilmez.
+function toScenarioCourseInput(course: ScenarioCourse): ScenarioCourseInput {
+  return {
+    scenarioId: course.scenarioId,
+    sourceRegistrationId: course.sourceRegistrationId,
+    courseId: course.courseId,
+    termId: course.termId,
+    courseCode: course.courseCode,
+    courseName: course.courseName,
+    credits: course.credits,
+    ects: course.ects,
+    averageScore: course.averageScore,
+    grade: course.grade,
+    originalGrade: course.originalGrade,
+    excludeFromAverage: course.excludeFromAverage,
+    continuationCourseId: course.continuationCourseId,
+    isAdded: course.isAdded,
+    isPlannedFromCurriculum: course.isPlannedFromCurriculum,
+    wasRepeated: course.wasRepeated,
+    sortOrder: course.sortOrder,
+  };
 }
 
 function removeScenarioCourse(courses: ScenarioCourse[], scenarioId: string) {

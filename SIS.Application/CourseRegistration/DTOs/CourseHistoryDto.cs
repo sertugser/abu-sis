@@ -29,8 +29,13 @@ public class CourseHistoryItemDto
     /// <summary>Dersin müfredattaki sınıfı (1-4). Öğrencinin aktif curriculum'unda hesaplanır. Bulunmazsa null.</summary>
     public int? ClassYear { get; set; }
 
-    /// <summary>"Zorunlu" / "Seçmeli" / "Alttan FF" / "Devamlı Alttan NA" gibi. Server hesaplar.</summary>
+    /// <summary>"Zorunlu" / "Seçmeli" / "Alttan FF" / "Devamlı Alttan NA" gibi. Server hesaplar.
+    /// PDF "Alış Şekli" sütununda detaylı gösterilir.</summary>
     public string AcquisitionType { get; set; } = string.Empty;
+
+    /// <summary>Dersin müfredatta zorunlu olup olmadığı. UI "Z/S" sütunu için (Z=Zorunlu, S=Seçmeli).
+    /// Müfredat dışı dersler için false (seçmeli kabul edilir).</summary>
+    public bool IsCompulsory { get; set; }
 
     /// <summary>Dersi sahiplenen birim adı (Course.Department.Name) — "Ortak Dersler" gibi.</summary>
     public string? OwnerDepartmentName { get; set; }

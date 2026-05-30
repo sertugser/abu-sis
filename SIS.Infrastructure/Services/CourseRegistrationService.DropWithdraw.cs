@@ -13,7 +13,7 @@ namespace SIS.Infrastructure.Services;
 /// </summary>
 public partial class CourseRegistrationService
 {
-    public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId)
+    public async Task<RegistrationResponseDto> DropCourseAsync(int studentId, int registrationId, bool asAdvisor = false)
     {
         var response = new RegistrationResponseDto();
         var registration = await _context.CourseRegistrations
@@ -38,11 +38,35 @@ public partial class CourseRegistrationService
             return response;
         }
 
+        // Öğrenci kilidi (Proliz): öğrenci kaydını kesinleştirdikten sonra (PendingAdvisorApproval)
+        // değişiklik yapamaz — yalnızca danışman düzenler.
+        if (!asAdvisor && registration.Status == RegistrationStatus.PendingAdvisorApproval)
+        {
+            response.Success = false;
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = false,
+                Errors = new List<ValidationError>
+                {
+                    new() { Rule = "FinalizedLocked", Message = "Ders kaydınız kesinleştirildi; değişikliği yalnızca danışmanınız yapabilir." }
+                }
+            };
+            return response;
+        }
+
+        // Alttan (FF/NA/U tekrar) ders: öğrenci çıkarabilir AMA çıkarırsa uyarılır (zorunlu tekrar).
+        // Danışman çıkarırken uyarı verilmez (normal ders gibi). Uyarı mesajı drop sonrası eklenir.
+        var warnFailedRetake = !asAdvisor
+            && await IsFailedRetakeCourseAsync(studentId, registration.CourseSection.CourseId);
+
+        // Danışman, kesinleştirilmiş (Pending) / onaylı (Active) kayıtları da kayıt VEYA ekle/bırak
+        // penceresinde çıkarabilsin diye plan-öğesi gibi muamele edilir (add-drop zorunluluğu aranmaz).
         var isPlanItemDrop = registration.Status == RegistrationStatus.Draft
             || registration.Status == RegistrationStatus.Rejected;
+        var treatAsPlanItem = isPlanItemDrop || asAdvisor;
         ValidationResultDto? webModuleGate = null;
         var isManualOpenMode = false;
-        if (isPlanItemDrop)
+        if (treatAsPlanItem)
         {
             var registrationControlCode = await ResolveStudentRegistrationControlCodeAsync(studentId, registration.CourseSection.TermId);
             var addDropControlCode = await ResolveStudentAddDropControlCodeAsync(studentId);
@@ -116,10 +140,10 @@ public partial class CourseRegistrationService
             return response;
         }
 
-        // Check add-drop period (FR-48)
+        // Check add-drop period (FR-48). Danışman akışında (treatAsPlanItem) kayıt penceresinde de izinli.
         var term = registration.CourseSection.Term;
         var now = _clock.UtcNow;
-        if (!isPlanItemDrop && !isManualOpenMode && !term.IsAddDropOpen(now))
+        if (!treatAsPlanItem && !isManualOpenMode && !term.IsAddDropOpen(now))
         {
             response.Success = false;
             response.ValidationResult = new ValidationResultDto
@@ -145,10 +169,10 @@ public partial class CourseRegistrationService
         registration.Status = RegistrationStatus.Dropped;
         registration.UpdatedAt = DateTime.UtcNow;
 
-        // Decrement section.EnrolledCount
+        // Koltuğu serbest bırak (tek kaynak: SeatLedger, floor-0 korumalı)
         var section = registration.CourseSection;
-        if (shouldReleaseSeat && section.EnrolledCount > 0)
-            section.EnrolledCount--;
+        if (shouldReleaseSeat)
+            SeatLedger.Release(section);
 
         await _context.SaveChangesAsync();
 
@@ -165,6 +189,26 @@ public partial class CourseRegistrationService
                 Status = registration.Status.ToString()
             }
         };
+
+        // Alttan ders çıkarıldıysa öğrenciyi uyar (başarı + uyarı). Zorunlu tekrar olduğu için
+        // tekrar eklemesi beklenir; danışmana göndermeden önce planında olmalı.
+        if (warnFailedRetake)
+        {
+            response.ValidationResult = new ValidationResultDto
+            {
+                IsValid = true,
+                Warnings = new List<ValidationError>
+                {
+                    new()
+                    {
+                        Rule = "FailedRetakeRemoved",
+                        Message = $"'{section.Course.Code} {section.Course.Name}' alttan (zorunlu tekrar) bir derstir. " +
+                                  "Çıkardınız; bu dersi tekrar almanız gerekir, kaydınızı kesinleştirmeden önce planınıza geri ekleyin.",
+                        CourseSectionId = section.Id
+                    }
+                }
+            };
+        }
 
         return response;
     }
@@ -261,7 +305,7 @@ public partial class CourseRegistrationService
         }
 
         // FR-57: Check withdrawal deadline
-        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !term.IsWithdrawalOpen(DateTime.UtcNow))
+        if (!await IsManualOpenModeAsync(withdrawalControlCode) && !term.IsWithdrawalOpen(_clock.UtcNow))
         {
             errors.Add(new ValidationError
             {
@@ -402,5 +446,27 @@ public partial class CourseRegistrationService
         };
 
         return response;
+    }
+
+    /// <summary>
+    /// Ders, öğrenci için "alttan" (zorunlu tekrar) mı? FF/NA/U almış ve sonradan geçmemişse true.
+    /// Öğrenci bu dersi plandan çıkaramaz (yalnızca danışman).
+    /// </summary>
+    private async Task<bool> IsFailedRetakeCourseAsync(int studentId, int courseId)
+    {
+        var grades = await _context.CourseRegistrations
+            .Where(cr => cr.StudentId == studentId
+                && cr.CourseSection.CourseId == courseId
+                && cr.Grade != null)
+            .Select(cr => cr.Grade!.Value)
+            .ToListAsync();
+
+        if (grades.Count == 0)
+            return false;
+
+        var hasFailed = grades.Any(g => g == GradeCode.FF || g == GradeCode.NA || g == GradeCode.U);
+        var hasPassed = grades.Any(g => g != GradeCode.FF && g != GradeCode.NA
+            && g != GradeCode.U && g != GradeCode.W && g != GradeCode.I);
+        return hasFailed && !hasPassed;
     }
 }

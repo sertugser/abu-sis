@@ -3,7 +3,6 @@ export const ROUTES = {
   DASHBOARD: '/',
   AKADEMIK_TAKVIM: '/akademik-takvim',
   DERS_KAYIT: '/ders-kayit',
-  SMART_PLANNING: '/akilli-planlama',
   PLAN: '/plan',
   ALINAN_DERSLER: '/alinan-dersler',
   NOT_LISTESI: '/not-listesi',
@@ -80,7 +79,8 @@ export const QUERY_KEYS = {
   activeTerm: ['activeTerm'] as const,
   courses: (programId?: number) => ['courses', programId] as const,
   studentCatalog: ['studentCatalog'] as const,
-  recommendations: (pacePreference?: number) => ['recommendation', 'my', pacePreference] as const,
+  studentRegistrationCatalog: ['studentRegistrationCatalog'] as const,
+  sectionPicker: (courseId: number, q?: unknown) => ['sectionPicker', courseId, q] as const,
   myRegistrations: ['myRegistrations'] as const,
   advisorStudents: ['advisor', 'students'] as const,
   advisorConstraints: (studentId?: number, termId?: number) => ['advisor', 'constraints', studentId, termId] as const,
@@ -166,14 +166,14 @@ export const STATUS_LABELS: Record<string, string> = {
   Rejected: 'Reddedildi',
 };
 
-export const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'> = {
-  Draft: 'secondary',
-  PendingAdvisorApproval: 'warning',
-  Active: 'success',
-  Completed: 'default',
-  Dropped: 'destructive',
-  Withdrawn: 'outline',
-  Rejected: 'destructive',
+export const STATUS_VARIANT: Record<string, 'neutralSoft' | 'successSoft' | 'warningSoft' | 'dangerSoft' | 'infoSoft'> = {
+  Draft: 'neutralSoft',
+  PendingAdvisorApproval: 'warningSoft',
+  Active: 'successSoft',
+  Completed: 'infoSoft',
+  Dropped: 'dangerSoft',
+  Withdrawn: 'neutralSoft',
+  Rejected: 'dangerSoft',
 };
 
 /** Routes that have actual page implementations in App.tsx */
@@ -182,11 +182,10 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/akademik-takvim',
   '/bildirimler',
   '/ders-kayit',
-  '/akilli-planlama',
-  '/plan',
   '/alinan-dersler',
   '/danisman-bilgileri',
   '/acilan-bolum-dersleri',
+  '/bolum-ders-programi',
   '/not-listesi',
   '/devamsizlik-durumu',
   '/donem-ortalamalari',

@@ -15,22 +15,28 @@ public class RegistrationValidationService : IRegistrationValidationService
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
+    private readonly IRegistrationGate? _registrationGate;
     private readonly bool _useCalendarFallbackForRegistrationWindow;
 
     public RegistrationValidationService(
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider? config = null,
-        IWebModuleControlService? webModuleControls = null)
+        IWebModuleControlService? webModuleControls = null,
+        IEctsLimitResolver? ectsLimitResolver = null,
+        IRegistrationGate? registrationGate = null)
     {
         _context = context;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
+        _registrationGate = registrationGate;
         _useCalendarFallbackForRegistrationWindow = webModuleControls is null;
     }
 
-    public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds)
+    public async Task<ValidationResultDto> ValidateRegistrationAsync(int studentId, List<int> courseSectionIds, bool skipGateChecks = false)
     {
         var result = new ValidationResultDto { IsValid = true };
         var errors = new List<ValidationError>();
@@ -81,9 +87,11 @@ public class RegistrationValidationService : IRegistrationValidationService
                         || cr.Status == RegistrationStatus.PendingAdvisorApproval
                         || cr.Status == RegistrationStatus.Draft))
                 .ToListAsync();
+        // Talep edilen section'lar "requested" tarafında sayılır; aynı kayıtların mevcut tarafta
+        // tekrar toplanması (çift sayım) önlenir. Onay akışında talep = onaylanan PendingAdvisorApproval
+        // kayıtları olduğundan bu, AKTS toplamının iki kez sayılmasını engeller.
         var existingRegistrationsOutsideRequest = existingRegistrations
-            .Where(registration => registration.Status != RegistrationStatus.Draft
-                || !requestedSectionIds.Contains(registration.CourseSectionId))
+            .Where(registration => !requestedSectionIds.Contains(registration.CourseSectionId))
             .ToList();
 
         // Load student's all past registrations (for prerequisite and grade checks)
@@ -93,48 +101,53 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Where(cr => cr.StudentId == studentId && cr.Grade != null)
             .ToListAsync();
 
-        // === CHECK 1: Student Status (FR-13/FR-14) ===
-        if (student.Status != StudentStatus.Active)
+        // "Kapı" kontrolleri (durum / finansal / kayıt dönemi). Danışman onayında (skipGateChecks)
+        // atlanır — bunlar onay akışında ayrıca uygulanır; burada amaç akademik seçim kontrolü.
+        if (!skipGateChecks)
         {
-            errors.Add(new ValidationError
+            // === CHECK 1: Student Status (FR-13/FR-14) ===
+            if (student.Status != StudentStatus.Active)
             {
-                Rule = "StudentStatus",
-                Message = $"Ogrenci durumu '{student.Status}' oldugu icin kayit yapilamaz. Sadece 'Active' durumundaki ogrenciler kayit yapabilir."
-            });
-        }
+                errors.Add(new ValidationError
+                {
+                    Rule = "StudentStatus",
+                    Message = $"Ogrenci durumu '{student.Status}' oldugu icin kayit yapilamaz. Sadece 'Active' durumundaki ogrenciler kayit yapabilir."
+                });
+            }
 
-        // === CHECK 2: Financial Eligibility (FR-49) ===
-        if (student.HasFinancialBlock)
-        {
-            errors.Add(new ValidationError
+            // === CHECK 2: Financial Eligibility (FR-49) ===
+            if (student.HasFinancialBlock)
             {
-                Rule = "FinancialEligibility",
-                Message = "Ogrencinin odenmemis borcu bulunmaktadir. Borc temizlenene kadar kayit yapilamaz."
-            });
-        }
+                errors.Add(new ValidationError
+                {
+                    Rule = "FinancialEligibility",
+                    Message = "Ogrencinin odenmemis borcu bulunmaktadir. Borc temizlenene kadar kayit yapilamaz."
+                });
+            }
 
-        // === CHECK 3: Registration Period (FR-47) ===
-        if (activeTerm == null)
-        {
-            errors.Add(new ValidationError
-            {
-                Rule = "RegistrationPeriod",
-                Message = "Aktif akademik donem bulunamadi."
-            });
-        }
-        else
-        {
-            var registrationControlCode = ResolveStudentRegistrationControlCode(student);
-            var registrationAccess = _useCalendarFallbackForRegistrationWindow
-                ? BuildFallbackRegistrationAccess(activeTerm)
-                : await _webModuleControls.EvaluateAsync(registrationControlCode, activeTerm.Id);
-            if (!registrationAccess.IsOpen)
+            // === CHECK 3: Registration Period (FR-47) ===
+            if (activeTerm == null)
             {
                 errors.Add(new ValidationError
                 {
                     Rule = "RegistrationPeriod",
-                    Message = registrationAccess.Message ?? $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
+                    Message = "Aktif akademik donem bulunamadi."
                 });
+            }
+            else
+            {
+                var registrationControlCode = ResolveStudentRegistrationControlCode(student);
+                var registrationAccess = _useCalendarFallbackForRegistrationWindow
+                    ? BuildFallbackRegistrationAccess(activeTerm)
+                    : await _webModuleControls.EvaluateAsync(registrationControlCode, activeTerm.Id);
+                if (!registrationAccess.IsOpen)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Rule = "RegistrationPeriod",
+                        Message = registrationAccess.Message ?? $"Kayıt dönemi açık değil. Dönem durumu: {activeTerm.GetStatus(_clock.UtcNow)}"
+                    });
+                }
             }
         }
 
@@ -170,44 +183,85 @@ public class RegistrationValidationService : IRegistrationValidationService
             .Where(r => RegistrationRulePolicy.IsPassedGrade(r.Grade))
             .Sum(r => r.CourseSection.Course.NationalCredit);
 
+        // === Yayın kapısı (publish gate) — tek kaynak IRegistrationGate ===
+        // Öğrenci yalnızca Active + fakülte-onaylı + suspend-değil section seçebilir. validate ve
+        // submit yolunda uygulanır; onay (skipGateChecks=true) yolunda atlanır — orada ayrıca
+        // değerlendirilip gate-fail kayıtlar otomatik reddedilir.
+        if (!skipGateChecks && _registrationGate is not null && sections.Count > 0)
+        {
+            var gateResults = await _registrationGate.EvaluateSectionsAsync(sections);
+            foreach (var section in sections)
+            {
+                if (gateResults.TryGetValue(section.Id, out var gate) && !gate.IsOpen)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Rule = gate.Rule ?? "PublishGate",
+                        Message = $"'{section.Course.Code} {section.Course.Name}' {gate.Message}",
+                        CourseSectionId = section.Id
+                    });
+                }
+            }
+        }
+
+        // ── Önkoşul/eş-koşul değerlendirme verisi (tek kaynak: PrerequisiteEvaluator) ──
+        var passedSet = passedCourseIds.ToHashSet();
+
+        // İntibak (PreviousCourse) haritası — öğrencinin aktif müfredatından.
+        var studentCurriculumId = await _context.StudentPrograms
+            .Where(sp => sp.StudentId == studentId && sp.Type == StudentProgramType.Main && sp.IsActive)
+            .Select(sp => (int?)sp.CurriculumId)
+            .FirstOrDefaultAsync();
+        var previousMap = studentCurriculumId is null
+            ? new Dictionary<int, int>()
+            : PreviousCourseResolver.BuildMap(await _context.CurriculumCourses
+                .Where(cc => cc.CurriculumId == studentCurriculumId && cc.PreviousCourseId != null)
+                .ToListAsync());
+
+        // İlgili önkoşul ders id'leri için filtreli (tüm tabloyu değil) simetrik eşdeğerlik haritası.
+        var requiredCourseIds = sections
+            .SelectMany(s => s.Course.Prerequisites.Select(p => p.RequiredCourseId))
+            .Distinct()
+            .ToList();
+        var equivalencyMap = requiredCourseIds.Count == 0
+            ? new Dictionary<int, HashSet<int>>()
+            : PrerequisiteEvaluator.BuildEquivalencyMap(await _context.CourseEquivalencies
+                .Where(ce => requiredCourseIds.Contains(ce.CourseId) || requiredCourseIds.Contains(ce.EquivalentCourseId))
+                .ToListAsync());
+
+        // Eş-koşul için "aynı dönem birlikte alınan" ders kümesi: talep edilenler + mevcut aktif/pending/draft.
+        var concurrentCourseIds = sections.Select(s => s.Course.Id)
+            .Concat(existingRegistrations.Select(r => r.CourseSection.Course.Id))
+            .ToHashSet();
+
         // Per-section checks
         foreach (var section in sections)
         {
             var course = section.Course;
 
-            // === CHECK 4: Prerequisite Check (FR-29/FR-45) ===
-            // Skip if student already passed this course (retake for grade improvement)
-            if (course.Prerequisites.Any() && !passedCourseIds.Contains(course.Id))
+            // === CHECK 4: Önkoşul / Eş-koşul (FR-29/FR-45) — tek kaynak: PrerequisiteEvaluator ===
+            // Öğrenci dersi zaten geçtiyse (not yükseltme amaçlı tekrar) önkoşul aranmaz.
+            if (course.Prerequisites.Any() && !passedSet.Contains(course.Id))
             {
                 foreach (var prereq in course.Prerequisites)
                 {
-                    var passedPrereq = allPastRegistrations.Any(r =>
-                        r.CourseSection.Course.Id == prereq.RequiredCourseId &&
-                        RegistrationRulePolicy.IsPassedGrade(r.Grade));
+                    var met = PrerequisiteEvaluator.IsSatisfied(
+                        prereq.RequiredCourseId,
+                        prereq.IsCorequisite,
+                        passedSet,
+                        previousMap,
+                        equivalencyMap,
+                        concurrentCourseIds);
 
-                    // Also check course equivalencies
-                    if (!passedPrereq)
-                    {
-                        var equivalencies = await _context.CourseEquivalencies
-                            .Where(ce => ce.CourseId == prereq.RequiredCourseId || ce.EquivalentCourseId == prereq.RequiredCourseId)
-                            .ToListAsync();
-
-                        var equivalentCourseIds = equivalencies
-                            .Select(e => e.CourseId == prereq.RequiredCourseId ? e.EquivalentCourseId : e.CourseId)
-                            .ToList();
-
-                        passedPrereq = allPastRegistrations.Any(r =>
-                            equivalentCourseIds.Contains(r.CourseSection.Course.Id) &&
-                            RegistrationRulePolicy.IsPassedGrade(r.Grade));
-                    }
-
-                    if (!passedPrereq)
+                    if (!met)
                     {
                         var reqCourse = await _context.Courses.FindAsync(prereq.RequiredCourseId);
                         errors.Add(new ValidationError
                         {
                             Rule = "Prerequisite",
-                            Message = $"'{course.Code} {course.Name}' dersi icin on kosul '{reqCourse?.Code} {reqCourse?.Name}' tamamlanmamis.",
+                            Message = prereq.IsCorequisite
+                                ? $"'{course.Code} {course.Name}' dersi icin es kosul '{reqCourse?.Code} {reqCourse?.Name}' ayni donemde alinmali veya gecilmis olmali."
+                                : $"'{course.Code} {course.Name}' dersi icin on kosul '{reqCourse?.Code} {reqCourse?.Name}' tamamlanmamis.",
                             CourseSectionId = section.Id
                         });
                     }
@@ -380,21 +434,10 @@ public class RegistrationValidationService : IRegistrationValidationService
         // Müfredat-özel override'ları önce dene, null ise global SystemConfig default'una düş.
         // Öğrencinin aktif ana müfredatı override sağlıyorsa onu kullanır (Proliz "Müfredat Sınıf Dönem Tanımları" muadili).
         var mainProgramForEcts = student.StudentPrograms.FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
-        Curriculum? curriculumForEcts = null;
-        if (mainProgramForEcts != null)
-        {
-            curriculumForEcts = await _context.Curricula
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
-        }
+        Curriculum? curriculumForEcts = mainProgramForEcts == null ? null
+            : await _context.Curricula.AsNoTracking().FirstOrDefaultAsync(c => c.Id == mainProgramForEcts.CurriculumId);
 
-        var ectsLimitBelow200 = curriculumForEcts?.EctsLimitBelow200
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30);
-        var ectsLimit200To249 = curriculumForEcts?.EctsLimit200To249
-            ?? await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42);
-        var ectsLimitAbove250 = curriculumForEcts?.EctsLimitAbove250
-            ?? await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48);
-        var ectsLimit = RegistrationRulePolicy.GetEctsLimit(student.Cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
+        var ectsLimit = await _ectsLimitResolver.ResolveAsync(student.Cgpa, curriculumForEcts);
 
         if (totalEcts > ectsLimit)
         {

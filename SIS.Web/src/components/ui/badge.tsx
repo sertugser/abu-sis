@@ -16,6 +16,12 @@ const badgeVariants = cva(
         warning: "border-transparent bg-amber-500 text-white",
         info: "border-transparent bg-blue-600 text-white",
         accent: "border-transparent bg-teal-600 text-white",
+        // Soft (açık zemin + koyu yazı) — modern, göz yormayan durum rozetleri
+        successSoft: "border border-green-200 bg-green-50 text-green-700",
+        warningSoft: "border border-amber-200 bg-amber-50 text-amber-700",
+        infoSoft: "border border-blue-200 bg-blue-50 text-blue-700",
+        dangerSoft: "border border-red-200 bg-red-50 text-red-700",
+        neutralSoft: "border border-border bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {

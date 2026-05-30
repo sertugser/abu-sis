@@ -98,6 +98,162 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             .Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
     }
 
+    [Fact]
+    public async Task AdvisorAdd_ThenApprove_ActivatesRegistration()
+    {
+        var course = AddCourse(110, "CENG210", "Operating Systems");
+        var section = AddSection(1010, course.Id);
+
+        // Danışman öğrenci adına ekler → PendingAdvisorApproval (Proliz modeli)
+        var addResult = await _service.AddToPlanAsync(StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+        addResult.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(r => r.CourseSectionId == section.Id)
+            .Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
+
+        // Danışman ekleyince plan "onay bekler" (Submitted) duruma gelir
+        _context.RegistrationPlans.Single(p => p.StudentId == StudentId && p.TermId == ActiveTermId)
+            .Status.Should().Be(RegistrationPlanStatus.Submitted);
+
+        // Danışman onaylar → eklenen ders Active olur (eski bug: Draft'ta kalıp yok sayılıyordu)
+        var approveResult = await _service.ApproveStudentRegistrationsAsync(
+            AdvisorId, new ApprovalActionDto { StudentId = StudentId });
+        approveResult.Success.Should().BeTrue();
+        approveResult.AffectedRegistrations.Should().Be(1);
+        _context.CourseRegistrations.Single(r => r.CourseSectionId == section.Id)
+            .Status.Should().Be(RegistrationStatus.Active);
+    }
+
+    [Fact]
+    public async Task GetStudentRegistrations_ReturnsProlizColumns()
+    {
+        var course = AddCourse(111, "CENG211", "Networks");
+        var section = AddSection(1011, course.Id);
+        await _service.AddToPlanAsync(StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+
+        var rows = await _service.GetStudentRegistrationsAsync(StudentId);
+
+        var row = rows.Single(r => r.CourseSectionId == section.Id);
+        row.SectionNumber.Should().Be(1);
+        row.NationalCredit.Should().Be(3);
+        row.IsCompulsory.Should().BeTrue();
+        row.SuggestedSemester.Should().Be(4);
+        row.TakeType.Should().Be("Zorunlu");
+    }
+
+    [Fact]
+    public async Task AdvisorApprove_WhenPrerequisiteMissing_BlocksWithValidationError()
+    {
+        var baseCourse = AddCourse(120, "CENG120", "Intro to Programming");
+        var advanced = AddCourse(121, "CENG320", "Advanced Topics");
+        _context.CoursePrerequisites.Add(new CoursePrerequisite
+        {
+            CourseId = advanced.Id,
+            RequiredCourseId = baseCourse.Id
+        });
+        var section = AddSection(1020, advanced.Id);
+
+        // Doğrudan PendingAdvisorApproval kayıt (AddToPlan önkoşul eksikliğinde zaten bloklardı).
+        _context.RegistrationPlans.Add(new RegistrationPlan
+        {
+            StudentId = StudentId,
+            TermId = ActiveTermId,
+            Status = RegistrationPlanStatus.Submitted,
+            CreatedAt = DateTime.UtcNow
+        });
+        _context.CourseRegistrations.Add(new SIS.Domain.Entities.CourseRegistration
+        {
+            StudentId = StudentId,
+            CourseSectionId = section.Id,
+            Status = RegistrationStatus.PendingAdvisorApproval,
+            CreatedAt = DateTime.UtcNow
+        });
+        _context.SaveChanges();
+
+        // "Kontrol Et ve Onayla": önkoşul eksik → onaylanmaz, hata döner
+        var result = await _service.ApproveStudentRegistrationsAsync(
+            AdvisorId, new ApprovalActionDto { StudentId = StudentId });
+
+        result.Success.Should().BeFalse();
+        result.ValidationResult.Should().NotBeNull();
+        result.ValidationResult!.Errors.Should().Contain(e => e.Rule == "Prerequisite");
+        // Onaylanmadığı için hâlâ PendingAdvisorApproval kalmalı
+        _context.CourseRegistrations.Single(r => r.CourseSectionId == section.Id)
+            .Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
+    }
+
+    [Fact]
+    public async Task AdvisorDrop_DuringRegistrationWindow_Succeeds()
+    {
+        // Dönem kayıt penceresinde (add-drop henüz açılmadı). Danışman Pending kaydı çıkarabilmeli.
+        var course = AddCourse(130, "CENG130", "Embedded Systems");
+        var section = AddSection(1030, course.Id);
+        var add = await _service.AddToPlanAsync(StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+        add.Success.Should().BeTrue();
+        var reg = _context.CourseRegistrations.Single(r => r.CourseSectionId == section.Id);
+
+        var drop = await _service.DropCourseAsync(StudentId, reg.Id, asAdvisor: true);
+
+        drop.Success.Should().BeTrue();
+        _context.CourseRegistrations.Single(r => r.Id == reg.Id).Status.Should().Be(RegistrationStatus.Dropped);
+    }
+
+    [Fact]
+    public async Task StudentDrop_OfFinalizedRegistration_IsBlocked()
+    {
+        var course = AddCourse(131, "CENG131", "Compilers");
+        var section = AddSection(1031, course.Id);
+        await _service.AddToPlanAsync(StudentId, section.Id, RegistrationStatus.PendingAdvisorApproval);
+        var reg = _context.CourseRegistrations.Single(r => r.CourseSectionId == section.Id);
+
+        // Öğrenci kesinleştirilmiş (Pending) kaydı çıkaramaz — yalnızca danışman.
+        var drop = await _service.DropCourseAsync(StudentId, reg.Id, asAdvisor: false);
+
+        drop.Success.Should().BeFalse();
+        drop.ValidationResult!.Errors.Should().Contain(e => e.Rule == "FinalizedLocked");
+        _context.CourseRegistrations.Single(r => r.Id == reg.Id).Status.Should().Be(RegistrationStatus.PendingAdvisorApproval);
+    }
+
+    [Fact]
+    public async Task EnsureFailedCourses_AutoAddsFailedCourseToPlan()
+    {
+        // Geçmiş dönemde FF alınmış ders + aktif dönemde açık şube.
+        var pastTerm = new AcademicTerm
+        {
+            Id = 2,
+            Name = "2024-2025 Güz",
+            Year = 2024,
+            TermType = TermType.Fall,
+            IsActivated = false,
+            TermStart = DateTime.UtcNow.AddYears(-1),
+            TermEnd = DateTime.UtcNow.AddYears(-1).AddDays(100)
+        };
+        _context.AcademicTerms.Add(pastTerm);
+
+        var course = AddCourse(140, "CENG140", "Logic Design");
+        _context.CourseSections.Add(new CourseSection
+        {
+            Id = 1400, CourseId = course.Id, TermId = 2, SectionNumber = 1,
+            Capacity = 40, EnrolledCount = 0, Status = CourseSectionStatus.Active
+        });
+        _context.CourseRegistrations.Add(new SIS.Domain.Entities.CourseRegistration
+        {
+            StudentId = StudentId, CourseSectionId = 1400,
+            Status = RegistrationStatus.Completed, Grade = GradeCode.FF,
+            CreatedAt = DateTime.UtcNow.AddYears(-1)
+        });
+        var activeSection = AddSection(1401, course.Id);
+        _context.SaveChanges();
+
+        var result = await _service.EnsureFailedCoursesInPlanAsync(StudentId);
+
+        result.Success.Should().BeTrue();
+        _context.CourseRegistrations
+            .Any(r => r.CourseSectionId == activeSection.Id
+                && r.StudentId == StudentId
+                && r.Status == RegistrationStatus.Draft)
+            .Should().BeTrue();
+    }
+
     private void SeedBaseData()
     {
         _context.Faculties.Add(new Faculty { Id = FacultyId, Name = "Engineering", Code = "ENG" });
@@ -129,6 +285,15 @@ public class AdvisorConstraintRegistrationTests : IDisposable
                 GradeEntryEnd = termEnd.AddDays(14),
                 CreatedAt = DateTime.UtcNow,
             }
+        });
+        // Yayın kapısı (draft/publish): fakülte programı onaylı olmalı, yoksa AddToPlan/Submit bloke olur.
+        _context.FacultyScheduleApprovals.Add(new FacultyScheduleApproval
+        {
+            Id = 1,
+            FacultyId = FacultyId,
+            TermId = ActiveTermId,
+            ApprovedByUserId = AdvisorUserId,
+            ApprovedAt = DateTime.UtcNow
         });
         _context.AcademicPrograms.Add(new AcademicProgram
         {
@@ -210,6 +375,7 @@ public class AdvisorConstraintRegistrationTests : IDisposable
             Name = name,
             DepartmentId = DepartmentId,
             Ects = 6,
+            NationalCredit = 3,
             TheoryHours = 3,
             LabHours = 0
         };

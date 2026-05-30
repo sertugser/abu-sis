@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SIS.Application.StudentEligibility.DTOs;
 using SIS.Application.StudentEligibility.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Application.Common.Services;
@@ -16,17 +17,20 @@ public class StudentEligibilityService : IStudentEligibilityService
     private readonly IGpaCalculationService _gpaCalculationService;
     private readonly ISystemConfigProvider _config;
     private readonly IDateTimeProvider _clock;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
 
     public StudentEligibilityService(
         AppDbContext context,
         IGpaCalculationService gpaCalculationService,
         IDateTimeProvider clock,
-        ISystemConfigProvider? config = null)
+        ISystemConfigProvider? config = null,
+        IEctsLimitResolver? ectsLimitResolver = null)
     {
         _context = context;
         _gpaCalculationService = gpaCalculationService;
         _clock = clock;
         _config = config ?? new NullSystemConfigProvider();
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
     }
 
     public async Task<CourseEligibilityReportDto?> GetCourseEligibilityReportAsync(
@@ -424,9 +428,6 @@ public class StudentEligibilityService : IStudentEligibilityService
         var snapshots = new List<EligibilityStudentSnapshot>();
         var cgpaCache = new Dictionary<int, decimal>();
 
-        var ectsLimitBelow200 = await _config.GetIntAsync("Registration.EctsLimit.CgpaBelow200", 30, cancellationToken);
-        var ectsLimit200To249 = await _config.GetIntAsync("Registration.EctsLimit.Cgpa200To249", 42, cancellationToken);
-        var ectsLimitAbove250 = await _config.GetIntAsync("Registration.EctsLimit.CgpaAbove250", 48, cancellationToken);
         var retentionThreshold = await _config.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
 
         foreach (var student in students)
@@ -440,7 +441,7 @@ public class StudentEligibilityService : IStudentEligibilityService
                 .GetValueOrDefault(student.Id, new List<CourseRegistration>());
 
             var cgpa = await GetCgpaAsync(student, cgpaCache);
-            var ectsLimit = RegistrationRulePolicy.GetEctsLimit(cgpa, ectsLimitBelow200, ectsLimit200To249, ectsLimitAbove250);
+            var ectsLimit = await _ectsLimitResolver.ResolveAsync(cgpa, null, cancellationToken);
             var completedSemesters = Math.Max(0, student.CompletedSemesters);
             var currentSemester = completedSemesters + 1;
 

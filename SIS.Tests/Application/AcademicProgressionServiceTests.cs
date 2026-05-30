@@ -24,7 +24,7 @@ public class AcademicProgressionServiceTests : IDisposable
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new AppDbContext(options);
-        _service = new AcademicProgressionService(_context, new GpaCalculationService(_context));
+        _service = new AcademicProgressionService(_context, new GpaCalculationService(_context, new SIS.Tests.TestDoubles.AllVisibleGradeVisibility()));
     }
 
     // ══════════════════════════════════════════════════════════

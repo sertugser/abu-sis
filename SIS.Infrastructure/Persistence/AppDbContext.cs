@@ -45,6 +45,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CourseRegistration> CourseRegistrations => Set<CourseRegistration>();
     public DbSet<AttendanceSession> AttendanceSessions => Set<AttendanceSession>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<TermAttendancePolicy> TermAttendancePolicies => Set<TermAttendancePolicy>();
     public DbSet<StudentProgram> StudentPrograms => Set<StudentProgram>();
     public DbSet<AcademicTerm> AcademicTerms => Set<AcademicTerm>();
     public DbSet<TermAcademicCalendar> TermAcademicCalendars => Set<TermAcademicCalendar>();
@@ -563,6 +564,9 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
             e.HasIndex(cs => new { cs.CourseId, cs.TermId, cs.SectionNumber }).IsUnique();
             e.HasIndex(cs => new { cs.CourseId, cs.TermId });
 
+            // DB-level son savunma: koltuk sayısı negatife düşemez (uygulama katmanına ek güvence).
+            e.ToTable(t => t.HasCheckConstraint("CK_CourseSection_EnrolledCount_NonNegative", "\"EnrolledCount\" >= 0"));
+
             e.HasOne(cs => cs.Course)
              .WithMany()
              .HasForeignKey(cs => cs.CourseId)
@@ -625,6 +629,35 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
              .WithMany()
              .HasForeignKey(r => r.StudentId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── TermAttendancePolicy (dönem/program bazlı devamsızlık limitleri) ──
+        builder.Entity<TermAttendancePolicy>(e =>
+        {
+            // Bir dönemde her program için en fazla bir override (ProgramId dolu).
+            // PostgreSQL'de unique index NULL'ları distinct sayar; bu yüzden iki ayrı filtered
+            // unique index kullanılır: biri program override'ları için, biri dönem geneli (NULL) için.
+            e.HasIndex(p => new { p.TermId, p.ProgramId })
+             .IsUnique()
+             .HasFilter("\"ProgramId\" IS NOT NULL");
+            // Bir dönemde en fazla bir "dönem geneli" (ProgramId == null) kayıt.
+            e.HasIndex(p => p.TermId)
+             .IsUnique()
+             .HasFilter("\"ProgramId\" IS NULL");
+
+            e.Property(p => p.TheoryAbsenceLimitPercent).HasPrecision(5, 2);
+            e.Property(p => p.LabAbsenceLimitPercent).HasPrecision(5, 2);
+            e.Property(p => p.Method).HasMaxLength(20).IsRequired();
+
+            e.HasOne(p => p.Term)
+             .WithMany()
+             .HasForeignKey(p => p.TermId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(p => p.Program)
+             .WithMany()
+             .HasForeignKey(p => p.ProgramId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── CourseRegistration ───────────────────────────────────

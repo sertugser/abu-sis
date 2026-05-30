@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using SIS.API.Controllers;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Application.ElectiveGroups.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -82,7 +84,8 @@ public sealed class ElectivePoolScopeIntegrationTests : IDisposable
     private ElectiveGroupController CreateGroupController() => new(_context);
 
     private CurriculumController CreateCurriculumController() =>
-        new(_context, new ElectiveGroupScopeValidator(), new CourseStatisticsService(_context));
+        new(_context, new ElectiveGroupScopeValidator(), new CourseStatisticsService(_context),
+            new Mock<IElectivePoolProgressCalculator>().Object);
 
     private static string MessageOf(IActionResult result)
     {

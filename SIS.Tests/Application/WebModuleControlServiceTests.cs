@@ -210,6 +210,24 @@ public class WebModuleControlServiceTests
         result.IsOpen.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task EvaluateAsync_WhenRegistrationModuleHasNoConfig_DoesNotFailOpen()
+    {
+        // Hiç WebModuleSetting yok → fallback "Açık" OLMAMALI; takvime bağlı davranır,
+        // aktif dönem/takvim olmadığı için kapalı döner (fail-closed).
+        await using var context = CreateContext();
+
+        var clock = new FakeClock { UtcNow = new DateTime(2026, 5, 21, 5, 0, 0, DateTimeKind.Utc) };
+        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var provider = new WebModuleSettingsProvider(context, memoryCache, clock);
+        var service = new WebModuleControlService(context, provider, clock);
+
+        var result = await service.EvaluateAsync("student-course-registration");
+
+        result.IsOpen.Should().BeFalse();
+        result.SelectedMode.Should().Be(WebModuleControlModes.TermEventBased);
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

@@ -27,12 +27,14 @@ public class GradeController : ControllerBase
     private readonly IWebModuleControlService _webModuleControls;
     private readonly ISystemConfigProvider _systemConfig;
     private readonly IExamRegulationResolver _examRegulationResolver;
+    private readonly IAttendancePolicyResolver _attendancePolicyResolver;
 
     public GradeController(
         AppDbContext context,
         IGpaCalculationService gpaService,
         IDateTimeProvider clock,
         IExamRegulationResolver examRegulationResolver,
+        IAttendancePolicyResolver? attendancePolicyResolver = null,
         ISystemConfigProvider? systemConfig = null,
         IWebModuleControlService? webModuleControls = null)
     {
@@ -41,6 +43,8 @@ public class GradeController : ControllerBase
         _clock = clock;
         _examRegulationResolver = examRegulationResolver;
         _systemConfig = systemConfig ?? new NullSystemConfigProvider();
+        _attendancePolicyResolver = attendancePolicyResolver
+            ?? new SIS.Infrastructure.Services.AttendancePolicyResolver(context, _systemConfig);
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -68,7 +72,8 @@ public class GradeController : ControllerBase
                 gc.Id,
                 gc.Name,
                 gc.Weight,
-                gc.Order
+                gc.Order,
+                gc.PublishedAt
             })
             .ToListAsync();
 
@@ -1084,22 +1089,17 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             .Select((s, index) => new AttendanceSlotInfo(index + 1, s.BlockType))
             .ToList();
 
-        // Config keys with defaults: 14 weeks / 30% theory / 20% lab
-        var weekCount = Math.Max(1, await _systemConfig.GetIntAsync("Attendance.TermWeekCount", 14));
-        var theoryLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m);
-        var labLimitPercent = await _systemConfig.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m);
-        var attendanceMethodStr = await _systemConfig.GetStringAsync("Attendance.Method", "Separate");
-        var attendanceMethod = AttendanceMethodExtensions.ParseAttendanceMethod(attendanceMethodStr);
-
         var course = section.Course;
-        var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
-        var labTotalHours = weekCount * Math.Max(0, course.LabHours);
-        var theoryLimitHours = CalculateLimitHours(theoryTotalHours, theoryLimitPercent);
-        var labLimitHours = CalculateLimitHours(labTotalHours, labLimitPercent);
-        // TotalHours method: combine theory+lab into one total; reuse theory% as the general limit
-        // (theory percent is the primary, usually only non-zero, percent in practice).
-        var combinedTotalHours = weekCount * (Math.Max(0, course.TheoryHours) + Math.Max(0, course.LabHours));
-        var totalLimitHours = CalculateLimitHours(combinedTotalHours, theoryLimitPercent);
+        // Uygulama saatleri devamsızlık sayımında Lab kovasına yazıldığı için lab toplamı onları da içerir
+        // (öğrenci Devamsızlık Durumu sayfasıyla birebir aynı hesap).
+        var theoryWeeklyHours = Math.Max(0, course.TheoryHours);
+        var labWeeklyHours = Math.Max(0, course.LabHours) + Math.Max(0, course.ApplicationHours ?? 0);
+
+        // Devamsızlık politikası dönem/program bazlı: aynı şubedeki farklı program öğrencileri
+        // kendi programlarının limitiyle değerlendirilir (global değil, geçmiş dönem dondurulmuş).
+        var attendanceStudentIds = registrations.Select(r => r.StudentId).Distinct().ToList();
+        var policiesByStudent = await _attendancePolicyResolver.ResolveForStudentsAsync(attendanceStudentIds, section.TermId, default);
+        var fallbackPolicy = await _attendancePolicyResolver.ResolveAsync(section.TermId, null, default);
 
         var naRegistrationIds = new HashSet<int>();
 
@@ -1108,6 +1108,14 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
             if (!attendanceByRegistration.TryGetValue(reg.Id, out var records) || records.Count == 0)
                 continue; // No attendance data → not auto-NA
 
+            var policy = policiesByStudent.GetValueOrDefault(reg.StudentId) ?? fallbackPolicy;
+            var theoryTotalHours = policy.TermWeekCount * theoryWeeklyHours;
+            var labTotalHours = policy.TermWeekCount * labWeeklyHours;
+            var theoryLimitHours = CalculateLimitHours(theoryTotalHours, policy.TheoryAbsenceLimitPercent);
+            var labLimitHours = CalculateLimitHours(labTotalHours, policy.LabAbsenceLimitPercent);
+            // TotalHours yönteminde birleşik limit teori yüzdesiyle hesaplanır.
+            var totalLimitHours = CalculateLimitHours(theoryTotalHours + labTotalHours, policy.TheoryAbsenceLimitPercent);
+
             var (theoryAbs, labAbs) = CalculateAbsenceHours(
                 records,
                 course.TheoryHours,
@@ -1115,7 +1123,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
                 course.ApplicationHours,
                 sectionSlots);
 
-            if (IsFailedByAbsence(attendanceMethod, theoryAbs, labAbs, theoryLimitHours, labLimitHours, totalLimitHours))
+            if (IsFailedByAbsence(policy.Method, theoryAbs, labAbs, theoryLimitHours, labLimitHours, totalLimitHours))
                 naRegistrationIds.Add(reg.Id);
         }
 
@@ -1340,6 +1348,103 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         {
             message = $"Sonuclandirma iptal edildi. {registrations.Count} ogrencinin harf notu temizlendi ve ortalamalari yeniden hesaplandi."
         });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  KOMPONENT İLAN AKIŞI (hoca-seviyesi yayın)
+    //  Tek-kaynak görünürlük kapısı: WebModuleControl (admin) AND PublishedAt (hoca).
+    //  Bkz. StudentController.BuildComponentVisibilityMapAsync.
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// POST api/instructor/components/{componentId}/publish
+    /// Bu bileşenin notlarını öğrencilere "ilan eder" — PublishedAt = UtcNow.
+    /// Bileşen, dersin TÜM section'larına ortak olduğundan etki ortaktır (Proliz davranışı).
+    /// Yetki: hoca, bileşenin (CourseId, AcademicTermId) çiftine ait section'lardan
+    /// en az birine atanmış olmalı.
+    /// </summary>
+    [HttpPost("components/{componentId}/publish")]
+    [RequirePermission("menu.not-girisi.publish")]
+    public async Task<IActionResult> PublishComponent(int componentId)
+    {
+        var (component, authError) = await GetAuthorizedComponentAsync(componentId);
+        if (authError is not null)
+            return authError;
+
+        var publishGate = await EnsureGradeEntryModuleOpenAsync(
+            component!.AcademicTermId,
+            component.Name,
+            "Komponent ilanı sadece uygun takvim penceresinde yapılabilir.");
+        if (publishGate is not null)
+            return publishGate;
+
+        if (component.PublishedAt.HasValue)
+            return Ok(new { message = "Bileşen zaten ilan edilmiş.", publishedAt = component.PublishedAt });
+
+        component.PublishedAt = _clock.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Bileşen ilan edildi.", publishedAt = component.PublishedAt });
+    }
+
+    /// <summary>
+    /// POST api/instructor/components/{componentId}/unpublish
+    /// İlanı geri alır — PublishedAt = null. Öğrenci bu bileşenin notunu ve sınıf
+    /// istatistiklerini görmeyi durdurur.
+    /// </summary>
+    [HttpPost("components/{componentId}/unpublish")]
+    [RequirePermission("menu.not-girisi.publish")]
+    public async Task<IActionResult> UnpublishComponent(int componentId)
+    {
+        var (component, authError) = await GetAuthorizedComponentAsync(componentId);
+        if (authError is not null)
+            return authError;
+
+        var publishGate = await EnsureGradeEntryModuleOpenAsync(
+            component!.AcademicTermId,
+            component.Name,
+            "İlan iptali sadece uygun takvim penceresinde yapılabilir.");
+        if (publishGate is not null)
+            return publishGate;
+
+        if (!component.PublishedAt.HasValue)
+            return Ok(new { message = "Bileşen zaten ilan edilmemiş." });
+
+        component.PublishedAt = null;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "İlan geri alındı." });
+    }
+
+    /// <summary>
+    /// Komponent yetki çözümü: hoca komponentin dersine ait bir section'a atanmış olmalı.
+    /// Komponent (CourseId, AcademicTermId) çiftine bağlıdır; aynı dersin tüm section'ları
+    /// tek komponent paylaşır. Hoca herhangi bir section'ın hocasıysa yetkilidir.
+    /// </summary>
+    private async Task<(GradeComponent? Component, IActionResult? Error)> GetAuthorizedComponentAsync(int componentId)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return (null, Unauthorized(new { error = "Kullanici bilgisi bulunamadi." }));
+
+        var instructor = await _context.Instructors.AsNoTracking().FirstOrDefaultAsync(i => i.UserId == userId);
+        if (instructor == null)
+            return (null, Forbid());
+
+        var component = await _context.GradeComponents
+            .FirstOrDefaultAsync(c => c.Id == componentId);
+        if (component == null)
+            return (null, NotFound(new { error = "Bileşen bulunamadı." }));
+
+        var isAuthorized = await _context.CourseSections
+            .AsNoTracking()
+            .AnyAsync(cs => cs.CourseId == component.CourseId
+                         && cs.TermId == component.AcademicTermId
+                         && cs.InstructorId == instructor.Id);
+        if (!isAuthorized)
+            return (null, Forbid());
+
+        return (component, null);
     }
 
     // ══════════════════════════════════════════════════════════

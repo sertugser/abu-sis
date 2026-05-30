@@ -14,11 +14,13 @@ import {
   getGradingCriteria,
   getMazeretRoster,
   previewImport,
+  publishComponent,
   setButunlemeScores,
   setExamAttendance,
   setMazeretScores,
   submitGrades,
   unfinalizeSection,
+  unpublishComponent,
   updateGradingCriteria,
 } from '../api/grade.api';
 import type {
@@ -103,6 +105,29 @@ export function useUnfinalize(sectionId: number) {
     mutationFn: () => unfinalizeSection(sectionId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+    },
+  });
+}
+
+// Komponent ilan (publish/unpublish). Öğrenci görünürlüğü için tek-kaynak hoca kapısı.
+// Section'a değil komponente bağlı — aynı dersin tüm section'ları ortak komponent paylaşır,
+// dolayısıyla diğer section'ların hocaları için de aynı ilan görünür.
+export function usePublishComponent(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (componentId: number) => publishComponent(componentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
+    },
+  });
+}
+
+export function useUnpublishComponent(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (componentId: number) => unpublishComponent(componentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gradeComponents', sectionId] });
     },
   });
 }

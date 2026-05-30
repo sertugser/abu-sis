@@ -3,7 +3,8 @@ import {
   applySchedule, assignSection, autoSchedulePreview, batchUnassignSections,
   getAvailableClassrooms, getFacultyPlanningConflicts, getFacultyPlanningOverview,
   getFacultyPlanningSections, getFacultyPlanningTimeSlots, getScheduleRun,
-  getScheduleRuns, resetAllSchedules, unassignSection, validateSectionSchedule,
+  getScheduleRuns, resetAllSchedules, resumeEnrollment, suspendEnrollment,
+  unassignSection, validateSectionSchedule,
 } from '../api/facultyPlanning.api';
 import type {
   ApplyScheduleRequest, AssignSectionRequest, AutoScheduleRequest,
@@ -55,6 +56,29 @@ export function useUnassignSection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (sectionId: number) => unassignSection(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      invalidateScheduleViews(qc);
+    },
+  });
+}
+
+// Faz 3b: onaylı programda tek section'ı düzenlemek için durdur/bitir.
+export function useSuspendEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sectionId: number) => suspendEnrollment(sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
+      invalidateScheduleViews(qc);
+    },
+  });
+}
+
+export function useResumeEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sectionId: number) => resumeEnrollment(sectionId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['facultyPlanning'] });
       invalidateScheduleViews(qc);

@@ -65,4 +65,10 @@ public class ApprovalResponseDto
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
     public int AffectedRegistrations { get; set; }
+
+    /// <summary>
+    /// "Kontrol Et ve Onayla" sonucu: onaydan önce çalışan akademik kontrolün hataları/uyarıları.
+    /// Hata varsa onay yapılmaz (Success=false). Uyarılar bilgilendirir, engellemez.
+    /// </summary>
+    public ValidationResultDto? ValidationResult { get; set; }
 }

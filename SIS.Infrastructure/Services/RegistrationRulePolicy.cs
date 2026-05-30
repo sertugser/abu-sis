@@ -42,10 +42,6 @@ internal static class RegistrationRulePolicy
     internal static IEnumerable<CourseRegistration> WherePassedGrade(this IEnumerable<CourseRegistration> source) =>
         source.Where(registration => IsPassedGrade(registration.Grade));
 
-    internal static int GetEctsLimit(decimal cgpa, int limitBelow200 = 30, int limit200To249 = 42, int limitAbove250 = 48) =>
-        cgpa >= 2.50m ? limitAbove250 :
-        cgpa >= 2.00m ? limit200To249 : limitBelow200;
-
     internal static bool HasLowCgpaRestriction(decimal cgpa, int completedSemesters, decimal retentionThreshold = 1.70m) =>
         cgpa < retentionThreshold && completedSemesters > 1;
 
@@ -62,12 +58,15 @@ internal static class RegistrationRulePolicy
         bool isFailedCourse,
         bool isDdDcImprovement)
     {
-        var isLowerOrSameSemester = suggestedSemester != null && suggestedSemester.Value <= completedSemesters;
+        // Öğrencinin içinde bulunduğu yarıyıl = completedSemesters + 1. Şartlı öğrenci kendi
+        // döneminin ve altının derslerini alabilir; yalnızca DAHA üst yarıyıllar kısıtlıdır.
+        var currentSemester = completedSemesters + 1;
+        var isCurrentOrLowerSemester = suggestedSemester != null && suggestedSemester.Value <= currentSemester;
         var isNonDepartmental = course.DepartmentId != null
             && programDepartmentId != null
             && course.DepartmentId != programDepartmentId;
 
-        return isFailedCourse || isDdDcImprovement || isLowerOrSameSemester || isNonDepartmental;
+        return isFailedCourse || isDdDcImprovement || isCurrentOrLowerSemester || isNonDepartmental;
     }
 
     internal static ConflictOverlapType CheckScheduleOverlap(List<TimeBlock> schedule1, List<TimeBlock> schedule2)

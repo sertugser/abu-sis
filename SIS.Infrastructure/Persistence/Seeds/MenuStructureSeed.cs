@@ -45,6 +45,7 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Danışman Bilgileri",     "/danisman-bilgileri",      "danisman-bilgileri",     3, "menu.danisman-bilgileri.view"),
             BuildItem(permissions, "Alınan Dersler",         "/alinan-dersler",          "alinan-dersler",         4, "menu.alinan-dersler.view"),
             BuildItem(permissions, "Açılan Bölüm Dersleri",  "/acilan-bolum-dersleri",   "acilan-bolum-dersleri",  5, "menu.acilan-bolum-dersleri.view"),
+            BuildItem(permissions, "Bölüm Ders Programı",    "/bolum-ders-programi",     "bolum-ders-programi",    6, "menu.bolum-ders-programi.view"),
         };
 
         // ─── Modül 2: Sık Kullanılanlar (favori-odaklı, sadece Ana Sayfa default) ─
@@ -111,8 +112,7 @@ public static class MenuStructureSeed
         dersVeDonemIslemleri.Items = new List<MenuItem>
         {
             BuildItem(permissions, "Ders Kayıt",              "/ders-kayit",            "ders-kayit",              1, "menu.ders-kayit.view"),
-            BuildItem(permissions, "Akıllı Ders Önerileri",   "/akilli-planlama",       "akilli-planlama",         2, "menu.akilli-planlama.view"),
-            BuildItem(permissions, "Kayıt Planım",            "/plan",                  "plan",                    3, "menu.plan.view"),
+            BuildItem(permissions, "Ders Programım",          "/ders-programim",        "ders-programim-ogrenci",  2, "menu.ders-programim.view"),
             BuildItem(permissions, "Not Listesi",             "/not-listesi",           "not-listesi",             4, "menu.not-listesi.view"),
             BuildItem(permissions, "Devamsızlık Durumu",      "/devamsizlik-durumu",    "devamsizlik-durumu",      5, "menu.devamsizlik-durumu.view"),
             BuildItem(permissions, "Dönem Ortalamaları",      "/donem-ortalamalari",    "donem-ortalamalari",      6, "menu.donem-ortalamalari.view"),
@@ -149,7 +149,9 @@ public static class MenuStructureSeed
             BuildItem(permissions, "Müfredat Ders İntibak İşlemleri","/mufredat-ders-intibak",               "mufredat-ders-intibak",          13, "menu.mufredat-ders-intibak.view"),
             BuildItem(permissions, "Ders Veren Öğretim Elemanları",  "/ders-veren-ogretim-uyeleri",          "ders-veren-ogretim-uyeleri",     14, "menu.ders-veren-ogretim-uyeleri.view"),
             BuildItem(permissions, "Sınav Müfredatı",                "/sinav-mufredati",                     "sinav-mufredati",                15, "menu.sinav-mufredati.view"),
-            BuildItem(permissions, "Program Onayı",                  "/program-onayi",                       "program-onayi",                  16, "menu.program-onayi.view"),
+            // "Program Onayı" ayrı menü item olmaktan çıktı → Ders Programı Oluşturma sayfasındaki
+            // "Programı Onayla" butonuna taşındı. Permission key'leri (menu.program-onayi.*) korunur
+            // (buton görünürlüğü + onay/geri-al uçları için).
         };
 
         // ─── Modül 7: Bölüm İşlemleri (hoca + admin için) ────────────────────────

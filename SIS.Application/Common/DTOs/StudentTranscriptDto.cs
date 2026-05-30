@@ -19,6 +19,30 @@ public class StudentTranscriptDto
     public int TotalGpaEcts { get; set; }
     public decimal TotalGpaPoints { get; set; }
     public List<StudentTranscriptTermDto> Terms { get; set; } = new();
+
+    /// <summary>
+    /// Aktif dönemde kayıtlı olup henüz harf notu girilmemiş dersler. Resmî transkript belgesi
+    /// bunları GÖSTERMEZ (yalnızca <see cref="Terms"/> render edilir). Transkript Senaryosu
+    /// (what-if) bu dersleri düzenlenebilir satır olarak ekler: öğrenci "bu dersi şu harfle
+    /// geçersem AGNO ne olur" simülasyonu yapabilir. (Tek kaynak: transkript servisi öğrencinin
+    /// tüm ders kayıtlarını sağlar; her tüketici ihtiyacı olanı seçer.)
+    /// </summary>
+    public List<StudentTranscriptInProgressCourseDto> InProgressCourses { get; set; } = new();
+}
+
+public class StudentTranscriptInProgressCourseDto
+{
+    public int RegistrationId { get; set; }
+    public int CourseId { get; set; }
+    public string CourseCode { get; set; } = string.Empty;
+    public string CourseName { get; set; } = string.Empty;
+    public int Credits { get; set; }
+    public int Ects { get; set; }
+    public List<int> EquivalentCourseIds { get; set; } = new();
+    public int TermId { get; set; }
+    public string TermName { get; set; } = string.Empty;
+    public int Year { get; set; }
+    public string Semester { get; set; } = string.Empty;
 }
 
 public class StudentTranscriptTermDto

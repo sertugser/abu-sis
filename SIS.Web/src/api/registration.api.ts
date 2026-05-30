@@ -16,6 +16,19 @@ export async function addToPlan(courseSectionId: number): Promise<RegistrationRe
   }
 }
 
+/**
+ * Başarısız (alttan) dersleri uygun şubeyle plana otomatik ekler (idempotent).
+ * Ders kayıt ekranı açılırken çağrılır.
+ */
+export async function ensureFailedCourses(): Promise<RegistrationResponseDto> {
+  try {
+    const response = await apiClient.post<RegistrationResponseDto>('/registrations/ensure-failed-courses');
+    return response.data;
+  } catch (error) {
+    throw toApiError(error, 'Alttan dersler plana eklenirken hata olustu.');
+  }
+}
+
 export async function submitRegistration(courseSectionIds: number[]): Promise<RegistrationResponseDto> {
   try {
     const response = await apiClient.post<RegistrationResponseDto>('/registrations/submit', { courseSectionIds });
@@ -56,16 +69,18 @@ export async function getCourseHistory(): Promise<CourseHistoryTermDto[]> {
 
 /**
  * "Alınan Dersler" PDF dosyasını indir. Backend QuestPDF ile resmî görünüm üretir.
+ * termId verilirse yalnız o dönem; verilmezse tüm geçmiş.
  * Browser yeni sekmede açar veya download tetikler.
  */
-export async function downloadCourseHistoryPdf(): Promise<Blob> {
+export async function downloadCourseHistoryPdf(termId?: number): Promise<Blob> {
   try {
     const response = await apiClient.get<Blob>('/registrations/history/pdf', {
       responseType: 'blob',
+      params: termId != null ? { termId } : undefined,
     });
     return response.data;
   } catch (error) {
-    throw toApiError(error, 'Alinan dersler PDF raporu olusturulamadi.');
+    throw toApiError(error, 'Alınan dersler PDF raporu oluşturulamadı.');
   }
 }
 

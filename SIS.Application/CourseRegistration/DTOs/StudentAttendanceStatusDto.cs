@@ -53,5 +53,17 @@ public class StudentAttendanceCourseDto
     public int TotalLabHours { get; set; }
     public int TheoryAbsenceLimitHours { get; set; }
     public int LabAbsenceLimitHours { get; set; }
+    /// <summary>Birleşik (teori+uygulama) limit — yalnızca TotalHours yönteminde anlamlı.</summary>
+    public int TotalAbsenceLimitHours { get; set; }
+    /// <summary>
+    /// Devamsızlık takibi bu ders için etkin mi? Passive/MarkOnly yönteminde false
+    /// (limit gösterilse de devamsızlıktan kalma uygulanmaz).
+    /// </summary>
+    public bool AttendanceTracked { get; set; }
+    /// <summary>
+    /// Yürürlükteki yönteme göre öğrenci bu dersten devamsızlıktan kaldı mı?
+    /// Yoklama girilmemişse veya takip kapalıysa false.
+    /// </summary>
+    public bool IsFailedByAbsence { get; set; }
     public string AttendanceStatusLabel { get; set; } = string.Empty;
 }

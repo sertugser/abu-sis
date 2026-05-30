@@ -6,6 +6,8 @@ using SIS.API.Authorization;
 using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
+using SIS.Application.GpaCalculation.Services;
+using SIS.Application.StudentCard.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -20,12 +22,24 @@ public class AdvisorController : ControllerBase
     private readonly ICourseRegistrationService _registrationService;
     private readonly AppDbContext _context;
     private readonly ISystemConfigProvider _systemConfig;
+    private readonly ICurriculumStatusService _curriculumStatus;
+    private readonly IStudentTranscriptService _transcript;
+    private readonly IGpaCalculationService _gpa;
 
-    public AdvisorController(ICourseRegistrationService registrationService, AppDbContext context, ISystemConfigProvider systemConfig)
+    public AdvisorController(
+        ICourseRegistrationService registrationService,
+        AppDbContext context,
+        ISystemConfigProvider systemConfig,
+        ICurriculumStatusService curriculumStatus,
+        IStudentTranscriptService transcript,
+        IGpaCalculationService gpa)
     {
         _registrationService = registrationService;
         _context = context;
         _systemConfig = systemConfig;
+        _curriculumStatus = curriculumStatus;
+        _transcript = transcript;
+        _gpa = gpa;
     }
 
     [HttpGet("pending-approvals")]
@@ -78,34 +92,74 @@ public class AdvisorController : ControllerBase
                 student.StudentNumber,
                 StudentName = user.FirstName + " " + user.LastName,
                 ProgramName = academicProgram.Name,
+                FacultyName = academicProgram.Department.Faculty.Name,
+                CurriculumName = program.Curriculum.Name,
+                CurriculumVersion = program.Curriculum.Version,
+                program.EnrollmentDate,
+                academicProgram.DegreeLevel,
                 student.CompletedSemesters,
                 student.Cgpa
             })
             .ToListAsync(cancellationToken);
 
-        // Aktif dönem plan durumları (sekme filtreleri için) — tek sorguda topla.
+        // Aktif dönem plan durumları + tarihleri (sekme filtreleri + durum başlığı için) — tek sorguda topla.
         var adviseeIds = advisees.Select(a => a.StudentId).ToList();
-        var planStatusMap = new Dictionary<int, RegistrationPlanStatus>();
+        var planMap = new Dictionary<int, (RegistrationPlanStatus Status, DateTime? SubmittedAt, DateTime? UpdatedAt)>();
         var activeTerm = await _context.AcademicTerms.AsNoTracking().ActiveTerm().FirstOrDefaultAsync(cancellationToken);
         if (activeTerm != null && adviseeIds.Count > 0)
         {
-            planStatusMap = await _context.RegistrationPlans.AsNoTracking()
+            planMap = await _context.RegistrationPlans.AsNoTracking()
                 .Where(rp => adviseeIds.Contains(rp.StudentId) && rp.TermId == activeTerm.Id)
-                .ToDictionaryAsync(rp => rp.StudentId, rp => rp.Status, cancellationToken);
+                .ToDictionaryAsync(
+                    rp => rp.StudentId,
+                    rp => new ValueTuple<RegistrationPlanStatus, DateTime?, DateTime?>(rp.Status, rp.SubmittedAt, rp.UpdatedAt),
+                    cancellationToken);
         }
 
         var retentionThreshold = await _systemConfig.GetDecimalAsync("GPA.RetentionThreshold", 1.70m, cancellationToken);
 
-        var result = advisees.Select(a => new
+        var result = advisees.Select(a =>
         {
-            a.StudentId,
-            a.StudentNumber,
-            a.StudentName,
-            a.ProgramName,
-            a.CompletedSemesters,
-            a.Cgpa,
-            PlanStatus = planStatusMap.TryGetValue(a.StudentId, out var st) ? st.ToString() : "None",
-            IsAtRisk = a.CompletedSemesters >= 1 && a.Cgpa < retentionThreshold,
+            planMap.TryGetValue(a.StudentId, out var plan);
+            var status = planMap.ContainsKey(a.StudentId) ? plan.Status.ToString() : "None";
+            // Danışman onay/red anı = Approved/Rejected planda UpdatedAt.
+            DateTime? decidedAt = plan.Status is RegistrationPlanStatus.Approved or RegistrationPlanStatus.Rejected
+                ? plan.UpdatedAt
+                : null;
+            // Normal öğrenim süresi (yarıyıl) — derece türüne göre. completedSemesters bunu aşmadıysa "Normal Süresi İçinde".
+            var normalDuration = a.DegreeLevel switch
+            {
+                DegreeLevel.Associate => 4,
+                DegreeLevel.Bachelor => 8,
+                DegreeLevel.Master => 4,
+                DegreeLevel.Doctorate => 8,
+                _ => 8
+            };
+            // Bağlı olunan müfredat gösterimi (Proliz): Ad varsa Ad, yoksa "Sürüm Program",
+            // o da yoksa program adı (asla boş "—" kalmasın).
+            var curriculumDisplay = !string.IsNullOrWhiteSpace(a.CurriculumName)
+                ? a.CurriculumName!
+                : !string.IsNullOrWhiteSpace(a.CurriculumVersion)
+                    ? $"{a.CurriculumVersion} {a.ProgramName}".Trim()
+                    : a.ProgramName;
+            return new
+            {
+                a.StudentId,
+                a.StudentNumber,
+                a.StudentName,
+                a.ProgramName,
+                a.FacultyName,
+                CurriculumVersion = curriculumDisplay,
+                EnrollmentDate = a.EnrollmentDate,
+                a.CompletedSemesters,
+                ClassYear = (a.CompletedSemesters / 2) + 1,
+                StudyDurationStatus = a.CompletedSemesters <= normalDuration ? "Normal Süresi İçinde" : "Normal Süre Aşıldı",
+                a.Cgpa,
+                PlanStatus = status,
+                PlanSubmittedAt = plan.SubmittedAt,
+                PlanDecidedAt = decidedAt,
+                IsAtRisk = a.CompletedSemesters >= 1 && a.Cgpa < retentionThreshold,
+            };
         }).ToList();
 
         return Ok(result);
@@ -193,9 +247,57 @@ public class AdvisorController : ControllerBase
         return Ok(registrations);
     }
 
+    /// <summary>GET .../course-history — danışanın aldığı dersler / ders kayıt geçmişi (Proliz "Aldığı Dersler").</summary>
+    [HttpGet("students/{studentId:int}/course-history")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetStudentCourseHistory(int studentId)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        return Ok(await _registrationService.GetCourseHistoryAsync(studentId));
+    }
+
+    /// <summary>GET .../curriculum-status — danışanın müfredat durumu (Proliz "Müfredat Durumu").</summary>
+    [HttpGet("students/{studentId:int}/curriculum-status")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetStudentCurriculumStatus(int studentId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        var status = await _curriculumStatus.GetCurriculumStatusAsync(studentId, ct);
+        if (status == null)
+            return NotFound(new { error = "Müfredat durumu bulunamadı." });
+        return Ok(status);
+    }
+
+    /// <summary>GET .../transcript — danışanın transkripti (Proliz "Transkript").</summary>
+    [HttpGet("students/{studentId:int}/transcript")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetStudentTranscript(int studentId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        var transcript = await _transcript.GetTranscriptAsync(studentId, ct);
+        if (transcript == null)
+            return NotFound(new { error = "Transkript bulunamadı." });
+        return Ok(transcript);
+    }
+
+    /// <summary>GET .../term-gpa — danışanın dönem ortalamaları geçmişi (Proliz "Dönem Ortalamaları").</summary>
+    [HttpGet("students/{studentId:int}/term-gpa")]
+    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    public async Task<IActionResult> GetStudentTermGpa(int studentId)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        return Ok(await _gpa.GetTermGpaHistoryAsync(studentId));
+    }
+
     /// <summary>
     /// POST api/advisor/students/{studentId}/add — öğrenci adına ders ekle.
     /// İş kuralları ve faz kontrolü AddToPlanAsync içinde uygulanır (öğrenci akışıyla aynı).
+    /// Proliz modeli: kayıt doğrudan PendingAdvisorApproval oluşturulur → "Danışman Onay"
+    /// akışı (ApproveStudentRegistrationsAsync) eklenen dersi de Active'e çevirir.
     /// </summary>
     [HttpPost("students/{studentId:int}/add")]
     [RequirePermission("menu.ders-kayit-duzenleme.approve")]
@@ -205,7 +307,8 @@ public class AdvisorController : ControllerBase
         if (guard != null)
             return guard;
 
-        var result = await _registrationService.AddToPlanAsync(studentId, dto.CourseSectionId);
+        var result = await _registrationService.AddToPlanAsync(
+            studentId, dto.CourseSectionId, RegistrationStatus.PendingAdvisorApproval);
         if (!result.Success)
             return BadRequest(result);
 
@@ -223,7 +326,7 @@ public class AdvisorController : ControllerBase
         if (guard != null)
             return guard;
 
-        var result = await _registrationService.DropCourseAsync(studentId, registrationId);
+        var result = await _registrationService.DropCourseAsync(studentId, registrationId, asAdvisor: true);
         if (!result.Success)
             return BadRequest(result);
 

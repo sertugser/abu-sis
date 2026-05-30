@@ -6,6 +6,8 @@ using SIS.API.Authorization;
 using SIS.Application.Common.DTOs;
 using SIS.Application.Common.Services;
 using SIS.Application.Common.Time;
+using SIS.Application.CourseRegistration.DTOs;
+using SIS.Application.CourseRegistration.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -22,16 +24,22 @@ public class CourseController : ControllerBase
     private readonly IDateTimeProvider _clock;
     private readonly IWebModuleControlService _webModuleControls;
     private readonly ISystemConfigProvider _systemConfig;
+    private readonly IStudentRegistrationCatalogService _registrationCatalogService;
+    private readonly ISectionPickerService _sectionPickerService;
 
     public CourseController(
         AppDbContext context,
         IDateTimeProvider clock,
         ISystemConfigProvider systemConfig,
+        IStudentRegistrationCatalogService registrationCatalogService,
+        ISectionPickerService sectionPickerService,
         IWebModuleControlService? webModuleControls = null)
     {
         _context = context;
         _clock = clock;
         _systemConfig = systemConfig;
+        _registrationCatalogService = registrationCatalogService;
+        _sectionPickerService = sectionPickerService;
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
     }
 
@@ -142,23 +150,19 @@ public class CourseController : ControllerBase
         return Ok(courseGroups);
     }
 
-    /// <summary>
-    /// GET api/course/student-catalog — courses for the authenticated student's active term.
-    /// Each course includes: TakeStatus (IlkDefa/Alttan/OncedenAlindi), PreviousGrade, CurriculumType, PrerequisitesMet.
-    /// </summary>
-    [HttpGet("student-catalog")]
+    /// <summary>GET api/course/registration-catalog — yeni müfredat-ağacı katalog (öğrenci).</summary>
+    [HttpGet("registration-catalog")]
     [RequirePermission("menu.ders-kayit.view")]
-    // Patch 2A: Permission kaldırıldı; data multi-role (sadece authenticated).
-    public async Task<IActionResult> GetStudentCatalog()
+    public async Task<IActionResult> GetRegistrationCatalog(CancellationToken ct)
     {
-        // 1. Authenticated student
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
 
         var student = await _context.Students
             .Include(s => s.StudentPrograms)
-            .FirstOrDefaultAsync(s => s.UserId == userId);
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
         if (student == null)
             return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
@@ -166,29 +170,34 @@ public class CourseController : ControllerBase
         if (activeProgram == null)
             return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
-        return await BuildStudentCatalogAsync(student, activeProgram);
+        try
+        {
+            var dto = await _registrationCatalogService.BuildAsync(student, activeProgram, ct);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "ActiveTermNotFound")
+        {
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
+        }
     }
 
-    /// <summary>
-    /// GET api/course/student-catalog/{studentId} — danışmanın, danışmanı olduğu öğrenci
-    /// adına ders ekleme yaparken kullanacağı aday ders kataloğu. Öğrenci akışıyla aynı
-    /// veri (BuildStudentCatalogAsync); sadece sahiplik kontrolü farklı.
-    /// </summary>
-    [HttpGet("student-catalog/{studentId:int}")]
+    /// <summary>GET api/course/registration-catalog/{studentId} — danışman öğrenci-adına.</summary>
+    [HttpGet("registration-catalog/{studentId:int}")]
     [RequirePermission("menu.ders-kayit-duzenleme.view")]
-    public async Task<IActionResult> GetStudentCatalogForAdvisor(int studentId)
+    public async Task<IActionResult> GetRegistrationCatalogForAdvisor(int studentId, CancellationToken ct)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
             return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
 
-        var instructor = await _context.Instructors.FirstOrDefaultAsync(i => i.UserId == userId);
+        var instructor = await _context.Instructors.FirstOrDefaultAsync(i => i.UserId == userId, ct);
         if (instructor == null)
             return StatusCode(403, new ApiErrorResponse("Bu islem icin ogretim uyesi profili gerekli.", "InstructorRequired"));
 
         var student = await _context.Students
             .Include(s => s.StudentPrograms)
-            .FirstOrDefaultAsync(s => s.Id == studentId);
+                .ThenInclude(sp => sp.Program)
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
         if (student == null)
             return NotFound(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
@@ -199,266 +208,39 @@ public class CourseController : ControllerBase
         if (activeProgram == null)
             return NotFound(new ApiErrorResponse("Aktif program bulunamadi.", "ActiveProgramNotFound"));
 
-        return await BuildStudentCatalogAsync(student, activeProgram);
+        try
+        {
+            var dto = await _registrationCatalogService.BuildAsync(student, activeProgram, ct);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "ActiveTermNotFound")
+        {
+            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
+        }
     }
 
-    /// <summary>
-    /// Verilen öğrenci + aktif programı için aday ders kataloğunu üretir
-    /// (öğrenci kendi akışı ve danışman öğrenci-adına akışı bu metodu paylaşır).
-    /// </summary>
-    private async Task<IActionResult> BuildStudentCatalogAsync(Student student, StudentProgram activeProgram)
+    /// <summary>GET api/course/{courseId}/sections — "+"a basınca açılan filtreli/sayfalı şube listesi.</summary>
+    [HttpGet("{courseId:int}/sections")]
+    [RequirePermission("menu.ders-kayit.view")]
+    public async Task<IActionResult> GetCourseSections(
+        int courseId,
+        [FromQuery] int? instructorId, [FromQuery] int? facultyId, [FromQuery] int? programId,
+        [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
-        // 2. Active term
-        var nowCatalog = _clock.UtcNow;
-        var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
-        if (activeTerm == null)
-            return NotFound(new ApiErrorResponse("Aktif donem bulunamadi.", "ActiveTermNotFound"));
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new ApiErrorResponse("Kullanici bilgisi bulunamadi.", "UserNotFound"));
 
-        var allowNonCurriculumCourseSelection = await _systemConfig.GetBoolAsync("Registration.AllowNonCurriculumCourseSelection", true);
-        var hideQuotaInCatalog = await _systemConfig.GetBoolAsync("Registration.HideQuotaInCatalog", false);
+        var student = await _context.Students
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (student == null)
+            return Unauthorized(new ApiErrorResponse("Ogrenci bilgisi bulunamadi.", "StudentNotFound"));
 
-        // 3. Curriculum data — which courses are in the student's program
-        var curriculumCourses = await _context.CurriculumCourses
-            .Where(cc => cc.CurriculumId == activeProgram.CurriculumId)
-            .ToListAsync();
-
-        var curriculumCourseIds = curriculumCourses.Select(cc => cc.CourseId).ToHashSet();
-        var compulsoryMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.IsCompulsory);
-        var semesterMap = curriculumCourses.ToDictionary(cc => cc.CourseId, cc => cc.SuggestedSemester);
-
-        // Faz C C1: Müfredata bağlı pool slot'ları + her course'un aday olduğu slot'lar.
-        // ElectiveGroupCourse üzerinden CourseId → Pool[] mapping kurulur. Bir ders
-        // Karar #5 gereği birden fazla grupta olabilir → çoğul liste.
-        var curriculumPools = await _context.CurriculumElectivePools
-            .AsNoTracking()
-            .Where(p => p.CurriculumId == activeProgram.CurriculumId)
-            .Include(p => p.ElectiveGroup)
-                .ThenInclude(eg => eg.Courses)
-            .ToListAsync();
-
-        var courseToPoolSlots = new Dictionary<int, List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>>();
-        foreach (var pool in curriculumPools)
-        {
-            var slot = new SIS.Application.Common.DTOs.ApplicablePoolSlotDto
-            {
-                PoolId = pool.Id,
-                SlotName = pool.SlotName,
-                GroupCode = pool.ElectiveGroup.Code,
-                GroupName = pool.ElectiveGroup.Name,
-                EctsPerCourse = pool.EctsPerCourse,
-            };
-            foreach (var groupCourse in pool.ElectiveGroup.Courses)
-            {
-                if (!courseToPoolSlots.TryGetValue(groupCourse.CourseId, out var list))
-                {
-                    list = new List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>();
-                    courseToPoolSlots[groupCourse.CourseId] = list;
-                }
-                list.Add(slot);
-            }
-        }
-
-        // 4. Student's ALL past registrations (excluding plan drafts and dropped)
-        var pastRegistrations = await _context.CourseRegistrations
-            .Include(cr => cr.CourseSection)
-            .Where(cr => cr.StudentId == student.Id
-                && cr.Status != RegistrationStatus.Draft
-                && cr.Status != RegistrationStatus.Dropped)
-            .ToListAsync();
-
-        // Build per-course grade history
-        // For each course: find the LATEST grade (most recent registration with a grade)
-        var courseGradeMap = new Dictionary<int, (GradeCode grade, string gradeStr)>();
-        var failedCourseIds = new HashSet<int>();
-
-        foreach (var group in pastRegistrations.GroupBy(r => r.CourseSection.CourseId))
-        {
-            var latestWithGrade = group
-                .Where(r => r.Grade != null && r.Status != RegistrationStatus.Withdrawn)
-                .OrderByDescending(r => r.Id)
-                .FirstOrDefault();
-
-            if (latestWithGrade?.Grade == null) continue;
-
-            var grade = latestWithGrade.Grade.Value;
-            courseGradeMap[group.Key] = (grade, grade.ToString());
-
-            if (grade == GradeCode.FF || grade == GradeCode.NA || grade == GradeCode.U)
-                failedCourseIds.Add(group.Key);
-        }
-
-        // Passed courses = have a grade that is NOT FF/NA/U/W/I
-        var passedCourseIds = courseGradeMap
-            .Where(kv => kv.Value.grade != GradeCode.FF && kv.Value.grade != GradeCode.NA
-                && kv.Value.grade != GradeCode.U && kv.Value.grade != GradeCode.W
-                && kv.Value.grade != GradeCode.I)
-            .Select(kv => kv.Key)
-            .ToHashSet();
-
-        // 5. Prerequisites & equivalencies
-        var prereqMap = (await _context.CoursePrerequisites.ToListAsync())
-            .GroupBy(p => p.CourseId)
-            .ToDictionary(g => g.Key, g => g.Select(p => p.RequiredCourseId).ToHashSet());
-
-        var equivMap = (await _context.CourseEquivalencies.ToListAsync())
-            .GroupBy(e => e.CourseId)
-            .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
-
-        // 6. Get ALL active term sections (filtered to curriculum + failed + passed courses)
-        var relevantCourseIds = new HashSet<int>(curriculumCourseIds);
-        relevantCourseIds.UnionWith(failedCourseIds);
-        // Also include passed courses so student can see them for potential retake
-        relevantCourseIds.UnionWith(passedCourseIds);
-
-        // CourseAccessPolicy filtresi: öğrencinin bölüm/fakültesine açık dersler
-        var studentDepartmentId = await _context.AcademicPrograms.AsNoTracking()
-            .Where(p => p.Id == activeProgram.ProgramId)
-            .Select(p => p.DepartmentId)
-            .FirstOrDefaultAsync();
-
-        var studentFacultyId = await _context.Departments.AsNoTracking()
-            .Where(d => d.Id == studentDepartmentId)
-            .Select(d => d.FacultyId)
-            .FirstOrDefaultAsync();
-
-        var accessibleCourseIds = await _context.CourseAccessPolicies
-            .AsNoTracking()
-            .Where(cap => cap.TermId == activeTerm.Id
-                && (cap.DepartmentId == null || cap.DepartmentId == studentDepartmentId)
-                && (cap.FacultyId == null || cap.FacultyId == studentFacultyId))
-            .Select(cap => cap.CourseId)
-            .Distinct()
-            .ToListAsync();
-
-        // DepartmentId null olan dersler (ortak dersler) her bölümden görünür
-        var sharedCourseIds = await _context.Courses.AsNoTracking()
-            .Where(c => c.DepartmentId == null)
-            .Select(c => c.Id)
-            .ToListAsync();
-
-        // Müfredattaki dersler + erişim politikası olan dersler + ortak dersler
-        var visibleCourseIds = new HashSet<int>(relevantCourseIds);
-        if (allowNonCurriculumCourseSelection)
-        {
-            visibleCourseIds.UnionWith(accessibleCourseIds);
-            visibleCourseIds.UnionWith(sharedCourseIds);
-        }
-
-        var sections = await _context.CourseSections
-            .Include(cs => cs.Course)
-            .Include(cs => cs.Instructor)
-            .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == activeTerm.Id && visibleCourseIds.Contains(cs.CourseId))
-            .ToListAsync();
-
-        // Instructor names
-        var instructorUserIds = sections
-            .Where(s => s.Instructor != null)
-            .Select(s => s.Instructor!.UserId)
-            .Distinct().ToList();
-        var userNames = await _context.Users
-            .Where(u => instructorUserIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}");
-
-        // Load SectionSchedule records for schedule display
-        var catalogSectionIds = sections.Select(s => s.Id).ToList();
-        var catalogSchedules = await _context.SectionSchedules
-            .AsNoTracking()
-            .Include(ss => ss.TimeSlot)
-            .Where(ss => catalogSectionIds.Contains(ss.CourseSectionId))
-            .ToListAsync();
-        var catalogScheduleMap = catalogSchedules
-            .GroupBy(ss => ss.CourseSectionId)
-            .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
-
-        // 7. Build result — group by course
-        var result = sections
-            .GroupBy(s => s.CourseId)
-            .Select(g =>
-            {
-                var course = g.First().Course;
-                var cid = course.Id;
-
-                // TakeStatus: how does this student relate to this course?
-                string takeStatus;
-                string? previousGrade = null;
-
-                if (failedCourseIds.Contains(cid))
-                {
-                    takeStatus = "Alttan"; // FF/NA/U — must retake
-                    previousGrade = courseGradeMap.TryGetValue(cid, out var fg) ? fg.gradeStr : null;
-                }
-                else if (courseGradeMap.TryGetValue(cid, out var pg))
-                {
-                    takeStatus = "OncedenAlindi"; // Previously passed — can improve if desired
-                    previousGrade = pg.gradeStr;
-                }
-                else
-                {
-                    takeStatus = "IlkDefa"; // Never taken
-                }
-
-                // CurriculumType: position in student's curriculum
-                string curriculumType;
-                if (compulsoryMap.TryGetValue(cid, out var isComp) && isComp)
-                    curriculumType = "Zorunlu";
-                else if (curriculumCourseIds.Contains(cid))
-                    curriculumType = "Secmeli";
-                else
-                    curriculumType = "MufredatDisi";
-
-                // Prerequisite check — skip if student already passed this course
-                bool prereqsMet = true;
-                if (!passedCourseIds.Contains(cid) && prereqMap.TryGetValue(cid, out var requiredIds))
-                {
-                    foreach (var reqId in requiredIds)
-                    {
-                        bool passed = passedCourseIds.Contains(reqId);
-                        if (!passed && equivMap.TryGetValue(reqId, out var equivIds))
-                            passed = equivIds.Any(eid => passedCourseIds.Contains(eid));
-                        if (!passed) { prereqsMet = false; break; }
-                    }
-                }
-
-                return new StudentCourseDto
-                {
-                    CourseId = cid,
-                    Code = course.Code,
-                    Name = course.Name,
-                    Ects = course.Ects,
-                    TheoryHours = course.TheoryHours,
-                    LabHours = course.LabHours,
-                    IsCompulsory = compulsoryMap.TryGetValue(cid, out var ic2) && ic2,
-                    SuggestedSemester = semesterMap.TryGetValue(cid, out var sem) ? sem : 0,
-                    TakeStatus = takeStatus,
-                    PrerequisitesMet = prereqsMet,
-                    PreviousGrade = previousGrade,
-                    CurriculumType = curriculumType,
-                    ApplicablePoolSlots = courseToPoolSlots.TryGetValue(cid, out var slots)
-                        ? slots
-                        : new List<SIS.Application.Common.DTOs.ApplicablePoolSlotDto>(),
-                    Sections = g.Select(s => new SectionDto
-                    {
-                        SectionId = s.Id,
-                        InstructorName = s.Instructor != null && userNames.TryGetValue(s.Instructor.UserId, out var name)
-                            ? $"{s.Instructor.Title} {name}".Trim()
-                            : string.Empty,
-                        Capacity = hideQuotaInCatalog ? 0 : s.Capacity,
-                        EnrolledCount = hideQuotaInCatalog ? 0 : s.EnrolledCount,
-                        AvailableSeats = hideQuotaInCatalog ? 0 : Math.Max(0, s.Capacity - s.EnrolledCount),
-                        ClassroomName = s.Classroom?.Name ?? string.Empty,
-                        Schedule = catalogScheduleMap.GetValueOrDefault(s.Id, string.Empty),
-                        IsActive = s.IsActive,
-                        QuotaVisible = !hideQuotaInCatalog
-                    }).ToList()
-                };
-            })
-            // Sort: Alttan first (must retake), then IlkDefa (new courses), then OncedenAlindi (improvement)
-            .OrderBy(c => c.TakeStatus == "Alttan" ? 0 : c.TakeStatus == "IlkDefa" ? 1 : 2)
-            .ThenBy(c => c.SuggestedSemester)
-            .ThenBy(c => c.Code)
-            .ToList();
-
+        var result = await _sectionPickerService.QueryAsync(
+            student.Id,
+            new SectionPickerQuery(courseId, instructorId, facultyId, programId, q, page, pageSize),
+            ct);
         return Ok(result);
     }
 
@@ -616,8 +398,6 @@ public class CourseController : ControllerBase
         var addDropControlCode = await ResolveAddDropControlCodeForCurrentUserAsync();
         var registrationControl = await GetStudentRegistrationControlAsync(term.Id, registrationControlCode);
         var addDropControl = await GetStudentRegistrationControlAsync(term.Id, addDropControlCode);
-        var freezeControl = await GetStudentRegistrationControlAsync(term.Id, "registration-freeze-application");
-        var freezeEnabled = await _systemConfig.GetBoolAsync("Application.RegistrationFreezeApplicationEnabled", true);
 
         var dto = new ActiveTermDto
         {
@@ -633,13 +413,7 @@ public class CourseController : ControllerBase
             IsAddDropOpen = addDropControl.IsOpen,
             Status = term.GetStatus(_clock.UtcNow).ToString(),
             HasAcademicCalendar = term.AcademicCalendar != null,
-            StudentRegistrationEnabled = registrationControl.IsEnabled,
-            StudentRegistrationOpenAt = null,
             StudentRegistrationMessage = registrationControl.Message,
-            IsFreezeApplicationOpen = freezeEnabled && freezeControl.IsOpen,
-            StudentFreezeApplicationMessage = freezeEnabled
-                ? freezeControl.Message
-                : "Kayıt dondurma başvurusu sistem konfigürasyonunda kapalı."
         };
 
         return Ok(dto);

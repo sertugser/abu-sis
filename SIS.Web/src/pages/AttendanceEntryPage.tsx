@@ -703,13 +703,13 @@ function AttendanceHistoryPanel({
     { present: 0, absent: 0, late: 0, excused: 0 }
   );
 
-  // Compute absent students per week for the popup
+  // Compute absent students per week for the popup.
+  // Yalnızca açıkça "Yok" işaretlenenler devamsız sayılır; kayıt olmayan (işaretlenmemiş)
+  // öğrenci devamsız sayılmaz — başlıktaki "{absentCount} yok" ve öğrenci Devamsızlık Durumu
+  // sayfasıyla tutarlı (kayıt yok = hesaba katılmaz).
   const absentStudentsForWeek = useMemo(() => {
     if (absentPanelWeek === null) return [];
-    return students.filter(student => {
-      const weekData = student.weeks?.[absentPanelWeek];
-      return !weekData || weekData.status === 'Absent';
-    });
+    return students.filter(student => student.weeks?.[absentPanelWeek]?.status === 'Absent');
   }, [absentPanelWeek, students]);
 
   // Compute per-student absent count across all history weeks

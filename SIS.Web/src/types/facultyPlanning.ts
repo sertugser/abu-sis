@@ -80,6 +80,7 @@ export interface FacultyPlanningSection {
   labHours: number;
   sectionIndex: number;
   isPinned: boolean;
+  isEnrollmentSuspended: boolean;
   suggestedSemester: number;
   teachingMethod: TeachingMethod;
 }

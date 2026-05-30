@@ -6,6 +6,7 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import {
   useAssignSection, useFacultyPlanningSections, useFacultyPlanningTimeSlots, useUnassignSection,
+  useSuspendEnrollment, useResumeEnrollment,
 } from '../../hooks/useFacultyPlanning';
 // Excel/PDF export butonları artık sayfa seviyesinde (FacultyPlanningPage)
 import type { AssignmentResult } from '../../types/facultyPlanning';
@@ -26,7 +27,7 @@ function extractError(error: unknown, fallback: string) {
 
 export function SectionListTab({
   facultyId, termId, readOnly = false,
-  filterDept, filterStatus, searchText, pageSize,
+  filterDept, filterStatus, searchText, pageSize, publishedEditMode = false,
 }: {
   facultyId: number;
   termId: number | null;
@@ -35,6 +36,8 @@ export function SectionListTab({
   filterStatus?: string;
   searchText: string;
   pageSize: number;
+  /** Faz 3b: onaylı programda section-bazı durdur/bitir aksiyonlarını aktifleştirir. */
+  publishedEditMode?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -43,6 +46,27 @@ export function SectionListTab({
   const timeSlotsQuery = useFacultyPlanningTimeSlots(termId);
   const assignMutation = useAssignSection();
   const unassignMutation = useUnassignSection();
+  const suspendMutation = useSuspendEnrollment();
+  const resumeMutation = useResumeEnrollment();
+
+  const handleSuspend = (sectionId: number) => {
+    setFeedback(null);
+    suspendMutation.mutate(sectionId, {
+      onSuccess: () => setFeedback({ kind: 'success', message: 'Şube düzenleme için durduruldu (yeni kayda kapalı, mevcut kayıtlılar korunuyor).' }),
+      onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Durdurulamadı.') }),
+    });
+  };
+
+  const handleResume = (sectionId: number) => {
+    setFeedback(null);
+    resumeMutation.mutate(sectionId, {
+      onSuccess: (result) => setFeedback({
+        kind: 'success',
+        message: `Şube yeniden kayda açıldı${result?.notifiedStudents ? ` — ${result.notifiedStudents} öğrenci bilgilendirildi` : ''}.`,
+      }),
+      onError: (error: unknown) => setFeedback({ kind: 'error', message: extractError(error, 'Açılamadı.') }),
+    });
+  };
   // Export butonları sayfa seviyesinde
 
   const totalCount = sectionsQuery.data?.totalCount ?? 0;
@@ -146,6 +170,11 @@ export function SectionListTab({
                     isUnassigning={unassignMutation.isPending}
                     readOnly={readOnly}
                     even={idx % 2 === 0}
+                    publishedEditMode={publishedEditMode}
+                    onSuspend={() => handleSuspend(s.sectionId)}
+                    onResume={() => handleResume(s.sectionId)}
+                    isSuspending={suspendMutation.isPending}
+                    isResuming={resumeMutation.isPending}
                   />
                 ))
               )}

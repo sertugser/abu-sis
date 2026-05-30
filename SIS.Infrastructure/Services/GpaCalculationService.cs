@@ -1,25 +1,37 @@
 using Microsoft.EntityFrameworkCore;
+using SIS.Application.Common.Services;
 using SIS.Application.GpaCalculation.DTOs;
 using SIS.Application.GpaCalculation.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
-using SIS.Domain.ValueObjects;
 using SIS.Infrastructure.Persistence;
+using SIS.Infrastructure.Services.Gpa;
 
 namespace SIS.Infrastructure.Services;
 
+/// <summary>
+/// Tek GPA motoru. Tüm ANO/AGNO, kredi/AKTS ve eşdeğer ders zinciri hesabı buradan ve
+/// <see cref="GpaMath"/>'tan okur (transkript de aynı çekirdeği kullanır → ikibaşlılık yok).
+///
+/// Not ilan görünürlüğü YALNIZCA öğrenci/yönetici görüntüleme metodunda
+/// (<see cref="GetTermGpaHistoryAsync"/>) uygulanır. Saklanan/karar veren hesaplar
+/// (Recalculate, Batch, CalculateCgpa/Sgpa) gerçek notlarla çalışır — yoksa not ilan
+/// edilmeden student.Cgpa düşer, ilanla zıplardı.
+/// </summary>
 public class GpaCalculationService : IGpaCalculationService
 {
     private readonly AppDbContext _context;
+    private readonly IGradeVisibilityService _gradeVisibility;
 
-    public GpaCalculationService(AppDbContext context)
+    public GpaCalculationService(AppDbContext context, IGradeVisibilityService gradeVisibility)
     {
         _context = context;
+        _gradeVisibility = gradeVisibility;
     }
 
     /// <summary>
-    /// Belirli bir dönemin ANO'sunu hesaplar.
-    /// Tekrar alınan dersler dahil — o dönemde alınan her ders sayılır.
+    /// Belirli bir dönemin ANO'sunu hesaplar. Tekrar alınan dersler dahil — o dönemde
+    /// alınan her ders sayılır. (Karar hesabı — görünürlük uygulanmaz.)
     /// </summary>
     public async Task<decimal> CalculateSgpaAsync(int studentId, int termId)
     {
@@ -27,11 +39,12 @@ public class GpaCalculationService : IGpaCalculationService
             .Where(cr => cr.StudentId == studentId && cr.CourseSection.TermId == termId)
             .ToListAsync();
 
-        return CalculateAverage(registrations);
+        return GpaMath.CalculateAverage(registrations);
     }
 
     /// <summary>
-    /// AGNO hesaplar. Aynı ders veya eşdeğer ders zinciri birden fazla alınmışsa sadece SON not geçerli.
+    /// AGNO hesaplar. Aynı ders veya eşdeğer ders zinciri birden fazla alınmışsa sadece
+    /// SON not geçerli. (Karar hesabı — görünürlük uygulanmaz.)
     /// </summary>
     public async Task<decimal> CalculateCgpaAsync(int studentId)
     {
@@ -39,21 +52,29 @@ public class GpaCalculationService : IGpaCalculationService
             .Where(cr => cr.StudentId == studentId)
             .ToListAsync();
 
-        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(registrations);
-        if (totalAkts == 0)
-            return 0m;
-
-        return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
+        var latest = await GetLatestRegistrationsByChainAsync(registrations);
+        return GpaMath.CalculateAverage(latest);
     }
 
-    public async Task<List<TermGpaHistoryItemDto>> GetTermGpaHistoryAsync(int studentId)
+    public async Task<TermGpaHistoryDto> GetTermGpaHistoryAsync(int studentId)
     {
         var registrations = await GetGradedRegistrationsQuery()
             .Where(cr => cr.StudentId == studentId)
             .ToListAsync();
 
         if (registrations.Count == 0)
-            return new List<TermGpaHistoryItemDto>();
+            return new TermGpaHistoryDto();
+
+        // Görüntüleme: aktif dönemin henüz ilan edilmemiş notlarını gizle (yalnızca aktif
+        // dönem gizlenebilir; o da en yeni dönem olduğundan satır + toplam tutarlı kalır).
+        var visibility = await _gradeVisibility.BuildTermGradeVisibilityAsync(
+            registrations.Select(cr => cr.CourseSection.TermId));
+        registrations = registrations
+            .Where(cr => visibility.GetValueOrDefault(cr.CourseSection.TermId, true))
+            .ToList();
+
+        if (registrations.Count == 0)
+            return new TermGpaHistoryDto();
 
         var courseChainIdByCourseId = await BuildCourseChainIdMapAsync(
             registrations.Select(registration => registration.CourseSection.CourseId));
@@ -73,7 +94,7 @@ public class GpaCalculationService : IGpaCalculationService
             .ToList();
 
         var latestGradesByChain = new Dictionary<int, CourseRegistration>();
-        var history = new List<TermGpaHistoryItemDto>(orderedTermGroups.Count);
+        var items = new List<TermGpaHistoryItemDto>(orderedTermGroups.Count);
 
         foreach (var termGroup in orderedTermGroups)
         {
@@ -85,27 +106,34 @@ public class GpaCalculationService : IGpaCalculationService
                 latestGradesByChain[chainId] = registration;
             }
 
-            history.Add(new TermGpaHistoryItemDto
+            items.Add(new TermGpaHistoryItemDto
             {
                 TermId = termGroup.Term.Id,
                 TermName = termGroup.Term.Name,
                 Year = termGroup.Term.Year,
                 Semester = termGroup.Term.TermType.ToString(),
                 CourseCount = termGroup.Registrations.Count,
-                TotalCredits = termGroup.Registrations.Sum(registration =>
-                    registration.CourseSection.Course.TheoryHours + registration.CourseSection.Course.LabHours),
-                TotalEcts = termGroup.Registrations.Sum(registration =>
-                    registration.EctsSnapshot ?? registration.CourseSection.Course.Ects),
-                Sgpa = CalculateAverage(termGroup.Registrations),
-                Cgpa = CalculateAverage(latestGradesByChain.Values)
+                TotalCredits = termGroup.Registrations.Sum(GpaMath.GetCredit),
+                TotalEcts = termGroup.Registrations.Sum(GpaMath.GetEcts),
+                Sgpa = GpaMath.CalculateAverageOrNull(termGroup.Registrations),
+                Cgpa = GpaMath.CalculateAverageOrNull(latestGradesByChain.Values)
             });
         }
 
-        return history;
+        // Toplam (denenmiş) kredi/AKTS — ders tekrarlarında son alınan ders sayılır.
+        var latestRegistrations = GpaMath.GetLatestRegistrationsByChain(registrations, courseChainIdByCourseId);
+
+        return new TermGpaHistoryDto
+        {
+            Terms = items,
+            TotalAttemptedCredits = latestRegistrations.Sum(GpaMath.GetCredit),
+            TotalAttemptedEcts = latestRegistrations.Sum(GpaMath.GetEcts)
+        };
     }
 
     /// <summary>
-    /// Hem ANO hem AGNO hesaplar ve Student tablosunu günceller.
+    /// Hem ANO hem AGNO hesaplar ve Student tablosunu günceller. (Karar/saklama hesabı —
+    /// görünürlük uygulanmaz; gerçek notlarla.)
     /// </summary>
     public async Task<GpaResultDto> RecalculateAndUpdateAsync(int studentId)
     {
@@ -130,12 +158,11 @@ public class GpaCalculationService : IGpaCalculationService
 
         var sgpa = latestTermRegistrations == null
             ? 0m
-            : CalculateAverage(latestTermRegistrations.Registrations);
+            : GpaMath.CalculateAverage(latestTermRegistrations.Registrations);
 
-        var (totalAkts, totalPoints) = await GetCgpaComponentsAsync(registrations);
-        var cgpa = totalAkts > 0
-            ? Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero)
-            : 0m;
+        var latest = await GetLatestRegistrationsByChainAsync(registrations);
+        var (totalAkts, totalPoints) = GpaMath.GetAverageComponents(latest);
+        var cgpa = GpaMath.CalculateAverage(latest);
 
         student.Sgpa = sgpa;
         student.Cgpa = cgpa;
@@ -151,18 +178,9 @@ public class GpaCalculationService : IGpaCalculationService
     }
 
     /// <summary>
-    /// AGNO bileşenlerini hesaplar: her ders/eşdeğer zincir için sadece son notu alır.
-    /// </summary>
-    private async Task<(int totalAkts, decimal totalPoints)> GetCgpaComponentsAsync(
-        IReadOnlyCollection<CourseRegistration> registrations)
-    {
-        var latestRegistrations = await GetLatestRegistrationsByChainAsync(registrations);
-        return GetAverageComponents(latestRegistrations);
-    }
-
-    /// <summary>
     /// Batch CGPA hesaplama: Tüm öğrencilerin kayıtlarını TEK sorguda yükler,
     /// her öğrenci için in-memory CGPA hesaplar. N+1 sorununu ortadan kaldırır.
+    /// (Karar hesabı — görünürlük uygulanmaz.)
     /// </summary>
     public async Task<Dictionary<int, decimal>> BatchCalculateCgpaAsync(List<int> studentIds)
     {
@@ -189,8 +207,8 @@ public class GpaCalculationService : IGpaCalculationService
                 continue;
             }
 
-            var latestRegistrations = GetLatestRegistrationsByChain(studentRegs, courseChainIdByCourseId);
-            result[studentId] = CalculateAverage(latestRegistrations);
+            var latestRegistrations = GpaMath.GetLatestRegistrationsByChain(studentRegs, courseChainIdByCourseId);
+            result[studentId] = GpaMath.CalculateAverage(latestRegistrations);
         }
 
         return result;
@@ -216,23 +234,7 @@ public class GpaCalculationService : IGpaCalculationService
 
         var courseChainIdByCourseId = await BuildCourseChainIdMapAsync(
             registrations.Select(registration => registration.CourseSection.CourseId));
-        return GetLatestRegistrationsByChain(registrations, courseChainIdByCourseId);
-    }
-
-    private static List<CourseRegistration> GetLatestRegistrationsByChain(
-        IEnumerable<CourseRegistration> registrations,
-        IReadOnlyDictionary<int, int> courseChainIdByCourseId)
-    {
-        return registrations
-            .GroupBy(registration => courseChainIdByCourseId.GetValueOrDefault(
-                registration.CourseSection.CourseId,
-                registration.CourseSection.CourseId))
-            .Select(group => group
-                .OrderByDescending(registration => registration.CourseSection.Term.TermStart)
-                .ThenByDescending(registration => registration.CourseSection.Term.Id)
-                .ThenByDescending(registration => registration.Id)
-                .First())
-            .ToList();
+        return GpaMath.GetLatestRegistrationsByChain(registrations, courseChainIdByCourseId);
     }
 
     private async Task<Dictionary<int, int>> BuildCourseChainIdMapAsync(IEnumerable<int> courseIds)
@@ -241,117 +243,13 @@ public class GpaCalculationService : IGpaCalculationService
         if (distinctCourseIds.Count == 0)
             return new Dictionary<int, int>();
 
-        var relevantCourseIds = distinctCourseIds.ToHashSet();
-        var equivalentCourseIdsByCourseId = distinctCourseIds.ToDictionary(
-            courseId => courseId,
-            _ => new HashSet<int>());
-
         var equivalencies = await _context.CourseEquivalencies
             .AsNoTracking()
             .Where(equivalency =>
-                relevantCourseIds.Contains(equivalency.CourseId)
-                || relevantCourseIds.Contains(equivalency.EquivalentCourseId))
+                distinctCourseIds.Contains(equivalency.CourseId)
+                || distinctCourseIds.Contains(equivalency.EquivalentCourseId))
             .ToListAsync();
 
-        foreach (var equivalency in equivalencies)
-        {
-            if (!relevantCourseIds.Contains(equivalency.CourseId)
-                || !relevantCourseIds.Contains(equivalency.EquivalentCourseId))
-            {
-                continue;
-            }
-
-            equivalentCourseIdsByCourseId[equivalency.CourseId].Add(equivalency.EquivalentCourseId);
-            equivalentCourseIdsByCourseId[equivalency.EquivalentCourseId].Add(equivalency.CourseId);
-        }
-
-        return BuildCourseChainIdMap(distinctCourseIds, equivalentCourseIdsByCourseId);
-    }
-
-    private static Dictionary<int, int> BuildCourseChainIdMap(
-        IEnumerable<int> courseIds,
-        IReadOnlyDictionary<int, HashSet<int>> equivalentCourseIdsByCourseId)
-    {
-        var distinctCourseIds = courseIds.Distinct().ToList();
-        var map = distinctCourseIds.ToDictionary(courseId => courseId, courseId => courseId);
-        var relevantCourseIds = distinctCourseIds.ToHashSet();
-        var visited = new HashSet<int>();
-
-        foreach (var courseId in distinctCourseIds)
-        {
-            if (!visited.Add(courseId))
-                continue;
-
-            var queue = new Queue<int>();
-            var component = new List<int>();
-            queue.Enqueue(courseId);
-
-            while (queue.Count > 0)
-            {
-                var currentCourseId = queue.Dequeue();
-                component.Add(currentCourseId);
-
-                if (!equivalentCourseIdsByCourseId.TryGetValue(currentCourseId, out var equivalentIds))
-                    continue;
-
-                foreach (var equivalentCourseId in equivalentIds)
-                {
-                    if (!relevantCourseIds.Contains(equivalentCourseId) || !visited.Add(equivalentCourseId))
-                        continue;
-
-                    queue.Enqueue(equivalentCourseId);
-                }
-            }
-
-            var chainId = component.Min();
-            foreach (var componentCourseId in component)
-            {
-                map[componentCourseId] = chainId;
-            }
-        }
-
-        return map;
-    }
-
-    private static (int totalAkts, decimal totalPoints) GetAverageComponents(IEnumerable<CourseRegistration> registrations)
-    {
-        var totalAkts = 0;
-        decimal totalPoints = 0;
-
-        foreach (var registration in registrations)
-        {
-            if (registration.Grade is not { } grade)
-                continue;
-
-            var point = GradePointMap.GetPoint(grade);
-            if (point == null)
-                continue;
-
-            // Faz 4 — Açma Nedeni snapshot'unda IsExcludedFromGpa=true ise dersi GPA hesabı dışı tut.
-            // Hobi/Tez/Staj/Seminer/Uzmanlık Alan/Danışmanlık dersleri akademik standart gereği
-            // not ortalamasına dahil edilmez. Eski kayıtlarda snapshot null → mevcut davranış sürer.
-            if (registration.OpeningReasonSnapshot?.IsExcludedFromGpa == true)
-                continue;
-
-            // Madde 7: Kayıt anında donan AKTS değeri önceliklidir; yoksa dersin katalog değeri
-            // (geriye uyumlu — eski kayıtlar için snapshot henüz yok).
-            var akts = registration.EctsSnapshot ?? registration.CourseSection.Course.Ects;
-            if (akts <= 0)
-                continue;
-
-            totalAkts += akts;
-            totalPoints += akts * point.Value;
-        }
-
-        return (totalAkts, totalPoints);
-    }
-
-    private static decimal CalculateAverage(IEnumerable<CourseRegistration> registrations)
-    {
-        var (totalAkts, totalPoints) = GetAverageComponents(registrations);
-        if (totalAkts == 0)
-            return 0m;
-
-        return Math.Round(totalPoints / totalAkts, 2, MidpointRounding.AwayFromZero);
+        return GpaMath.BuildCourseChainIdMap(distinctCourseIds, equivalencies);
     }
 }

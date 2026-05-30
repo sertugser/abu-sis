@@ -1391,6 +1391,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("InternalQuota")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsEnrollmentSuspended")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 
@@ -1433,7 +1436,10 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("CourseId", "TermId", "SectionNumber")
                         .IsUnique();
 
-                    b.ToTable("CourseSections");
+                    b.ToTable("CourseSections", t =>
+                        {
+                            t.HasCheckConstraint("CK_CourseSection_EnrolledCount_NonNegative", "\"EnrolledCount\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.CourseSectionApproval", b =>
@@ -2583,6 +2589,9 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<int?>("PrerequisiteGradeComponentId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("RequiresAttendanceEligibility")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -3704,6 +3713,57 @@ namespace SIS.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("TermAcademicCalendars");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermAttendancePolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("LabAbsenceLimitPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TermWeekCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TheoryAbsenceLimitPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("TermId")
+                        .IsUnique()
+                        .HasFilter("\"ProgramId\" IS NULL");
+
+                    b.HasIndex("TermId", "ProgramId")
+                        .IsUnique()
+                        .HasFilter("\"ProgramId\" IS NOT NULL");
+
+                    b.ToTable("TermAttendancePolicies");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.TermCalendarEvent", b =>
@@ -5602,6 +5662,24 @@ namespace SIS.Infrastructure.Migrations
                         .HasForeignKey("SIS.Domain.Entities.TermAcademicCalendar", "TermId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Term");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.TermAttendancePolicy", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("SIS.Domain.Entities.AcademicTerm", "Term")
+                        .WithMany()
+                        .HasForeignKey("TermId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
 
                     b.Navigation("Term");
                 });

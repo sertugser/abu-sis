@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -826,27 +825,6 @@ public class AttendanceController : ControllerBase
 
     private static bool IsQrActive(AttendanceSession session) =>
         session.IsQrOpen && session.QrExpiresAt.HasValue && session.QrExpiresAt.Value > DateTime.UtcNow;
-
-    private static bool NamesMatch(string expected, string actual) =>
-        NormalizeName(expected) == NormalizeName(actual);
-
-    private static string NormalizeName(string value)
-    {
-        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-
-        foreach (var ch in decomposed)
-        {
-            var category = CharUnicodeInfo.GetUnicodeCategory(ch);
-            if (category == UnicodeCategory.NonSpacingMark)
-                continue;
-
-            if (char.IsLetterOrDigit(ch))
-                builder.Append(char.ToLowerInvariant(ch));
-        }
-
-        return builder.ToString().Normalize(NormalizationForm.FormC);
-    }
 
     private sealed record SectionScheduleSlot(DayOfWeek DayOfWeek, TimeOnly StartTime, int SlotOrder);
 }

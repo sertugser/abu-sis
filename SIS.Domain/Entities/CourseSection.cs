@@ -33,6 +33,15 @@ public class CourseSection
     public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
 
     /// <summary>
+    /// Yayın sonrası geçici düzenleme bayrağı. Program onaylı (yayında) iken bu section'ı
+    /// değiştirmek için "yeni kayda durdur": true iken yeni öğrenci plana ekleyemez (mevcut
+    /// kayıtlılar korunur) ve yayın kilidi yalnızca bu section için gevşer → düzenlenebilir.
+    /// Düzenleme bitince false'a çekilir + kayıtlı öğrencilere bildirim gider. Status'tan
+    /// bağımsız ortogonal bir boyuttur (Active section da suspended olabilir).
+    /// </summary>
+    public bool IsEnrollmentSuspended { get; set; }
+
+    /// <summary>
     /// Cross-list grup kimliği. Aynı gruptaki section'lar aynı hoca/sınıf/saat paylaşır,
     /// kapasite birleşik hesaplanır. Null = tek başına section.
     /// </summary>

@@ -8,6 +8,8 @@ export interface GradeComponent {
   weight: number;
   order: number;
   type: GradeComponentType;
+  /** Hocanın bu komponenti "ilan ettiği" an (UTC ISO). null = ilan edilmedi. */
+  publishedAt?: string | null;
 }
 
 export interface StudentScore {

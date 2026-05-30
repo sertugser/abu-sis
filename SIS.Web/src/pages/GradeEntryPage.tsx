@@ -36,6 +36,8 @@ import {
   Upload,
   FileSpreadsheet,
   BarChart2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { computeScoreStats, letterDistribution, passFailCounts } from '@/lib/gradeStats';
 import {
@@ -52,7 +54,10 @@ import {
   usePreviewImport,
   useApplyImport,
   useSetExamAttendance,
+  usePublishComponent,
+  useUnpublishComponent,
 } from '../hooks/useGradeData';
+import { usePermissions } from '../context/PermissionContext';
 import { ButunlemePanel, MazeretPanel } from '../components/grade/MakeupSections';
 import type {
   ExamAttendance,
@@ -292,6 +297,10 @@ export default function GradeEntryPage() {
 const previewImportMut = usePreviewImport(id);
 const applyImportMut = useApplyImport(id);
 const setAttendanceMut = useSetExamAttendance(id);
+const publishComponentMut = usePublishComponent(id);
+const unpublishComponentMut = useUnpublishComponent(id);
+const { hasPermission } = usePermissions();
+const canPublishComponent = hasPermission('menu.not-girisi.publish');
 
   const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<number, string>>({});
@@ -615,6 +624,35 @@ const handleApplyImport = () => {
             Harf Aralığı
           </Button>
 
+          {canPublishComponent && activeComponentId && (() => {
+            const active = components?.find(c => c.id === activeComponentId);
+            const isPublished = Boolean(active?.publishedAt);
+            const busy = publishComponentMut.isPending || unpublishComponentMut.isPending;
+            return isPublished ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => unpublishComponentMut.mutate(activeComponentId)}
+                disabled={busy}
+                className="gap-1.5 text-sm"
+                title={`İlan: ${new Date(active!.publishedAt!).toLocaleString('tr-TR')} — geri al`}
+              >
+                <EyeOff className="h-4 w-4" /> İlanı Geri Al
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => publishComponentMut.mutate(activeComponentId)}
+                disabled={busy}
+                className="gap-1.5 text-sm border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
+                title="Öğrenci bu bileşenin notunu ve sınıf istatistiklerini görmeye başlar"
+              >
+                <Eye className="h-4 w-4" /> İlan Et
+              </Button>
+            );
+          })()}
+
           {isFinalized ? (
             <Button
               variant="outline"
@@ -641,6 +679,7 @@ const handleApplyImport = () => {
       <div className="flex items-center gap-2 flex-wrap">
         {components?.map(comp => {
           const isActive = activeComponentId === comp.id;
+          const isPublished = Boolean(comp.publishedAt);
           return (
             <button
               key={comp.id}
@@ -650,7 +689,18 @@ const handleApplyImport = () => {
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'bg-muted/50 text-foreground hover:bg-muted'
               }`}
+              title={isPublished ? `İlan edildi: ${new Date(comp.publishedAt!).toLocaleString('tr-TR')}` : 'İlan edilmedi (öğrenci notu/istatistiği göremez)'}
             >
+              <span
+                aria-hidden
+                className={`inline-block h-2 w-2 rounded-full ${
+                  isPublished
+                    ? 'bg-emerald-500'
+                    : isActive
+                      ? 'bg-primary-foreground/40'
+                      : 'bg-muted-foreground/40'
+                }`}
+              />
               <span>{comp.name}</span>
               <span className={`font-mono text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                 %{comp.weight}

@@ -98,20 +98,12 @@ public partial class FacultyPlanningService : IFacultyPlanningService
             .AsNoTracking()
             .Include(cs => cs.Course)
             .Include(cs => cs.Classroom)
-            .Where(cs => cs.TermId == termId && cs.Status == CourseSectionStatus.Active && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
+            .Where(cs => cs.TermId == termId && cs.Status != CourseSectionStatus.Cancelled && departmentIds.Contains(cs.Course.DepartmentId ?? 0))
             .ToListAsync(ct);
 
-        // Determine which sections have SectionSchedule records
-        var overviewSectionIds = sections.Select(s => s.Id).ToList();
-        var scheduledSectionIds = await _context.SectionSchedules
-            .AsNoTracking()
-            .Where(ss => overviewSectionIds.Contains(ss.CourseSectionId))
-            .Select(ss => ss.CourseSectionId)
-            .Distinct()
-            .ToListAsync(ct);
-        var scheduledSet = scheduledSectionIds.ToHashSet();
-
-        var scheduled = sections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id));
+        // Toplam = iptal olmayan tüm şube (Draft + Active). Programlanan = Active
+        // (hoca+derslik+slot dolu = öğrenciye gidecek olan). Onay ekranı ile tek tanım.
+        var scheduled = sections.Count(s => s.Status == CourseSectionStatus.Active);
         var unscheduled = sections.Count - scheduled;
 
         var conflicts = await _schedulingService.GetConflictsAsync(termId, ct);
@@ -136,7 +128,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                 DepartmentName = dept.Name,
                 DepartmentCode = dept.Code,
                 TotalSections = deptSections.Count,
-                ScheduledSections = deptSections.Count(s => s.ClassroomId.HasValue && scheduledSet.Contains(s.Id)),
+                ScheduledSections = deptSections.Count(s => s.Status == CourseSectionStatus.Active),
                 PendingApprovals = 0
             });
         }
@@ -359,6 +351,7 @@ public partial class FacultyPlanningService : IFacultyPlanningService
                     LabHours = s.Course.LabHours,
                     SectionIndex = index,
                     IsPinned = s.IsPinned,
+                    IsEnrollmentSuspended = s.IsEnrollmentSuspended,
                     SuggestedSemester = semesterMap.GetValueOrDefault(s.CourseId, 0),
                     TeachingMethod = s.Course.TeachingMethod,
                 });

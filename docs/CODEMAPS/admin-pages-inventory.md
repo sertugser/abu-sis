@@ -578,20 +578,6 @@
 
 ## Ders ve Dönem İşlemleri
 
-### Akıllı Ders Önerileri
-
-| | |
-|---|---|
-| **Route** | `/akilli-planlama` |
-| **Dosya** | `SIS.Web/src/pages/SmartPlanningPage.tsx` |
-| **Roller** | student |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
-
-**Veri kancaları (1):**
-- `useRecommendations()`
-
----
-
 ### Ders Kayıt
 
 | | |

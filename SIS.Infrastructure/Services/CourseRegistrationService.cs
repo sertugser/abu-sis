@@ -31,6 +31,9 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     private readonly IWebModuleControlService _webModuleControls;
     private readonly bool _useCalendarFallbackForWebModuleControls;
     private readonly INotificationService? _notifications;
+    private readonly IEctsLimitResolver _ectsLimitResolver;
+    private readonly IRegistrationGate _registrationGate;
+    private readonly IAttendancePolicyResolver _attendancePolicyResolver;
     private static readonly TimeZoneInfo TurkeyTimeZone = ResolveTurkeyTimeZone();
 
     public CourseRegistrationService(
@@ -41,7 +44,10 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         IAdvisorConstraintService? advisorConstraintService = null,
         IWebModuleSettingsProvider? webSettings = null,
         IWebModuleControlService? webModuleControls = null,
-        INotificationService? notifications = null)
+        INotificationService? notifications = null,
+        IEctsLimitResolver? ectsLimitResolver = null,
+        IRegistrationGate? registrationGate = null,
+        IAttendancePolicyResolver? attendancePolicyResolver = null)
     {
         _context = context;
         _validationService = validationService;
@@ -52,11 +58,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
         _useCalendarFallbackForWebModuleControls = webModuleControls is null;
         _notifications = notifications;
+        _ectsLimitResolver = ectsLimitResolver ?? new EctsLimitResolver(_config);
+        _registrationGate = registrationGate ?? new RegistrationGate(_context);
+        _attendancePolicyResolver = attendancePolicyResolver ?? new AttendancePolicyResolver(_context, _config);
     }
 
     public async Task<List<StudentRegistrationDto>> GetStudentRegistrationsAsync(int studentId)
     {
-        var now = _clock.UtcNow;
         var activeTerm = await _context.AcademicTerms.ActiveTerm().FirstOrDefaultAsync();
         if (activeTerm == null)
             return new List<StudentRegistrationDto>();
@@ -128,6 +136,32 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             .GroupBy(ss => ss.CourseSectionId)
             .ToDictionary(g => g.Key, g => ScheduleHelper.FormatSchedule(g));
 
+        // Açma Nedeni adı (Proliz "Açma Nedeni") — kayıttaki OpeningReasonIdSnapshot çözümlenir.
+        var openingReasonIds = registrations
+            .Where(r => r.OpeningReasonIdSnapshot.HasValue)
+            .Select(r => r.OpeningReasonIdSnapshot!.Value)
+            .Distinct()
+            .ToList();
+        var openingReasonNames = openingReasonIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.CurriculumCourseOpeningReasons.AsNoTracking()
+                .Where(o => openingReasonIds.Contains(o.Id))
+                .ToDictionaryAsync(o => o.Id, o => o.Name);
+
+        // Seçmeli havuz slotu (Proliz "Grup Kod") — kayıttaki AppliedElectivePoolId çözümlenir.
+        var appliedPoolIds = registrations
+            .Where(r => r.AppliedElectivePoolId.HasValue)
+            .Select(r => r.AppliedElectivePoolId!.Value)
+            .Distinct()
+            .ToList();
+        var poolRows = appliedPoolIds.Count == 0
+            ? new List<PoolInfoRow>()
+            : await _context.CurriculumElectivePools.AsNoTracking()
+                .Where(p => appliedPoolIds.Contains(p.Id))
+                .Select(p => new PoolInfoRow { Id = p.Id, SlotName = p.SlotName, GroupCode = p.ElectiveGroup.Code })
+                .ToListAsync();
+        var poolInfo = poolRows.ToDictionary(p => p.Id, p => (SlotName: p.SlotName, GroupCode: p.GroupCode));
+
         return registrations.Select(r =>
         {
             var courseId = r.CourseSection.CourseId;
@@ -151,11 +185,15 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             {
                 RegistrationId = r.Id,
                 CourseSectionId = r.CourseSectionId,
+                CourseId = r.CourseSection.CourseId,
+                SectionNumber = r.CourseSection.SectionNumber,
                 CourseCode = r.CourseSection.Course.Code,
                 CourseName = r.CourseSection.Course.Name,
                 Ects = r.CourseSection.Course.Ects,
+                NationalCredit = r.CreditSnapshot ?? r.CourseSection.Course.NationalCredit,
                 TheoryHours = r.CourseSection.Course.TheoryHours,
                 LabHours = r.CourseSection.Course.LabHours,
+                ApplicationHours = r.CourseSection.Course.ApplicationHours,
                 InstructorName = r.CourseSection.Instructor != null
                     && userNames.TryGetValue(r.CourseSection.Instructor.UserId, out var name)
                         ? $"{r.CourseSection.Instructor.Title} {name}".Trim()
@@ -166,13 +204,31 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 IsCompulsory = isCompulsory,
                 SuggestedSemester = semester,
                 IsRepeated = r.IsRepeated,
-                TakeType = takeType
+                TakeType = takeType,
+                OpeningReasonName = r.OpeningReasonIdSnapshot.HasValue
+                    && openingReasonNames.TryGetValue(r.OpeningReasonIdSnapshot.Value, out var orName)
+                        ? orName
+                        : null,
+                ElectivePoolSlotName = r.AppliedElectivePoolId.HasValue
+                    && poolInfo.TryGetValue(r.AppliedElectivePoolId.Value, out var pi)
+                        ? pi.SlotName
+                        : null,
+                ElectiveGroupCode = r.AppliedElectivePoolId.HasValue
+                    && poolInfo.TryGetValue(r.AppliedElectivePoolId.Value, out var pi2)
+                        ? pi2.GroupCode
+                        : null,
             };
         }).ToList();
     }
 
     public async Task<StudentAttendanceStatusDto?> GetStudentAttendanceStatusAsync(int studentId, int? termId = null)
     {
+        // Tek kaynak: "aktif dönem" = AcademicTerms.ActiveTerm() (CLAUDE.md değişmezi).
+        var activeTermId = await _context.AcademicTerms
+            .ActiveTerm()
+            .Select(t => (int?)t.Id)
+            .FirstOrDefaultAsync();
+
         var registeredTermRows = await _context.CourseRegistrations
             .AsNoTracking()
             .Where(cr => cr.StudentId == studentId
@@ -183,9 +239,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 TermId = cr.CourseSection.Term.Id,
                 TermName = cr.CourseSection.Term.Name,
                 cr.CourseSection.Term.Year,
-                cr.CourseSection.Term.TermType,
-                IsActive = !cr.CourseSection.Term.IsCancelled
-                    && cr.CourseSection.Term.IsActivated
+                cr.CourseSection.Term.TermType
             })
             .Distinct()
             .ToListAsync();
@@ -201,7 +255,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     TermName = term.TermName,
                     Year = term.Year,
                     Semester = term.TermType.ToString(),
-                    IsActive = term.IsActive
+                    IsActive = activeTermId.HasValue && term.TermId == activeTermId.Value
                 };
             })
             .OrderByDescending(term => term.IsActive)
@@ -238,11 +292,6 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             availableTerms.Add(selectedTerm);
         }
 
-        var weekCount = Math.Max(1, await _config.GetIntAsync("Attendance.TermWeekCount", 14));
-        var theoryLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.TheoryAbsenceLimitPercent", 30m));
-        var labLimitPercent = ClampPercent(await _config.GetDecimalAsync("Attendance.LabAbsenceLimitPercent", 20m));
-        var attendanceMethodStr = await _config.GetStringAsync("Attendance.Method", "Separate");
-
         var student = await _context.Students
             .AsNoTracking()
             .Include(s => s.StudentPrograms)
@@ -254,6 +303,15 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             .FirstOrDefault(sp => sp.Type == StudentProgramType.Main && sp.IsActive);
         var activeProgramId = activeStudentProgram?.ProgramId;
         var activeProgramName = activeStudentProgram?.Program?.Name ?? string.Empty;
+
+        // Devamsızlık politikası dönem (+ öğrencinin programı) bazlı çözülür — global değil.
+        // Geçmiş dönem kendi limitini taşır (TermAttendancePolicies'te snapshot'lı).
+        var policy = await _attendancePolicyResolver.ResolveAsync(selectedTerm.TermId, activeProgramId);
+        var weekCount = policy.TermWeekCount;
+        var theoryLimitPercent = policy.TheoryAbsenceLimitPercent;
+        var labLimitPercent = policy.LabAbsenceLimitPercent;
+        var attendanceMethod = policy.Method;
+        var attendanceTracked = attendanceMethod is not (AttendanceMethod.Passive or AttendanceMethod.MarkOnly);
 
         var curriculumMap = new Dictionary<int, int>();
         if (activeProgramId.HasValue)
@@ -332,13 +390,17 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 TermWeekCount = weekCount,
                 TheoryAbsenceLimitPercent = theoryLimitPercent,
                 LabAbsenceLimitPercent = labLimitPercent,
-                AttendanceMethod = attendanceMethodStr
+                AttendanceMethod = attendanceMethod.ToString()
             },
             Courses = registrations.Select(registration =>
             {
                 var course = registration.CourseSection.Course;
+                // Uygulama saatleri devamsızlık sayımında Lab kovasına yazıldığı için
+                // (ScheduleBlockType.Lab = "Uygulama/laboratuvar") lab toplamı da onları içerir.
+                var labWeeklyHours = Math.Max(0, course.LabHours) + Math.Max(0, course.ApplicationHours ?? 0);
                 var theoryTotalHours = weekCount * Math.Max(0, course.TheoryHours);
-                var labTotalHours = weekCount * Math.Max(0, course.LabHours);
+                var labTotalHours = weekCount * labWeeklyHours;
+                var combinedTotalHours = theoryTotalHours + labTotalHours;
                 var recordsForRegistration = attendanceByRegistration.GetValueOrDefault(registration.Id) ?? [];
                 scheduleSlotsBySection.TryGetValue(registration.CourseSectionId, out var scheduleSlots);
                 var (theoryAbsenceHours, labAbsenceHours) = AttendanceAbsenceCalculator.CalculateAbsenceHours(
@@ -348,6 +410,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     course.ApplicationHours,
                     scheduleSlots);
                 var totalAbsenceHours = theoryAbsenceHours + labAbsenceHours;
+                var theoryLimitHours = AttendanceAbsenceCalculator.CalculateLimitHours(theoryTotalHours, theoryLimitPercent);
+                var labLimitHours = AttendanceAbsenceCalculator.CalculateLimitHours(labTotalHours, labLimitPercent);
+                // TotalHours yönteminde birleşik limit teori yüzdesiyle hesaplanır (NA kesinleştirmeyle aynı kural).
+                var totalLimitHours = AttendanceAbsenceCalculator.CalculateLimitHours(combinedTotalHours, theoryLimitPercent);
+                var hasRecords = recordsForRegistration.Count > 0;
+                var isFailed = hasRecords && attendanceTracked && AttendanceAbsenceCalculator.IsFailedByAbsence(
+                    attendanceMethod, theoryAbsenceHours, labAbsenceHours, theoryLimitHours, labLimitHours, totalLimitHours);
                 var isInStudentProgram = curriculumMap.TryGetValue(course.Id, out var suggestedSemester);
                 var programName = isInStudentProgram && !string.IsNullOrWhiteSpace(activeProgramName)
                     ? activeProgramName
@@ -365,17 +434,20 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                     SuggestedSemester = suggestedSemester,
                     ProgramName = programName,
                     TheoryHours = course.TheoryHours,
-                    LabHours = course.LabHours,
+                    LabHours = labWeeklyHours,
                     MandatoryAttendance = registration.MandatoryAttendance,
-                    AttendanceEntered = recordsForRegistration.Count > 0,
-                    TheoryAbsenceHours = recordsForRegistration.Count > 0 ? theoryAbsenceHours : null,
-                    LabAbsenceHours = recordsForRegistration.Count > 0 ? labAbsenceHours : null,
-                    TotalAbsenceHours = recordsForRegistration.Count > 0 ? totalAbsenceHours : null,
+                    AttendanceEntered = hasRecords,
+                    TheoryAbsenceHours = hasRecords ? theoryAbsenceHours : null,
+                    LabAbsenceHours = hasRecords ? labAbsenceHours : null,
+                    TotalAbsenceHours = hasRecords ? totalAbsenceHours : null,
                     TotalTheoryHours = theoryTotalHours,
                     TotalLabHours = labTotalHours,
-                    TheoryAbsenceLimitHours = AttendanceAbsenceCalculator.CalculateLimitHours(theoryTotalHours, theoryLimitPercent),
-                    LabAbsenceLimitHours = AttendanceAbsenceCalculator.CalculateLimitHours(labTotalHours, labLimitPercent),
-                    AttendanceStatusLabel = recordsForRegistration.Count > 0
+                    TheoryAbsenceLimitHours = theoryLimitHours,
+                    LabAbsenceLimitHours = labLimitHours,
+                    TotalAbsenceLimitHours = totalLimitHours,
+                    AttendanceTracked = attendanceTracked,
+                    IsFailedByAbsence = isFailed,
+                    AttendanceStatusLabel = hasRecords
                         ? $"{totalAbsenceHours} Saat"
                         : "Yoklama Girişi Yapılmamış"
                 };
@@ -393,10 +465,11 @@ public partial class CourseRegistrationService : ICourseRegistrationService
 
     /// <summary>
     /// "Alınan Dersler" PDF raporu için öğrenci bilgi bloğu + dönem listesi + alt toplam.
+    /// <paramref name="termId"/> verilirse yalnız o dönem (üst blok "Dönemi" alanı da o döneme göre); null ise tüm dönemler.
     /// </summary>
-    public async Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId)
+    public async Task<CourseHistoryReportDto?> GetCourseHistoryReportAsync(int studentId, int? termId = null)
     {
-        var (terms, studentInfo) = await LoadCourseHistoryCoreAsync(studentId);
+        var (terms, studentInfo) = await LoadCourseHistoryCoreAsync(studentId, termId);
         if (studentInfo == null)
             return null;
 
@@ -423,9 +496,11 @@ public partial class CourseRegistrationService : ICourseRegistrationService
     /// <summary>
     /// İçi: GetCourseHistoryAsync + GetCourseHistoryReportAsync ortak akışı.
     /// Tüm join'ler ve AcquisitionType hesabı tek yerde toplanır.
+    /// <paramref name="termId"/> verilirse hem listelenen dersler hem üst blok "Dönemi" alanı o dönemle sınırlanır;
+    /// null ise tüm dönemler + global aktif dönem üst blokta.
     /// </summary>
     private async Task<(List<CourseHistoryTermDto> Terms, CourseHistoryStudentInfo? StudentInfo)>
-        LoadCourseHistoryCoreAsync(int studentId)
+        LoadCourseHistoryCoreAsync(int studentId, int? termId = null)
     {
         // Öğrenci + program + curriculum bilgisi (rapor üst bloğu + ClassYear hesabı için)
         var student = await _context.Students
@@ -468,9 +543,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 .ThenInclude(cs => cs.Instructor)
             .Include(cr => cr.CourseSection)
                 .ThenInclude(cs => cs.Term)
+            // Allow-list: yalnız onaylı/tamamlanmış kayıtlar.
+            // Withdrawn (W) ders bu sayfada gösterilmez — diğer servisler (GpaMath, CurriculumStatus,
+            // EnrollmentForecast, ...) kendi sorgularıyla W'yi okumaya devam eder.
             .Where(cr => cr.StudentId == studentId
-                && cr.Status != RegistrationStatus.Draft
-                && cr.Status != RegistrationStatus.Dropped)
+                && (cr.Status == RegistrationStatus.Active
+                    || cr.Status == RegistrationStatus.Completed)
+                && (termId == null || cr.CourseSection.TermId == termId))
             .ToListAsync();
 
         // Instructor user adları
@@ -506,12 +585,19 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                 advisorName = $"{student.Advisor.Title} {advisorUser.FirstName} {advisorUser.LastName}".Trim();
         }
 
-        // Aktif dönem (rapor üst bloğu)
-        var activeTermName = await _context.AcademicTerms
-            .AsNoTracking()
-            .ActiveTerm()
-            .Select(t => t.Name)
-            .FirstOrDefaultAsync();
+        // Rapor üst bloğu "Dönemi" alanı: termId verildiyse o dönemin adı (PDF seçili dönem ile basıldı),
+        // verilmediyse global aktif dönem (UI listesi tüm dönemleri çekiyor — geriye uyumlu).
+        var headerTermName = termId.HasValue
+            ? await _context.AcademicTerms
+                .AsNoTracking()
+                .Where(t => t.Id == termId.Value)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync()
+            : await _context.AcademicTerms
+                .AsNoTracking()
+                .ActiveTerm()
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync();
 
         var studentInfo = new CourseHistoryStudentInfo
         {
@@ -521,7 +607,7 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             FacultyName = activeProgram?.Program.Department.Faculty.Name,
             ProgramName = activeProgram?.Program.Name,
             AdvisorName = advisorName,
-            ActiveTermName = activeTermName
+            ActiveTermName = headerTermName
         };
 
         var grouped = registrations
@@ -561,6 +647,9 @@ public partial class CourseRegistrationService : ICourseRegistrationService
                                 ? ((ccInfo.SuggestedSemester - 1) / 2) + 1
                                 : (int?)null,
                             AcquisitionType = ComputeAcquisitionType(r, registrationsByCourse[course.Id], ccInfo),
+                            // Z/S sütunu için: müfredattaki tip — müfredat dışı (ccInfo == null)
+                            // dersler "Seçmeli" (S) kabul edilir (ComputeAcquisitionType ile aynı varsayım).
+                            IsCompulsory = ccInfo?.IsCompulsory ?? false,
                             OwnerDepartmentName = course.Department?.Name,
                             LanguageDisplay = FormatCourseLanguage(course.Language),
                             InstructorName = r.CourseSection.Instructor != null
@@ -649,6 +738,13 @@ public partial class CourseRegistrationService : ICourseRegistrationService
         public int CourseId { get; set; }
         public bool IsCompulsory { get; set; }
         public int SuggestedSemester { get; set; }
+    }
+
+    private sealed class PoolInfoRow
+    {
+        public int Id { get; set; }
+        public string SlotName { get; set; } = string.Empty;
+        public string GroupCode { get; set; } = string.Empty;
     }
 
 
@@ -944,9 +1040,14 @@ public partial class CourseRegistrationService : ICourseRegistrationService
             return (catalogEcts, catalogCredit, null, direct.OpeningReasonId);
 
         // 2) Müfredatın havuzlarından birinde mi?
+        // Bir ders birden fazla havuza aday olabilir (Seçmeli Havuz kararı #5); hangi havuza
+        // sayılacağı DETERMİNİSTİK olmalı — aksi halde aynı ders farklı zamanlarda farklı havuza
+        // (ve farklı EctsPerCourse'a) snapshot'lanabilir. SlotName, sonra Id ile sabit sıralama.
         var poolHit = await _context.CurriculumElectivePools.AsNoTracking()
             .Where(p => p.CurriculumId == activeProgram.CurriculumId
                 && p.ElectiveGroup.Courses.Any(egc => egc.CourseId == courseId))
+            .OrderBy(p => p.SlotName)
+            .ThenBy(p => p.Id)
             .Select(p => new { p.Id, p.EctsPerCourse })
             .FirstOrDefaultAsync(ct);
         if (poolHit != null)

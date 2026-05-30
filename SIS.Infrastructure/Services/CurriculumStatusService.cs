@@ -17,14 +17,15 @@ namespace SIS.Infrastructure.Services;
 public class CurriculumStatusService : ICurriculumStatusService
 {
     private readonly AppDbContext _context;
-    private readonly IWebModuleControlService _webModuleControls;
+    private readonly IGradeVisibilityService _gradeVisibility;
 
     public CurriculumStatusService(
         AppDbContext context,
-        IWebModuleControlService? webModuleControls = null)
+        IGradeVisibilityService? gradeVisibility = null)
     {
         _context = context;
-        _webModuleControls = webModuleControls ?? new NullWebModuleControlService();
+        _gradeVisibility = gradeVisibility
+            ?? new GradeVisibilityService(context, new NullWebModuleControlService());
     }
 
     public async Task<CurriculumStatusDto?> GetCurriculumStatusAsync(int studentId, CancellationToken ct = default)
@@ -68,7 +69,8 @@ public class CurriculumStatusService : ICurriculumStatusService
                 && cr.Status != RegistrationStatus.Dropped)
             .ToListAsync(ct);
 
-        var gradeVisibilityByTerm = await BuildGradeVisibilityMapAsync(allRegistrations.Select(r => r.CourseSection.TermId));
+        var gradeVisibilityByTerm = await _gradeVisibility.BuildTermGradeVisibilityAsync(
+            allRegistrations.Select(r => r.CourseSection.TermId).Distinct().ToList(), ct);
         bool HasVisibleLetterGrade(CourseRegistration registration) =>
             registration.Grade != null && gradeVisibilityByTerm.GetValueOrDefault(registration.CourseSection.TermId, true);
 
@@ -174,13 +176,52 @@ public class CurriculumStatusService : ICurriculumStatusService
             .GroupBy(p => p.CourseId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // 6. Equivalencies
-        var equivMap = (await _context.CourseEquivalencies.ToListAsync(ct))
-            .GroupBy(e => e.CourseId)
-            .ToDictionary(g => g.Key, g => g.Select(e => e.EquivalentCourseId).ToHashSet());
+        // 6. Equivalencies — ÇİFT YÖNLÜ. CourseEquivalency satırı (A,B) hem A→B hem B→A
+        // olarak kaydedilir; böylece bir dersin eşdeğeri hangi yönde tanımlanmış olursa olsun
+        // bulunur. Hem "ders eşdeğeriyle alındı mı" hem önkoşul kontrolü AYNI haritadan okur.
+        var equivMap = new Dictionary<int, HashSet<int>>();
+        void AddEquivalence(int courseId, int equivalentCourseId)
+        {
+            if (!equivMap.TryGetValue(courseId, out var set))
+            {
+                set = new HashSet<int>();
+                equivMap[courseId] = set;
+            }
+            set.Add(equivalentCourseId);
+        }
+        foreach (var equivalency in await _context.CourseEquivalencies.ToListAsync(ct))
+        {
+            AddEquivalence(equivalency.CourseId, equivalency.EquivalentCourseId);
+            AddEquivalence(equivalency.EquivalentCourseId, equivalency.CourseId);
+        }
 
         // 6b. İntibak: (yeni CourseId → eski PreviousCourseId) — eski ders geçildiyse yeni ders karşılanmış sayılır
         var previousCourseMap = PreviousCourseResolver.BuildMap(curriculumCourses);
+
+        // 6c. Müfredat dersinin "alınan kaydını" çöz — TEK kaynak. Öncelik:
+        //   doğrudan kayıt > intibak (PreviousCourse) > eşdeğer ders kaydı.
+        // Eşdeğeriyle alınan zorunlu ders artık "Henüz alınmadı" görünmez; böylece
+        // Transkript Senaryosu'nda yanlışlıkla "Sonraki Ders" olarak planlanıp çift sayılmaz.
+        bool TryResolveTakenRegistration(
+            int curriculumCourseId,
+            int? previousCourseId,
+            out (CourseRegistration reg, string gradeStatus) taken)
+        {
+            if (courseRegMap.TryGetValue(curriculumCourseId, out taken))
+                return true;
+            if (previousCourseId.HasValue && courseRegMap.TryGetValue(previousCourseId.Value, out taken))
+                return true;
+            if (equivMap.TryGetValue(curriculumCourseId, out var equivalentIds))
+            {
+                foreach (var equivalentId in equivalentIds)
+                {
+                    if (courseRegMap.TryGetValue(equivalentId, out taken))
+                        return true;
+                }
+            }
+            taken = default;
+            return false;
+        }
 
         // 7. Build semester groups — curriculum dersleri + pool slot'ları aynı dönemde
         var allSemesterNumbers = curriculumCourses.Select(cc => cc.SuggestedSemester)
@@ -222,9 +263,9 @@ public class CurriculumStatusService : ICurriculumStatusService
                     string? grade = null;
                     string? gradeStatus = null;
 
-                    // Doğrudan ders kaydı VEYA intibak: eski (PreviousCourse) ders kaydı bu satırı karşılar
-                    if (courseRegMap.TryGetValue(cid, out var regInfo)
-                        || (cc.PreviousCourseId.HasValue && courseRegMap.TryGetValue(cc.PreviousCourseId.Value, out regInfo)))
+                    // Doğrudan ders kaydı VEYA intibak (PreviousCourse) VEYA eşdeğer ders kaydı
+                    // bu satırı karşılar (tek kaynak: TryResolveTakenRegistration).
+                    if (TryResolveTakenRegistration(cid, cc.PreviousCourseId, out var regInfo))
                     {
                         var reg = regInfo.reg;
                         var section = reg.CourseSection;
@@ -329,6 +370,14 @@ public class CurriculumStatusService : ICurriculumStatusService
                         ? $"{pool.ElectiveGroup.Name} {slotNumber}"
                         : pool.ElectiveGroup.Name;
 
+                    // Bir slot satırı = TEK ders. Henüz alınmamışken gösterilecek AKTS ders
+                    // BAŞINA olmalı: önce EctsPerCourse, yoksa RequiredEcts'i ders sayısına böl
+                    // (RequiredEcts havuzun TOPLAM hedefidir — tek ders satırına yazılamaz).
+                    var slotEctsPerCourse = pool.EctsPerCourse
+                        ?? (pool.RequiredCourseCount > 0
+                            ? pool.RequiredEcts / pool.RequiredCourseCount
+                            : pool.RequiredEcts);
+
                     return new CurriculumCourseStatusDto
                     {
                         // Pool slot'ları için CourseId çakışmaması adına negative: -pool.Id
@@ -337,7 +386,7 @@ public class CurriculumStatusService : ICurriculumStatusService
                         Name = poolDisplayName,
                         IsCompulsory = false,
                         Credits = takenCredits ?? 0,
-                        Ects = takenEcts ?? pool.EctsPerCourse ?? pool.RequiredEcts,
+                        Ects = takenEcts ?? slotEctsPerCourse,
                         TakenTermLabel = termLabel,
                         TakenCourseCode = takenCode,
                         TakenCourseName = takenName,
@@ -407,24 +456,4 @@ public class CurriculumStatusService : ICurriculumStatusService
         return dto;
     }
 
-    private async Task<Dictionary<int, bool>> BuildGradeVisibilityMapAsync(IEnumerable<int> termIds)
-    {
-        var result = new Dictionary<int, bool>();
-        foreach (var termId in termIds.Distinct())
-        {
-            result[termId] = await CanStudentSeeLetterGradeAsync(termId);
-        }
-
-        return result;
-    }
-
-    private async Task<bool> CanStudentSeeLetterGradeAsync(int termId)
-    {
-        var finalAccess = await _webModuleControls.EvaluateAsync("letter-grade-publication", termId);
-        if (finalAccess.IsOpen)
-            return true;
-
-        var makeupAccess = await _webModuleControls.EvaluateAsync("makeup-letter-grade-publication", termId);
-        return makeupAccess.IsOpen;
-    }
 }

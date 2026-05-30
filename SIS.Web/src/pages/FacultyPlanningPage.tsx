@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Calendar, Download, FileText, LayoutList, Maximize2, Search, Upload, Wand2 } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, Download, FileText, LayoutList, Maximize2, Search, ShieldCheck, Upload, Wand2, XCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { STATUS_CONFIG } from '../components/faculty-planning/sectionUtils';
 import { cn } from '@/lib/utils';
@@ -12,11 +12,17 @@ import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useActiveTerm } from '../hooks/useActiveTerm';
 import { useFacultyLookup } from '../hooks/useAdminLookup';
 import { useExportExcel, useExportPdf } from '../hooks/useExcelSchedule';
-import { useScheduleApprovalStatus } from '../hooks/useScheduleApproval';
+import { useScheduleApprovalStatus, useApproveSchedule, useRevokeScheduleApproval } from '../hooks/useScheduleApproval';
+import { usePermissions } from '../hooks/usePermissions';
 import { ConflictBar } from '../components/faculty-planning/ConflictBar';
 import { SectionListTab } from '../components/faculty-planning/SectionListTab';
 import { AutoScheduleTab } from '../components/faculty-planning/AutoScheduleTab';
 import { ExcelImportModal } from '../components/faculty-planning/ExcelImportModal';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type TabKey = 'list' | 'auto-schedule';
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -36,6 +42,10 @@ export default function FacultyPlanningPage() {
   const exportExcel = useExportExcel();
   const exportPdf = useExportPdf();
   const { data: approvalStatus } = useScheduleApprovalStatus(facultyId, termId ?? undefined);
+  const approveMutation = useApproveSchedule(facultyId ?? 0, termId ?? undefined);
+  const revokeMutation = useRevokeScheduleApproval(facultyId ?? 0, termId ?? undefined);
+  const { hasPermission } = usePermissions();
+  const [approveNote, setApproveNote] = useState('');
 
   const [triggerRun, setTriggerRun] = useState(0);
   // Hangi triggerRun değeri çocuk komponentte işlendi.
@@ -71,7 +81,12 @@ export default function FacultyPlanningPage() {
   }
 
   const termStatus = activeTerm?.status;
-  const isTermEditable = termStatus === 'Active';
+  const isApproved = approvalStatus?.isApproved ?? false;
+  const canApprove = hasPermission('menu.program-onayi.approve');
+  // Faz 3b: onaylı programda section-bazı durdur/bitir yetkisi (program yapan + dekan).
+  const canEditPublished = hasPermission('menu.ders-programi-olusturma.assign');
+  // Yayın kilidi: dönem Active DEĞİLSE veya program onaylı (yayında) ise düzenleme kapalı.
+  const isTermEditable = termStatus === 'Active' && !isApproved;
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] overflow-hidden">
@@ -210,7 +225,7 @@ export default function FacultyPlanningPage() {
                   if (termId == null) return;
                   navigate(`/ders-programi-olusturma/duzenle?facultyId=${facultyId}&termId=${termId}`);
                 }}
-                disabled={termId == null}
+                disabled={termId == null || !isTermEditable}
               >
                 <Maximize2 className="h-3.5 w-3.5" />
                 Düzenleyici
@@ -237,8 +252,8 @@ export default function FacultyPlanningPage() {
         </Button>
       </div>
 
-      {/* Term guard */}
-      {termStatus && !isTermEditable && (
+      {/* Term guard — yalnızca dönem gerçekten Active değilken (iptal/pasif) */}
+      {termStatus && termStatus !== 'Active' && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-center mb-3">
           <p className="text-xs text-red-700 font-medium">
             Dönem durumu "{termStatus}" — atama işlemleri yalnızca dönem "Active" (tarih aralığı içinde ve iptal edilmemiş) iken yapılabilir.
@@ -246,12 +261,94 @@ export default function FacultyPlanningPage() {
         </div>
       )}
 
-      {/* Onay uyarısı — program onaylanmışsa düzenleme engellenmez ama operatör bilgilendirilir. */}
-      {approvalStatus?.isApproved && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3">
-          <p className="text-xs text-amber-800 font-medium">
-            Bu fakültenin programı onaylanmış{approvalStatus.approvedByName ? ` (${approvalStatus.approvedByName})` : ''}. Yapacağınız değişiklikler onayın güncelliğini yansıtmayabilir — gerekirse Program Onayı sayfasından yeniden onaylayın.
-          </p>
+      {/* ── Program Onay (yayın) barı ── */}
+      {(canApprove || isApproved) && (
+        <div className={cn(
+          'flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2 mb-3',
+          isApproved ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200',
+        )}>
+          {isApproved ? (
+            <>
+              <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span className="text-xs font-medium text-emerald-800">
+                Program onaylandı (yayında) — öğrencilere açık
+                {approvalStatus?.approvedByName ? ` · ${approvalStatus.approvedByName}` : ''}
+                {approvalStatus?.approvedAt ? ` · ${new Date(approvalStatus.approvedAt).toLocaleString('tr-TR')}` : ''}
+              </span>
+              <span className="text-xs text-emerald-700/70">Değiştirmek için önce onayı geri alın.</span>
+              {canApprove && (
+                <div className="ml-auto">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" disabled={revokeMutation.isPending}>
+                        <XCircle className="h-3.5 w-3.5" />
+                        {revokeMutation.isPending ? 'Geri alınıyor...' : 'Onayı Geri Al'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Onayı Geri Al</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Bu fakültenin programı öğrencilerden geri çekilecek ve yeniden düzenlemeye açılacak.
+                          Yeniden onaylanana kadar öğrenciler bu fakültenin derslerini göremez. Emin misiniz?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => revokeMutation.mutate()} className="bg-red-600 hover:bg-red-700">
+                          Onayı Geri Al
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-xs font-medium text-amber-800">
+                Program henüz yayınlanmadı — öğrenciler bu fakültenin derslerini göremez.
+              </span>
+              {canApprove && (
+                <div className="ml-auto">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={approveMutation.isPending || !isTermEditable}>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {approveMutation.isPending ? 'Onaylanıyor...' : 'Programı Onayla'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Programı Onayla ve Yayınla</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Bu fakültenin programı öğrencilere açılacak (yalnızca tam atanmış/Active şubeler görünür).
+                          Onayladıktan sonra program kilitlenir; değiştirmek için onayı geri almanız gerekir.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <Textarea
+                        placeholder="Onay notu (opsiyonel)..."
+                        value={approveNote}
+                        onChange={e => setApproveNote(e.target.value)}
+                        rows={2}
+                        className="resize-none"
+                      />
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => approveMutation.mutate(approveNote || undefined, { onSuccess: () => setApproveNote('') })}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          Onayla ve Yayınla
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -267,6 +364,7 @@ export default function FacultyPlanningPage() {
               filterStatus={filterStatus}
               searchText={searchText}
               pageSize={pageSize}
+              publishedEditMode={isApproved && canEditPublished}
             />
           </div>
         )}

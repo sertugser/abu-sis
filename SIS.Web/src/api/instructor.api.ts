@@ -70,6 +70,11 @@ export interface InstructorSectionsResponse {
   totalSections: number;
   totalStudents: number;
   sections: InstructorSection[];
+  /** Sistem ayarından gelen öğle arası penceresi, "HH:mm". */
+  lunchBreakStart: string;
+  lunchBreakEnd: string;
+  /** Term'in tanımlı ders saati pencereleri — ızgaranın satır yapısını besler. */
+  slots: { start: string; end: string }[];
 }
 
 export interface InstructorTerm {
@@ -142,6 +147,14 @@ export async function getInstructorSections(termId?: number): Promise<Instructor
 
 export async function getInstructorTerms(): Promise<InstructorTerm[]> {
   const { data } = await apiClient.get('/instructor/my-terms');
+  return data;
+}
+
+export async function downloadInstructorTimetablePdf(termId?: number): Promise<Blob> {
+  const { data } = await apiClient.get('/instructor/my-timetable/pdf', {
+    params: termId != null ? { termId } : undefined,
+    responseType: 'blob',
+  });
   return data;
 }
 

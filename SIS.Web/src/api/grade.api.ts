@@ -55,6 +55,17 @@ export async function unfinalizeSection(sectionId: number): Promise<void> {
   await apiClient.post(`/instructor/section/${sectionId}/unfinalize`);
 }
 
+// Komponent ilan (hoca öğrenciye bu bileşenin notunu yayınlar / kaldırır).
+// Tek-kaynak görünürlük kapısı: WebModuleControl (admin) AND PublishedAt (hoca).
+export async function publishComponent(componentId: number): Promise<{ publishedAt: string }> {
+  const { data } = await apiClient.post(`/instructor/components/${componentId}/publish`);
+  return data;
+}
+
+export async function unpublishComponent(componentId: number): Promise<void> {
+  await apiClient.post(`/instructor/components/${componentId}/unpublish`);
+}
+
 // Harf aralığı
 export async function getGradingCriteria(sectionId: number): Promise<GradingCriteria> {
   const { data } = await apiClient.get(`/instructor/section/${sectionId}/grading-criteria`);
