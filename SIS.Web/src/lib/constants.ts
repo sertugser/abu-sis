@@ -12,6 +12,7 @@ export const ROUTES = {
   TRANSCRIPT: '/report/transkript',
   TRANSCRIPT_SCENARIO: '/transkript-senaryosu',
   // Instructor routes
+  SINAV_TANIMLAMA: '/sinav-tanimlama',
   INSTRUCTOR_SECTIONS: '/derslerim',
   INSTRUCTOR_SCHEDULING: '/ders-programim',
   INSTRUCTOR_ACADEMIC_CALENDAR: '/ogretim-elemani-akademik-takvim',
@@ -193,6 +194,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/report/transkript',
   '/transkript-senaryosu',
   '/derslerim',
+  '/sinav-tanimlama',
   '/yoklama-girisi',
   '/not-girisi',
   '/ders-programim',
