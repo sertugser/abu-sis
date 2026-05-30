@@ -73,6 +73,8 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<PromotionRule> PromotionRules => Set<PromotionRule>();
     public DbSet<ExamRegulation> ExamRegulations => Set<ExamRegulation>();
+    public DbSet<SectionExam> SectionExams => Set<SectionExam>();
+    public DbSet<SectionExamClassroom> SectionExamClassrooms => Set<SectionExamClassroom>();
     public DbSet<FacultyScheduleApproval> FacultyScheduleApprovals => Set<FacultyScheduleApproval>();
     public DbSet<ConstraintDefinition> ConstraintDefinitions => Set<ConstraintDefinition>();
     public DbSet<ConstraintException> ConstraintExceptions => Set<ConstraintException>();
@@ -688,6 +690,11 @@ builder.Entity<GradeComponent>(e =>
      .HasDefaultValue("Other")
      .IsRequired();
 
+    e.Property(gc => gc.ShortName)
+     .HasMaxLength(40)
+     .HasDefaultValue("")
+     .IsRequired();
+
     e.Property(gc => gc.Weight)
      .HasPrecision(5, 2);
 
@@ -715,6 +722,39 @@ builder.Entity<GradeComponent>(e =>
      .HasForeignKey(gc => gc.PrerequisiteGradeComponentId)
      .OnDelete(DeleteBehavior.Restrict);
 });
+
+        // ── SectionExam ─────────────────────────────────────────
+        builder.Entity<SectionExam>(e =>
+        {
+            e.HasIndex(se => new { se.CourseSectionId, se.GradeComponentId }).IsUnique();
+            e.Property(se => se.Description).HasMaxLength(500);
+
+            e.HasOne(se => se.CourseSection)
+             .WithMany()
+             .HasForeignKey(se => se.CourseSectionId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(se => se.GradeComponent)
+             .WithMany()
+             .HasForeignKey(se => se.GradeComponentId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── SectionExamClassroom ────────────────────────────────
+        builder.Entity<SectionExamClassroom>(e =>
+        {
+            e.HasIndex(sec => new { sec.SectionExamId, sec.ClassroomId }).IsUnique();
+
+            e.HasOne(sec => sec.SectionExam)
+             .WithMany(se => se.Classrooms)
+             .HasForeignKey(sec => sec.SectionExamId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(sec => sec.Classroom)
+             .WithMany()
+             .HasForeignKey(sec => sec.ClassroomId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
 
         // ── StudentGrade ──────────────────────────────────────
         builder.Entity<StudentGrade>(e =>
