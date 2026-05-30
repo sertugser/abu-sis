@@ -46,6 +46,15 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
         if (section == null)
             return NotFound(new { error = "Bu section sizin dersleriniz arasında bulunamadı." });
 
+        if (req.GradeComponentId <= 0)
+            return BadRequest(new { error = "Geçersiz sınav kalemi." });
+        if (req.ExamDate == default)
+            return BadRequest(new { error = "Sınav tarihi geçerli değil." });
+        if (req.DurationMinutes is <= 0)
+            return BadRequest(new { error = "Sınav süresi pozitif olmalıdır." });
+        if (req.Description is { Length: > 500 })
+            return BadRequest(new { error = "Açıklama 500 karakteri aşamaz." });
+
         var component = await _context.GradeComponents.FirstOrDefaultAsync(
             gc => gc.Id == req.GradeComponentId
                 && gc.CourseId == section.CourseId
@@ -68,10 +77,12 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
         SectionExam exam;
         if (req.Id.HasValue)
         {
-            exam = await _context.SectionExams
+            var existingExam = await _context.SectionExams
                 .Include(se => se.Classrooms)
-                .FirstOrDefaultAsync(se => se.Id == req.Id.Value && se.CourseSectionId == sectionId, ct)
-                ?? throw new InvalidOperationException();
+                .FirstOrDefaultAsync(se => se.Id == req.Id.Value && se.CourseSectionId == sectionId, ct);
+            if (existingExam == null)
+                return NotFound(new { error = "Sınav oturumu bulunamadı." });
+            exam = existingExam;
 
             exam.GradeComponentId = req.GradeComponentId;
             exam.ExamDate = req.ExamDate;
@@ -79,6 +90,8 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
             exam.Description = req.Description;
             if (req.IsAnnouncedToStudents && !exam.IsAnnouncedToStudents)
                 exam.AnnouncedAt = DateTime.UtcNow;
+            else if (!req.IsAnnouncedToStudents)
+                exam.AnnouncedAt = null;
             exam.IsAnnouncedToStudents = req.IsAnnouncedToStudents;
             exam.UpdatedAt = DateTime.UtcNow;
 
@@ -177,7 +190,10 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
             .Include(se => se.Classrooms)
             .Include(se => se.GradeComponent)
             .Include(se => se.CourseSection).ThenInclude(cs => cs.Course)
-            .Where(se => se.Id != (req.Id ?? 0) && se.CourseSection.TermId == section.TermId)
+            .Where(se => se.Id != (req.Id ?? 0)
+                && se.CourseSection.TermId == section.TermId
+                && se.ExamDate >= req.ExamDate.AddDays(-1)
+                && se.ExamDate <= req.ExamDate.AddDays(1))
             .ToListAsync(ct);
 
         // Kohort için ders kodları (candidate + diğerleri)

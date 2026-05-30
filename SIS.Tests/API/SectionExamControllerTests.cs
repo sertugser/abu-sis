@@ -241,5 +241,68 @@ public class SectionExamControllerTests : IDisposable
         result.Should().BeOfType<NotFoundObjectResult>();
     }
 
+    // Fix 1 — AnnouncedAt cleared when un-announcing
+    [Fact]
+    public async Task Upsert_ClearsAnnouncedAt_WhenUnAnnouncing()
+    {
+        // Create exam with IsAnnouncedToStudents = true
+        var createReq = new SaveSectionExamRequest(
+            null, MidtermComponentId,
+            new DateTime(2026, 2, 10, 9, 0, 0, DateTimeKind.Utc),
+            60, true, "Duyuruldu", new[] { 1 });
+        var create = await _controller.Upsert(SectionId, createReq, default);
+        var created = ((SectionExamDto)((OkObjectResult)create).Value!);
+        created.IsAnnouncedToStudents.Should().BeTrue();
+        created.AnnouncedAt.Should().NotBeNull();
+
+        // Update same exam with IsAnnouncedToStudents = false
+        var updateReq = new SaveSectionExamRequest(
+            created.Id, MidtermComponentId,
+            new DateTime(2026, 2, 10, 9, 0, 0, DateTimeKind.Utc),
+            60, false, "Geri alındı", new[] { 1 });
+        var update = await _controller.Upsert(SectionId, updateReq, default);
+        update.Should().BeOfType<OkObjectResult>();
+
+        var items = ((IEnumerable<SectionExamDto>)((OkObjectResult)(await _controller.List(SectionId, default))).Value!).ToList();
+        items.Should().ContainSingle();
+        items[0].IsAnnouncedToStudents.Should().BeFalse();
+        items[0].AnnouncedAt.Should().BeNull();
+    }
+
+    // Fix 2 — 404 when updating non-existent exam id
+    [Fact]
+    public async Task Upsert_ReturnsNotFound_WhenUpdatingMissingExam()
+    {
+        var req = new SaveSectionExamRequest(
+            9999, MidtermComponentId,
+            new DateTime(2026, 3, 10, 9, 0, 0, DateTimeKind.Utc),
+            60, false, null, new[] { 1 });
+        var result = await _controller.Upsert(SectionId, req, default);
+        result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    // Fix 4 — input validation: default ExamDate rejected
+    [Fact]
+    public async Task Upsert_Rejects_WhenExamDateDefault()
+    {
+        var req = new SaveSectionExamRequest(
+            null, MidtermComponentId,
+            default, 60, false, null, new[] { 1 });
+        var result = await _controller.Upsert(SectionId, req, default);
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    // Fix 4 — input validation: non-positive DurationMinutes rejected
+    [Fact]
+    public async Task Upsert_Rejects_WhenDurationNonPositive()
+    {
+        var req = new SaveSectionExamRequest(
+            null, MidtermComponentId,
+            new DateTime(2026, 4, 10, 9, 0, 0, DateTimeKind.Utc),
+            0, false, null, new[] { 1 });
+        var result = await _controller.Upsert(SectionId, req, default);
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
     public void Dispose() => _context.Dispose();
 }
