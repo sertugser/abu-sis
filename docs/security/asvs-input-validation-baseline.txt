@@ -83,6 +83,8 @@ RegistrationPlanItemDto
 RegistrationSubmitDto
 SaveAcademicCalendarChangesDto
 SaveExamRegulationRequest
+# SectionExam upsert: instructor-only endpoint; inputs are strongly typed (int IDs, DateTime, bool, optional string Description); inline validation for component ownership and classroom existence
+SaveSectionExamRequest
 SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto
