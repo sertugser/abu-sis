@@ -84,6 +84,7 @@ public static class RolePermissionSeed
                 "menu.yoklama-girisi.view",
                 "menu.ders-programim.view",
                 "menu.not-girisi.view",
+                "menu.sinav-tanimlama.view",
                 "menu.danisman-ders-kisitlari.view",
                 "menu.degerlendirme-sonuclari.view",
                 "menu.sifre-degistir.view",
@@ -96,6 +97,7 @@ public static class RolePermissionSeed
                 "menu.duyuru-yonetimi.view",
 
                 // ── Action permissions ──
+                "menu.sinav-tanimlama.manage",
                 "menu.not-girisi.edit",
                 "menu.not-girisi.submit",
                 "menu.not-girisi.export",
@@ -324,6 +326,8 @@ public static class RolePermissionSeed
                 "menu.sinav-mufredati.edit",
                 "menu.sinav-mufredati.create",
                 "menu.sinav-mufredati.delete",
+                "menu.sinav-tanimlama.view",
+                "menu.sinav-tanimlama.manage",
                 "menu.mufredat-ders-intibak.view",
                 "menu.mufredat-ders-intibak.edit",
                 "menu.ders-programi-kisitlamalari.view",
@@ -482,6 +486,8 @@ public static class RolePermissionSeed
                 "menu.sinav-mufredati.edit",
                 "menu.sinav-mufredati.create",
                 "menu.sinav-mufredati.delete",
+                "menu.sinav-tanimlama.view",
+                "menu.sinav-tanimlama.manage",
                 "menu.mufredat-ders-intibak.view",
                 "menu.mufredat-ders-intibak.edit",
                 "menu.ders-programi-kisitlamalari.view",

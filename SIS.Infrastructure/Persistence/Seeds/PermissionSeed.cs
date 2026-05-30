@@ -183,6 +183,10 @@ public static class PermissionSeed
         ("menu.sinav-mufredati.create",                  PermissionCategory.Menu, "Sınav yönergesi oluşturma"),
         ("menu.sinav-mufredati.delete",                  PermissionCategory.Menu, "Sınav yönergesi silme"),
 
+        // Sınav Tanımlama (şube bazlı sınav oturumu — SectionExamController)
+        ("menu.sinav-tanimlama.view",                    PermissionCategory.Menu, "Sınav Tanımlama sayfası (sınav oturumlarını görme)"),
+        ("menu.sinav-tanimlama.manage",                  PermissionCategory.Menu, "Sınav oturumu ekle/düzenle/sil (tarih/derslik/ilan)"),
+
         // Şubelendirme İşlemleri (sidebar item; backend henüz yok ama placeholder)
         ("menu.subelendirme-islemleri.view",             PermissionCategory.Menu, "Şubelendirme işlemleri sayfası"),
         ("menu.subelendirme-islemleri.transfer",         PermissionCategory.Menu, "Şubeler arası öğrenci taşıma"),
