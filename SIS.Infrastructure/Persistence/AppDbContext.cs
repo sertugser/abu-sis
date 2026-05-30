@@ -726,6 +726,11 @@ builder.Entity<GradeComponent>(e =>
         // ── SectionExam ─────────────────────────────────────────
         builder.Entity<SectionExam>(e =>
         {
+            // Karar (2026-05-31): bir şubede bir sınav kalemi için TEK oturum.
+            // Bütünleme/mazeret bugün skor-bazlı (StudentGrade.MakeupScore) — ayrı GradeComponent
+            // YOK, dolayısıyla makeup için ayrı SectionExam takvimlendirme şu an kapsam dışı.
+            // İleride makeup sınavı ayrı tarih/derslikle takvimlenecekse: SectionExam'e ExamKind
+            // (Regular/Makeup) ayrımı eklenip bu unique index (..., ExamKind)'e genişletilir (kırıcı değil).
             e.HasIndex(se => new { se.CourseSectionId, se.GradeComponentId }).IsUnique();
             e.Property(se => se.Description).HasMaxLength(500);
 
