@@ -71,8 +71,10 @@ public class GradeController : ControllerBase
             {
                 gc.Id,
                 gc.Name,
+                gc.ShortName,
                 gc.Weight,
                 gc.Order,
+                gc.Type,
                 gc.PublishedAt
             })
             .ToListAsync();
@@ -135,6 +137,7 @@ public class GradeController : ControllerBase
             component.Weight = dto.Weight;
             component.Order = dto.Order;
             component.Type = dto.Type;
+            component.ShortName = dto.ShortName ?? string.Empty;
         }
         else
         {
@@ -146,7 +149,8 @@ public class GradeController : ControllerBase
                 Name = dto.Name,
                 Weight = dto.Weight,
                 Order = dto.Order,
-                Type = dto.Type
+                Type = dto.Type,
+                ShortName = dto.ShortName ?? string.Empty
             };
             _context.GradeComponents.Add(component);
         }
@@ -2686,6 +2690,7 @@ public async Task<IActionResult> ImportApply(int sectionId, [FromForm] ImportFil
         public decimal Weight { get; set; }
         public int Order { get; set; }
         public GradeComponentType Type { get; set; } = GradeComponentType.Other;
+        public string? ShortName { get; set; }
     }
 
     public class GradeSubmitDto
