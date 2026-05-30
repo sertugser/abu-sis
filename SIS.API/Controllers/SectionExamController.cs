@@ -14,10 +14,11 @@ namespace SIS.API.Controllers;
 [ApiController]
 [Route("api/instructor/section/{sectionId:int}/exams")]
 [Authorize]
-public class SectionExamController(AppDbContext context, ISystemConfigProvider config) : ControllerBase
+public class SectionExamController(AppDbContext context, ISystemConfigProvider config, IExamRegulationResolver resolver) : ControllerBase
 {
     private readonly AppDbContext _context = context;
     private readonly ISystemConfigProvider _config = config;
+    private readonly IExamRegulationResolver _resolver = resolver;
 
     [HttpGet]
     [RequirePermission("menu.sinav-tanimlama.view")]
@@ -143,6 +144,42 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
         _context.SectionExams.Remove(exam);
         await _context.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    [HttpGet("config")]
+    [RequirePermission("menu.sinav-tanimlama.view")]
+    public async Task<IActionResult> GetExamConfig(int sectionId, CancellationToken ct)
+    {
+        var section = await GetAuthorizedSectionAsync(sectionId, ct);
+        if (section == null)
+            return NotFound(new { error = "Bu section sizin dersleriniz arasında bulunamadı." });
+
+        var components = await _context.GradeComponents
+            .AsNoTracking()
+            .Where(gc => gc.CourseId == section.CourseId && gc.AcademicTermId == section.TermId)
+            .OrderBy(gc => gc.Order)
+            .Select(gc => new ExamConfigComponentDto(
+                gc.Id, gc.Name, gc.ShortName, gc.Type.ToString(), gc.Weight, gc.Order))
+            .ToListAsync(ct);
+
+        var counts = await _resolver.ResolveCourseExamCountsAsync(section.CourseId, section.TermId, ct);
+        var bounds = await _resolver.ResolveCourseWeightBoundsAsync(section.CourseId, section.TermId, ct);
+
+        var classrooms = await _context.Classrooms
+            .AsNoTracking()
+            .OrderBy(c => c.BuildingName).ThenBy(c => c.Name)
+            .Select(c => new ExamConfigClassroomDto(c.Id, c.Name, c.BuildingName, c.Capacity))
+            .ToListAsync(ct);
+
+        return Ok(new ExamConfigDto(
+            section.Course.Code,
+            section.Course.Name,
+            counts.HasRegulation,
+            counts.MidtermCount,
+            counts.FinalCount,
+            bounds?.MinMidterm, bounds?.MaxMidterm, bounds?.MinFinal, bounds?.MaxFinal,
+            components,
+            classrooms));
     }
 
     private async Task<CourseSection?> GetAuthorizedSectionAsync(int sectionId, CancellationToken ct)
@@ -271,3 +308,12 @@ public record SaveSectionExamRequest(
     bool IsAnnouncedToStudents,
     string? Description,
     IReadOnlyList<int> ClassroomIds);
+
+public record ExamConfigComponentDto(int Id, string Name, string ShortName, string Type, decimal Weight, int Order);
+public record ExamConfigClassroomDto(int Id, string Name, string BuildingName, int Capacity);
+public record ExamConfigDto(
+    string CourseCode, string CourseName,
+    bool HasRegulation, int MidtermCount, int FinalCount,
+    decimal? MinMidtermWeight, decimal? MaxMidtermWeight, decimal? MinFinalWeight, decimal? MaxFinalWeight,
+    IReadOnlyList<ExamConfigComponentDto> Components,
+    IReadOnlyList<ExamConfigClassroomDto> Classrooms);

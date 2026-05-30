@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using SIS.API.Controllers;
 using SIS.Application.Common.Services;
+using SIS.Application.Grading;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
 using SIS.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ public class SectionExamControllerTests : IDisposable
 {
     private readonly AppDbContext _context;
     private readonly Mock<ISystemConfigProvider> _configMock;
+    private readonly Mock<IExamRegulationResolver> _resolverMock;
     private readonly SectionExamController _controller;
 
     private const int InstructorUserId = 100;
@@ -40,12 +42,20 @@ public class SectionExamControllerTests : IDisposable
         _configMock.Setup(c => c.GetIntAsync("Exam.DefaultDurationMinutes", 60, It.IsAny<CancellationToken>()))
             .ReturnsAsync(60);
 
+        _resolverMock = new Mock<IExamRegulationResolver>();
+        _resolverMock
+            .Setup(r => r.ResolveCourseExamCountsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExamCounts(2, 1, true));
+        _resolverMock
+            .Setup(r => r.ResolveCourseWeightBoundsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WeightBounds(40m, 60m, 40m, 60m, false));
+
         _controller = CreateController(InstructorUserId);
     }
 
     private SectionExamController CreateController(int userId)
     {
-        var controller = new SectionExamController(_context, _configMock.Object);
+        var controller = new SectionExamController(_context, _configMock.Object, _resolverMock.Object);
         var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         controller.ControllerContext = new ControllerContext
@@ -302,6 +312,29 @@ public class SectionExamControllerTests : IDisposable
             0, false, null, new[] { 1 });
         var result = await _controller.Upsert(SectionId, req, default);
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetExamConfig_ReturnsConfig_WithComponentsAndClassrooms()
+    {
+        var result = await _controller.GetExamConfig(SectionId, default);
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var dto = ok.Value.Should().BeAssignableTo<ExamConfigDto>().Subject;
+
+        dto.CourseCode.Should().Be("BM101");
+        dto.HasRegulation.Should().BeTrue();
+        dto.MidtermCount.Should().Be(2);
+        dto.FinalCount.Should().Be(1);
+        dto.Components.Should().ContainSingle(c => c.Name == "Vize");
+        dto.Classrooms.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetExamConfig_ReturnsNotFound_WhenSectionNotOwned()
+    {
+        var other = CreateController(userId: 999);
+        var result = await other.GetExamConfig(SectionId, default);
+        result.Should().BeOfType<NotFoundObjectResult>();
     }
 
     public void Dispose() => _context.Dispose();
