@@ -92,14 +92,16 @@ export default function StudentTimetablePage() {
   return (
     <Card className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden">
       <CardContent className="flex flex-1 flex-col p-0">
-        <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-4">
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-muted-foreground">Dönem</label>
+        <header className="flex items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Dönem
+            </label>
             <Select
               value={selectedTermId?.toString()}
               onValueChange={(v) => setSelectedTermId(Number(v))}
             >
-              <SelectTrigger className="w-64">
+              <SelectTrigger className="h-8 w-52 text-xs">
                 <SelectValue placeholder="Dönem seçin" />
               </SelectTrigger>
               <SelectContent>
@@ -111,8 +113,15 @@ export default function StudentTimetablePage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handlePrint} disabled={!selectedTermId} variant="outline">
-            <Printer className="mr-2 h-4 w-4" /> Yazdır
+          <Button
+            onClick={handlePrint}
+            disabled={!selectedTermId}
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+          >
+            <Printer className="mr-1.5 h-3.5 w-3.5" />
+            Yazdır
           </Button>
         </header>
 

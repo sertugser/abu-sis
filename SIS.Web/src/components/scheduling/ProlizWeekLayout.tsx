@@ -52,7 +52,7 @@ export function ProlizWeekLayout({ rowsByDay }: ProlizWeekLayoutProps) {
                   Bu güne tanımlı ders programı bulunamadı.
                 </div>
               ) : (
-                <ul className="flex flex-1 flex-col">
+                <ul className="flex flex-1 flex-col divide-y divide-border/50">
                   {rows.map((row, idx) => (
                     <li
                       key={`${day}-${row.sectionId}-${idx}`}
