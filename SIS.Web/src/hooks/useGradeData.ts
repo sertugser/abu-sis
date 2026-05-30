@@ -10,9 +10,12 @@ import {
   finalizeSection,
   getButunlemeRoster,
   getComponents,
+  getExamsOverview,
   getGrades,
   getGradingCriteria,
   getMazeretRoster,
+  pasteApply,
+  pastePreview,
   previewImport,
   publishComponent,
   setButunlemeScores,
@@ -30,6 +33,7 @@ import type {
   GradeSubmitDto,
   GradingCriteria,
   MazeretScoreItem,
+  PasteScoresRequest,
 } from '../types/grade';
 
 export function useComponents(sectionId: number) {
@@ -180,6 +184,34 @@ export function useSetExamAttendance(sectionId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['grades', sectionId] });
     },
+  });
+}
+
+// ── Paste import hooks ───────────────────────────────────
+
+export function usePastePreview(sectionId: number) {
+  return useMutation({
+    mutationFn: (req: PasteScoresRequest) => pastePreview(sectionId, req),
+  });
+}
+
+export function usePasteApply(sectionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: PasteScoresRequest) => pasteApply(sectionId, req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['grades', sectionId] });
+    },
+  });
+}
+
+// ── Exams overview hook ──────────────────────────────────
+
+export function useExamsOverview(termId?: number) {
+  return useQuery({
+    queryKey: ['examsOverview', termId ?? 'active'],
+    queryFn: () => getExamsOverview(termId),
+    staleTime: 2 * 60 * 1000,
   });
 }
 

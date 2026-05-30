@@ -5,6 +5,7 @@ import type {
   ButunlemeRosterResponse,
   ButunlemeScoreItem,
   ExamAttendance,
+  ExamOverviewRow,
   FinalizeResponse,
   GradeComponent,
   GradeComponentType,
@@ -16,6 +17,7 @@ import type {
   MazeretFinalizeResponse,
   MazeretRosterResponse,
   MazeretScoreItem,
+  PasteScoresRequest,
 } from '../types/grade';
 
 // Bileşen CRUD
@@ -143,6 +145,39 @@ export async function applyImport(
     }
   );
 
+  return data;
+}
+
+// ── Paste import ───────────────────────────────────────
+
+export async function pastePreview(
+  sectionId: number,
+  req: PasteScoresRequest
+): Promise<ImportPreviewResponse> {
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/grades/paste-preview`,
+    req
+  );
+  return data;
+}
+
+export async function pasteApply(
+  sectionId: number,
+  req: PasteScoresRequest
+): Promise<ImportApplyResponse> {
+  const { data } = await apiClient.post(
+    `/instructor/section/${sectionId}/grades/paste-apply`,
+    req
+  );
+  return data;
+}
+
+// ── Exams overview ──────────────────────────────────────
+
+export async function getExamsOverview(termId?: number): Promise<ExamOverviewRow[]> {
+  const { data } = await apiClient.get('/instructor/exams-overview', {
+    params: termId != null ? { termId } : undefined,
+  });
   return data;
 }
 

@@ -196,3 +196,35 @@ export interface MazeretFinalizeResponse {
   message: string;
   results: MazeretFinalizeResult[];
 }
+
+// ══════════════════════════════════════════════════════════
+// PASTE IMPORT TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface PasteScoresRequest {
+  componentId: number;
+  text: string;
+  separator: string;
+}
+
+// ══════════════════════════════════════════════════════════
+// EXAMS OVERVIEW TYPES
+// ══════════════════════════════════════════════════════════
+
+export interface ExamOverviewComponent {
+  id: number;
+  name: string;
+  type: GradeComponentType;
+  weight: number;
+  publishedAt: string | null;
+  examDate: string | null;
+}
+
+export interface ExamOverviewRow {
+  sectionId: number;
+  courseCode: string;
+  courseName: string;
+  sectionNumber: number;
+  isFinalized: boolean;
+  components: ExamOverviewComponent[];
+}
