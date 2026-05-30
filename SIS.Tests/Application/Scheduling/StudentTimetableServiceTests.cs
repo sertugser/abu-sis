@@ -199,15 +199,17 @@ public sealed class StudentTimetableServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTimetableAsync_returns_schedule_blocks_built_by_helper()
+    public async Task GetTimetableAsync_returns_one_block_per_raw_time_slot()
     {
         await SeedBaseAsync();
         await AddCourseAsync(CourseId, "TST101", "Test Dersi");
         var section = await AddSectionAsync(1001, CourseId);
         var classroom = await AddClassroomAsync(ClassroomId, "C 036");
 
-        // Pzt 09:00-09:50 + Pzt 09:55-10:45 aynı derslik + theory → MERGE
-        // Çar 13:00-13:50 lab → ayrı blok
+        // Pzt 09:00-09:50 + Pzt 09:55-10:45 aynı derslik + theory.
+        // Ortak helper bunları birleştirirdi; öğrenci sayfası ham slot bazlı görür
+        // → 2 ayrı theory blok dönmeli.
+        // Çar 13:00-13:50 lab → ayrı blok.
         var ts1 = await AddTimeSlotAsync(501, DayOfWeek.Monday, 9, 0, 9, 50);
         var ts2 = await AddTimeSlotAsync(502, DayOfWeek.Monday, 9, 55, 10, 45);
         var ts3 = await AddTimeSlotAsync(503, DayOfWeek.Wednesday, 13, 0, 13, 50);
@@ -222,14 +224,20 @@ public sealed class StudentTimetableServiceTests : IDisposable
 
         result.Sections.Should().HaveCount(1);
         var blocks = result.Sections[0].Blocks;
-        blocks.Should().HaveCount(2);
+        blocks.Should().HaveCount(3);
         blocks.Should().ContainSingle(b =>
             b.Day == (int)DayOfWeek.Monday
             && b.StartTime == new TimeOnly(9, 0)
+            && b.EndTime == new TimeOnly(9, 50)
+            && b.BlockType == ScheduleBlockType.Theory);
+        blocks.Should().ContainSingle(b =>
+            b.Day == (int)DayOfWeek.Monday
+            && b.StartTime == new TimeOnly(9, 55)
             && b.EndTime == new TimeOnly(10, 45)
             && b.BlockType == ScheduleBlockType.Theory);
         blocks.Should().ContainSingle(b =>
             b.Day == (int)DayOfWeek.Wednesday
+            && b.StartTime == new TimeOnly(13, 0)
             && b.BlockType == ScheduleBlockType.Lab);
     }
 

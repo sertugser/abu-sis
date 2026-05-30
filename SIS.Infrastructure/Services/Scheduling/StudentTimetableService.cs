@@ -86,7 +86,7 @@ public sealed class StudentTimetableService : IStudentTimetableService
                     CourseCode: r.CourseSection.Course.Code,
                     CourseName: r.CourseSection.Course.Name,
                     InstructorDisplay: BuildInstructorDisplay(r.CourseSection.Instructor, instructorUser),
-                    Blocks: ScheduleHelper.BuildScheduleBlocks(r.CourseSection.SectionSchedules));
+                    Blocks: ExpandSchedulesToSlots(r.CourseSection.SectionSchedules));
             })
             .OrderBy(s => s.CourseCode)
             .ThenBy(s => s.SectionNumber)
@@ -169,5 +169,29 @@ public sealed class StudentTimetableService : IStudentTimetableService
         var parts = new[] { instructor.Title ?? string.Empty, firstName, lastName }
             .Where(p => !string.IsNullOrWhiteSpace(p));
         return string.Join(" ", parts).Trim();
+    }
+
+    /// <summary>
+    /// Öğrenci ders programı için ham TimeSlot bazlı listeye dönüştürür.
+    /// Ortak <see cref="ScheduleHelper.BuildScheduleBlocks"/> ardışık slotları
+    /// birleştirir; öğrenci sayfası 09:00-09:50 / 10:00-10:50 gibi her dilimi
+    /// ayrı satırda gösterdiği için merge yapılmaz.
+    /// </summary>
+    private static List<ScheduleBlockDto> ExpandSchedulesToSlots(IEnumerable<SectionSchedule> schedules)
+    {
+        return schedules
+            .OrderBy(ss => ss.TimeSlot.DayOfWeek)
+            .ThenBy(ss => ss.TimeSlot.StartTime)
+            .Select(ss => new ScheduleBlockDto
+            {
+                Day = (int)ss.TimeSlot.DayOfWeek,
+                StartTime = ss.TimeSlot.StartTime,
+                EndTime = ss.TimeSlot.EndTime,
+                BlockType = ss.BlockType,
+                ClassroomId = ss.ClassroomId,
+                ClassroomName = ss.Classroom?.Name,
+                ClassroomType = ss.Classroom?.Type.ToString(),
+            })
+            .ToList();
     }
 }

@@ -14,12 +14,12 @@ const COLUMN_GRID =
 
 export function ProlizWeekLayout({ rowsByDay }: ProlizWeekLayoutProps) {
   return (
-    <div className="flex flex-col">
-      {/* Sütun başlıkları — bir kez, sticky */}
+    <div className="flex flex-1 flex-col">
+      {/* Sütun başlıkları — bir kez */}
       <div
         className={cn(
           COLUMN_GRID,
-          'sticky top-0 z-10 border-y border-border bg-muted/40 px-6 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground',
+          'border-y border-border bg-muted/40 px-6 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground',
         )}
       >
         <span>Saat</span>
@@ -29,39 +29,37 @@ export function ProlizWeekLayout({ rowsByDay }: ProlizWeekLayoutProps) {
         <span>Öğretim Elemanı</span>
       </div>
 
-      <div className="divide-y divide-border">
+      {/* Günler eşit dağılım — az ders varsa satırlar büyür, çok ders varsa sıkışır */}
+      <div className="flex flex-1 flex-col divide-y divide-border">
         {DAY_ORDER.map((day) => {
           const rows = rowsByDay[day] ?? [];
           return (
-            <section key={day}>
-              {/* Gün başlığı: sol bant + ders sayısı */}
-              <header className="flex items-center gap-3 px-6 py-2.5">
+            <section key={day} className="flex flex-1 flex-col">
+              {/* Gün başlığı */}
+              <header className="flex flex-none items-center gap-3 px-6 py-2">
                 <span className="h-4 w-1 rounded-full bg-primary" aria-hidden />
                 <h2 className="text-sm font-semibold text-foreground">
                   {dayNumberToTurkish(day)}
                 </h2>
                 <span className="text-xs text-muted-foreground">
-                  {rows.length === 0
-                    ? 'ders yok'
-                    : `${rows.length} ders`}
+                  {rows.length === 0 ? 'ders yok' : `${rows.length} ders`}
                 </span>
               </header>
 
-              {/* Satırlar */}
+              {/* Satırlar — flex-1 ile eşit pay alır */}
               {rows.length === 0 ? (
-                <p className="px-6 pb-3 pl-10 text-xs italic text-muted-foreground">
+                <div className="flex flex-1 items-center px-6 pb-2 pl-10 text-xs italic text-muted-foreground">
                   Bu güne tanımlı ders programı bulunamadı.
-                </p>
+                </div>
               ) : (
-                <ul className="pb-1">
+                <ul className="flex flex-1 flex-col">
                   {rows.map((row, idx) => (
                     <li
                       key={`${day}-${row.sectionId}-${idx}`}
                       className={cn(
                         COLUMN_GRID,
-                        'group items-center px-6 py-2 text-sm transition-colors hover:bg-muted/40',
-                        row.isLab &&
-                          'bg-emerald-50/60 hover:bg-emerald-100/70',
+                        'group flex-1 items-center px-6 py-1.5 text-sm transition-colors hover:bg-muted/40',
+                        row.isLab && 'bg-emerald-50/60 hover:bg-emerald-100/70',
                       )}
                       data-testid={row.isLab ? 'lab-row' : 'theory-row'}
                     >
@@ -102,8 +100,8 @@ export function ProlizWeekLayout({ rowsByDay }: ProlizWeekLayoutProps) {
         })}
       </div>
 
-      {/* Lab açıklama şeridi */}
-      <div className="mt-auto flex items-center gap-2 border-t border-border bg-muted/30 px-6 py-2 text-xs text-muted-foreground">
+      {/* Lab açıklama şeridi — alta yapışır */}
+      <div className="flex flex-none items-center gap-2 border-t border-border bg-muted/30 px-6 py-2 text-xs text-muted-foreground">
         <span
           className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200"
           aria-hidden
