@@ -125,7 +125,8 @@ export default function CourseOpeningPage() {
   const updateMutation = useUpdateOpenedSection(deptId ?? 0, targetTermId ?? 0);
   const closeMutation = useCloseSection(deptId ?? 0, targetTermId ?? 0);
   const closeAllMutation = useCloseAllSections(deptId ?? 0, targetTermId ?? 0);
-  const deleteAllHardMutation = useDeleteAllSectionsHard(deptId ?? 0, targetTermId ?? 0);
+  // silent: toplu silme paneli döngü sonunda kendi tek özet toast'ını (ders adlı) gösterir.
+  const deleteAllHardMutation = useDeleteAllSectionsHard(deptId ?? 0, targetTermId ?? 0, { silent: true });
   const reactivateMutation = useReactivateSection(deptId ?? 0, targetTermId ?? 0);
 
   const forecastMap = useMemo(() => {
@@ -229,7 +230,10 @@ export default function CourseOpeningPage() {
     [updateMutation],
   );
 
-  const handleCloseSection = useCallback((sectionId: number) => closeMutation.mutate(sectionId), [closeMutation]);
+  const handleCloseSection = useCallback(
+    (sectionId: number, label?: string) => closeMutation.mutate({ sectionId, label }),
+    [closeMutation],
+  );
   const handleCloseAllSections = useCallback(
     (courseId: number) => closeAllMutation.mutateAsync(courseId),
     [closeAllMutation],

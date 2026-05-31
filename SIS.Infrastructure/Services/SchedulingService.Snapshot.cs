@@ -57,10 +57,16 @@ public partial class SchedulingService
 
         var candidates = ProjectRuntimeCandidates(sections, instructorNameMap, courseMetadata);
 
-        var hardCfg = await LoadHardConstraintConfigAsync(cancellationToken);
         var rawConfig = await LoadSystemConfigAsync(cancellationToken);
         var fullCfg = SchedulingConstraintConfig.FromSystemConfig(rawConfig);
-        var curriculumConflictMode = hardCfg?.CurriculumConflictMode ?? "curriculum";
+        // 2026-05-31 — CurriculumConflictMode tek kaynak: H5.Parameters JSON (solver ile aynı).
+        // FromSystemConfig default "curriculum" döndürür; ApplyConstraintStateOverrides H5.Parameters'taki
+        // gerçek modu ("cohort") uygular. Aksi halde evaluator "curriculum", solver "cohort" çalışıp drift
+        // oluşur → panel, solver'ın bilerek izin verdiği (modulo) çakışmaları sahte uyarı olarak gösterir.
+        var constraintState = await _constraintStateLoader.LoadConstraintStateAsync(
+            null, null, null, termId, cancellationToken);
+        fullCfg.ApplyConstraintStateOverrides(constraintState);
+        var curriculumConflictMode = fullCfg.CurriculumConflictMode;
 
         var conflictData = await BuildConflictPairsAsync(
             candidates, courseMetadata, curriculumConflictMode,

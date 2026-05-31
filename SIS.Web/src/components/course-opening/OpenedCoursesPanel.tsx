@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/global-toast';
 import { Download, ExternalLink, HelpCircle, Layers, Loader2, Search, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -38,10 +39,10 @@ interface Props {
   nameSearch: string;
 
   onUpdateSection: (sectionId: number, capacity: number, instructorId: number | undefined, internalQuota?: number | null, externalQuota?: number | null) => void;
-  onCloseSection: (sectionId: number) => void;
+  onCloseSection: (sectionId: number, label?: string) => void;
   onCloseAllSections: (courseId: number) => Promise<unknown>;
-  /** Hard-delete: dersin tüm şubelerini DB'den fiziksel sil (geri alınamaz). */
-  onDeleteAllSectionsHard: (courseId: number) => Promise<unknown>;
+  /** Hard-delete: dersin tüm şubelerini DB'den fiziksel sil (geri alınamaz). Silinen şube sayısını döndürür. */
+  onDeleteAllSectionsHard: (courseId: number) => Promise<{ deletedSectionCount: number }>;
   onReactivateSection: (sectionId: number) => Promise<unknown>;
   onAddSection: (courseId: number, capacity: number, instructorId: number | undefined, internalQuota?: number, externalQuota?: number) => void;
   updatePending: boolean;
@@ -96,6 +97,7 @@ export function OpenedCoursesPanel({
   readOnly = false,
   canEdit = true,
 }: Props) {
+  const { showSuccess, showWarning, showError } = useToast();
   const [sortField, _setSortField] = useState<SortField>('code');
   const [sortDir, _setSortDir] = useState<SortDir>('asc');
   // Multi-select — birden fazla ders seçilebilir, toplu silme için
@@ -208,25 +210,56 @@ export function OpenedCoursesPanel({
     if (selectedCourseIds.size === 0) return;
     setIsBulkDeleting(true);
     setBulkDeleteError(null);
+
+    const succeeded: { code: string; sections: number }[] = [];
     const errors: string[] = [];
     for (const courseId of selectedCourseIds) {
+      const code = courseGroups.find((g) => g.courseId === courseId)?.courseCode ?? `#${courseId}`;
       try {
         // Hard-delete: dersin tüm şubeleri DB'den fiziksel silinir (geri alınamaz)
-        await onDeleteAllSectionsHard(courseId);
+        const res = await onDeleteAllSectionsHard(courseId);
+        succeeded.push({ code, sections: res?.deletedSectionCount ?? 0 });
       } catch (e) {
         const err = e as { response?: { data?: { error?: string } }; message?: string };
-        const code = courseGroups.find((g) => g.courseId === courseId)?.courseCode ?? `#${courseId}`;
         errors.push(`${code}: ${err?.response?.data?.error ?? err?.message ?? 'Bilinmeyen hata'}`);
       }
     }
     setIsBulkDeleting(false);
+
+    // Tek özet toast — hangi dersler + kaç şube. (Tekrarlı, bilgisiz toast yığını yerine.)
+    const codes = succeeded.map((s) => s.code).join(', ');
+    const totalSections = succeeded.reduce((sum, s) => sum + s.sections, 0);
+    const TOAST_DURATION_MS = 7500;
+    if (succeeded.length > 0 && errors.length === 0) {
+      showSuccess(
+        succeeded.length === 1
+          ? `${codes} bu dönemden kaldırıldı`
+          : `${succeeded.length} ders bu dönemden kaldırıldı`,
+        `${codes} — toplam ${totalSections} şube silindi.`,
+        { durationMs: TOAST_DURATION_MS },
+      );
+    } else if (succeeded.length > 0 && errors.length > 0) {
+      showWarning(
+        'Kaldırma kısmen tamamlandı',
+        `Silinen: ${codes} (${totalSections} şube). ${errors.length} ders kayıtlı öğrenci nedeniyle silinemedi.`,
+        { durationMs: TOAST_DURATION_MS },
+      );
+    } else if (errors.length > 0) {
+      showError(
+        'Hiçbir ders kaldırılamadı',
+        `${errors.length} ders kayıtlı öğrenci içerdiği için silinemedi.`,
+        { durationMs: TOAST_DURATION_MS },
+      );
+    }
+
     if (errors.length > 0) {
+      // Ders bazlı gerekçeler diyalogda kalsın (kullanıcı tek tek görebilsin).
       setBulkDeleteError(errors.join('\n'));
     } else {
       setBulkDeleteOpen(false);
       setSelectedCourseIds(new Set());
     }
-  }, [selectedCourseIds, onDeleteAllSectionsHard, courseGroups]);
+  }, [selectedCourseIds, onDeleteAllSectionsHard, courseGroups, showSuccess, showWarning, showError]);
 
   const handleScroll = () => {
     const el = scrollRef.current;

@@ -280,7 +280,13 @@ export default function SectioningPage() {
     if (!confirmAction) return;
     switch (confirmAction.type) {
       case 'closeSection':
-        closeSection.mutate(confirmAction.section.sectionId, { onSuccess: () => setConfirmAction(null) });
+        closeSection.mutate(
+          {
+            sectionId: confirmAction.section.sectionId,
+            label: `${confirmAction.section.courseCode} — ${confirmAction.section.sectionNumber}. şube`,
+          },
+          { onSuccess: () => setConfirmAction(null) },
+        );
         break;
       case 'reactivateSection':
         reactivateSection.mutate(confirmAction.section.sectionId, { onSuccess: () => setConfirmAction(null) });

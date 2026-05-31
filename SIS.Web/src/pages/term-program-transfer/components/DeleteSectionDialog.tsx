@@ -20,7 +20,10 @@ export function DeleteSectionDialog({ section, departmentId, termId, open, onOpe
   const handleDelete = async () => {
     setError(null);
     try {
-      await mutation.mutateAsync(section.sectionId);
+      await mutation.mutateAsync({
+        sectionId: section.sectionId,
+        label: `${section.courseCode} — ${section.sectionNumber}. şube`,
+      });
       onOpenChange(false);
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } }; message?: string };
