@@ -1394,6 +1394,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsEnrollmentSuspended")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsExamCoordinator")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 
@@ -2597,6 +2602,13 @@ namespace SIS.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
@@ -3187,6 +3199,76 @@ namespace SIS.Infrastructure.Migrations
                     b.HasIndex("SectionId", "CreatedAt");
 
                     b.ToTable("SchedulingAuditLogs");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SectionExam", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AnnouncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CourseSectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExamDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("GradeComponentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsAnnouncedToStudents")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GradeComponentId");
+
+                    b.HasIndex("CourseSectionId", "GradeComponentId")
+                        .IsUnique();
+
+                    b.ToTable("SectionExams");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SectionExamClassroom", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClassroomId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SectionExamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassroomId");
+
+                    b.HasIndex("SectionExamId", "ClassroomId")
+                        .IsUnique();
+
+                    b.ToTable("SectionExamClassrooms");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.SectionSchedule", b =>
@@ -5525,6 +5607,44 @@ namespace SIS.Infrastructure.Migrations
                     b.Navigation("Section");
                 });
 
+            modelBuilder.Entity("SIS.Domain.Entities.SectionExam", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.CourseSection", "CourseSection")
+                        .WithMany()
+                        .HasForeignKey("CourseSectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.GradeComponent", "GradeComponent")
+                        .WithMany()
+                        .HasForeignKey("GradeComponentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CourseSection");
+
+                    b.Navigation("GradeComponent");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SectionExamClassroom", b =>
+                {
+                    b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
+                        .WithMany()
+                        .HasForeignKey("ClassroomId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIS.Domain.Entities.SectionExam", "SectionExam")
+                        .WithMany("Classrooms")
+                        .HasForeignKey("SectionExamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Classroom");
+
+                    b.Navigation("SectionExam");
+                });
+
             modelBuilder.Entity("SIS.Domain.Entities.SectionSchedule", b =>
                 {
                     b.HasOne("SIS.Domain.Entities.Classroom", "Classroom")
@@ -5948,6 +6068,11 @@ namespace SIS.Infrastructure.Migrations
             modelBuilder.Entity("SIS.Domain.Entities.RegistrationPlan", b =>
                 {
                     b.Navigation("Registrations");
+                });
+
+            modelBuilder.Entity("SIS.Domain.Entities.SectionExam", b =>
+                {
+                    b.Navigation("Classrooms");
                 });
 
             modelBuilder.Entity("SIS.Domain.Entities.Student", b =>

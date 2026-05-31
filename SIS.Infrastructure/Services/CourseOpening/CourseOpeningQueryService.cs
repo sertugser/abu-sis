@@ -118,6 +118,7 @@ public class CourseOpeningQueryService(
                 DraftOrPendingCount = draftOrPendingCount,
                 InstructorId = s.InstructorId,
                 InstructorName = instrName,
+                IsExamCoordinator = s.IsExamCoordinator,
                 IsActive = s.IsActive,
                 DepartmentId = s.Course.DepartmentId,
                 DepartmentName = s.Course.Department?.Name,

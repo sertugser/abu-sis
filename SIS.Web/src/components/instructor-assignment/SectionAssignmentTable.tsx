@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { UserPlus, Copy, Search } from 'lucide-react';
+import { UserPlus, Copy, Search, Crown } from 'lucide-react';
 import type { OpenedCourseSectionDto, InstructorOptionDto } from '../../types/courseOpening';
 
 type AssignFilter = 'all' | 'unassigned' | 'assigned';
@@ -16,6 +16,7 @@ interface Props {
   inlineAssignments: Map<number, number>;
   onInlineAssign: (sectionId: number, instructorId: number) => void;
   onUnassign: (sectionId: number) => void;
+  onSetCoordinator?: (sectionId: number, isCoordinator: boolean) => void;
   selectedSectionIds: Set<number>;
   onClearInvisibleSelections: (visibleIds: number[]) => void;
   onToggleSection: (sectionId: number) => void;
@@ -33,6 +34,7 @@ export function SectionAssignmentTable({
   inlineAssignments,
   onInlineAssign,
   onUnassign,
+  onSetCoordinator,
   selectedSectionIds,
   onClearInvisibleSelections,
   onToggleSection,
@@ -134,6 +136,7 @@ export function SectionAssignmentTable({
               <th className="p-2 text-center font-medium">Şube</th>
               <th className="p-2 text-center font-medium">T+U</th>
               <th className="p-2 text-left font-medium">Mevcut Hoca</th>
+              <th className="p-2 text-center font-medium" title="Sınav Koordinatörü — çok şubeli derste ortak sınavı tanımlar">Koord.</th>
               <th className="p-2 text-left font-medium min-w-[180px]">Yeni Hoca</th>
             </tr>
           </thead>
@@ -174,6 +177,28 @@ export function SectionAssignmentTable({
                       <span className="text-amber-600 italic">Atanmamış</span>
                     )}
                   </td>
+                  <td className="p-2 text-center">
+                    {!noInstructor && onSetCoordinator ? (
+                      <button
+                        type="button"
+                        title="Sınav Koordinatörü"
+                        aria-pressed={section.isExamCoordinator}
+                        onClick={() => onSetCoordinator(section.sectionId, !section.isExamCoordinator)}
+                        className={`inline-flex items-center justify-center h-6 w-6 rounded transition-colors ${
+                          section.isExamCoordinator
+                            ? 'text-amber-500 hover:text-amber-600'
+                            : 'text-muted-foreground/40 hover:text-amber-500'
+                        }`}
+                      >
+                        <Crown
+                          className="h-4 w-4"
+                          fill={section.isExamCoordinator ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground/30">—</span>
+                    )}
+                  </td>
                   <td className="p-2">
                     <select
                       className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs"
@@ -206,13 +231,14 @@ export function SectionAssignmentTable({
                   <td className="p-2"><Skeleton className="h-3.5 w-6 mx-auto" /></td>
                   <td className="p-2"><Skeleton className="h-3.5 w-10 mx-auto" /></td>
                   <td className="p-2"><Skeleton className="h-3.5 w-28" /></td>
+                  <td className="p-2"><Skeleton className="h-4 w-4 mx-auto" /></td>
                   <td className="p-2"><Skeleton className="h-7 w-full" /></td>
                 </tr>
               ))
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                <td colSpan={8} className="p-8 text-center text-muted-foreground">
                   <p className="text-sm">Gösterilecek şube bulunamadı</p>
                   <p className="text-[11px] mt-1">Bu bölüm ve dönem için henüz ders şubesi açılmamış olabilir.</p>
                 </td>
@@ -222,6 +248,16 @@ export function SectionAssignmentTable({
         </table>
         </div>
       </ScrollArea>
+
+      {/* Koordinatör açıklaması */}
+      {onSetCoordinator && (
+        <div className="px-3 py-1.5 border-t bg-muted/30 flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0">
+          <Crown className="h-3.5 w-3.5 text-amber-500" fill="currentColor" />
+          <span>
+            Sınav koordinatörü, çok şubeli dersin ortak sınavını tanımlar. Ders+dönem başına tek hoca seçilebilir.
+          </span>
+        </div>
+      )}
 
       {/* Footer Actions */}
       <div className="p-3 border-t flex flex-wrap items-center gap-2 shrink-0">

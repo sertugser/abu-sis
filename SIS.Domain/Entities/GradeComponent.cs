@@ -28,6 +28,9 @@ public class GradeComponent
     /// </summary>
     public GradeComponentType Type { get; set; } = GradeComponentType.Other;
 
+    /// <summary>Kısa ad (Proliz "Sınav Kısa Adı"). Opsiyonel, default boş.</summary>
+    public string ShortName { get; set; } = string.Empty;
+
     public decimal Weight { get; set; }                // 30.00 = %30
     public int Order { get; set; }                     // Görüntüleme sırası
 

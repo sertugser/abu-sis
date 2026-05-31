@@ -22,6 +22,8 @@ public class OpenedCourseSectionDto
     public int DraftOrPendingCount { get; set; }
     public int? InstructorId { get; set; }
     public string? InstructorName { get; set; }
+    /// <summary>Bu şubenin atanmış hocası, ders+dönem için ortak sınavı tanımlayan sınav koordinatörü mü.</summary>
+    public bool IsExamCoordinator { get; set; }
     public bool IsActive { get; set; }
     public int? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }

@@ -72,6 +72,8 @@ GenerateCalendarRequestDto
 GradeSubmitDto
 GradingCriteriaDto
 ImportApplyRequest
+# PasteScoresRequest: paste-based bulk score import; inputs are ComponentId (int), Text (string parsed by ParseScorePaste), and optional Separator (string); component ownership validated via GetAuthorizedSectionAsync + GradeComponents scope check inside BuildScoreImportPreviewAsync/ApplyScoreImportAsync; score range (0-100) enforced in shared helpers
+PasteScoresRequest
 # Pre-existing debt (not exam-regulation related): un-baselined [FromBody] types surfaced by the guardrail; backlogged for validators.
 IntibakBulkRequest
 UpdateStudentAcademicDto
@@ -83,10 +85,14 @@ RegistrationPlanItemDto
 RegistrationSubmitDto
 SaveAcademicCalendarChangesDto
 SaveExamRegulationRequest
+# SectionExam upsert: instructor-only endpoint; inputs are strongly typed (int IDs, DateTime, bool, optional string Description); inline validation for component ownership and classroom existence
+SaveSectionExamRequest
 SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto
 SetExamAttendanceRequest
+# Exam coordinator toggle: single bool flag (IsCoordinator); endpoint is permission-gated (menu.ogretim-elemani-atama.bulk-assign) + section/department access guard, no free-text/numeric input to validate
+SetExamCoordinatorRequest
 SetUserStatusDto
 SimulateConstraintChangeRequest
 SimulateMoveRequest

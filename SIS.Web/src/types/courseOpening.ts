@@ -51,6 +51,8 @@ export interface OpenedCourseSectionDto {
   draftOrPendingCount: number;
   instructorId: number | null;
   instructorName: string | null;
+  /** Bu şubenin hocası ders+dönem için ortak sınavı tanımlayan sınav koordinatörü mü. */
+  isExamCoordinator: boolean;
   isActive: boolean;
   departmentId: number | null;
   departmentName: string | null;

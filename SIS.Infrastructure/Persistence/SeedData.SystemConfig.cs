@@ -88,6 +88,9 @@ public static partial class SeedData
             // ── Sınav Yönergesi Kontrolleri ───────────────────────
             new() { Key = "ExamRegulation.GlobalEditLock", Value = "false", Category = "ExamRegulation", DataType = "bool", Description = "Açıkken sınav yönergelerinde ekleme/düzenleme/silme tüm rollere kapalı (SysAdmin hariç)." },
 
+            // ── Sınav İlan Süreleri ───────────────────────────────
+            new() { Key = "Exam.AnnounceDeadlineDays", Value = "7", Category = "Exam", DataType = "int", Description = "Sınavın öğrenciye ilan edilmesi için sınav tarihinden kaç gün önce son tarih (geri sayım + 'İlan Süresi Geçti' için)." },
+
             // ── Ders Çekilme Limitleri ────────────────────────────
             new() { Key = "Withdrawal.MaxCount.Undergraduate", Value = "6", Category = "Registration", DataType = "int", Description = "Lisans öğrencileri için toplam çekilme hakkı" },
             new() { Key = "Withdrawal.MaxCount.Associate", Value = "3", Category = "Registration", DataType = "int", Description = "Önlisans öğrencileri için toplam çekilme hakkı" },

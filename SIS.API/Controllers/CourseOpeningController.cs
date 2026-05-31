@@ -13,6 +13,8 @@ namespace SIS.API.Controllers;
 
 public sealed record TransferDefaultsDto(int DefaultCapacityPerSection, int MaxSectionsPerCourse);
 
+public sealed record SetExamCoordinatorRequest(bool IsCoordinator);
+
 [ApiController]
 [Route("api/course-opening")]
 [Authorize]
@@ -394,6 +396,33 @@ public class CourseOpeningController(
         {
             var result = await _instructorAssignmentService.CopyInstructorAssignmentsFromTermAsync(request, ct);
             return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("section/{sectionId}/exam-coordinator")]
+    [RequirePermission("menu.ogretim-elemani-atama.bulk-assign")]
+    public async Task<IActionResult> SetExamCoordinator(
+        int sectionId, [FromBody] SetExamCoordinatorRequest request, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+
+        var section = await _context.CourseSections
+            .AsNoTracking()
+            .Include(cs => cs.Course)
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct);
+
+        if (section == null) return NotFound(new { error = "Şube bulunamadı." });
+        if (section.Course.DepartmentId == null) return BadRequest(new { error = "Ders bir bölüme ait değil." });
+        if (!await HasDepartmentAccessAsync(userId, section.Course.DepartmentId.Value, ct)) return Forbid();
+
+        try
+        {
+            await _instructorAssignmentService.SetExamCoordinatorAsync(sectionId, request.IsCoordinator, ct);
+            return Ok();
         }
         catch (InvalidOperationException ex)
         {

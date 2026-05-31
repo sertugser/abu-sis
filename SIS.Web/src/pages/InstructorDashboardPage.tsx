@@ -334,7 +334,7 @@ export default function InstructorDashboardPage() {
         {/* Awaiting grade entry */}
         <Card
           className="border-l-4 border-l-amber-500 hover:shadow-md transition-all cursor-pointer"
-          onClick={() => navigate(ROUTES.INSTRUCTOR_SECTIONS)}
+          onClick={() => navigate(ROUTES.GRADE_ENTRY)}
         >
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -386,7 +386,7 @@ export default function InstructorDashboardPage() {
                 <div
                   key={section.sectionId}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                  onClick={() => navigate(`${ROUTES.GRADE_ENTRY}/${section.sectionId}`)}
+                  onClick={() => navigate(ROUTES.GRADE_ENTRY)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">

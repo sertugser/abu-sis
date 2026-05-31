@@ -24,10 +24,12 @@ import TranscriptScenarioPage from './pages/TranscriptScenarioPage';
 import AcademicCalendarPage from './pages/AcademicCalendarPage';
 import AcademicCalendarGeneratorPage from './pages/AcademicCalendarGeneratorPage';
 import InstructorSectionsPage from './pages/InstructorSectionsPage';
+import SinavTanimlamaPage from './pages/SinavTanimlamaPage';
 import AttendanceEntryPage from './pages/AttendanceEntryPage';
 import QrAttendancePage from './pages/QrAttendancePage';
 import DersProgramimRouter from './pages/DersProgramimRouter';
 import GradeEntryPage from './pages/GradeEntryPage';
+import NotGirisiListPage from './pages/NotGirisiListPage';
 import FacultyPlanningPage from './pages/FacultyPlanningPage';
 import SchedulingEditorPage from './pages/SchedulingEditorPage';
 import ClassroomManagementPage from './pages/ClassroomManagementPage';
@@ -188,11 +190,14 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
                     <Route path="derslerim" element={<InstructorSectionsPage />} />
                   </Route>
+                  <Route element={<RoleProtectedRoute permission="menu.sinav-tanimlama.view" />}>
+                    <Route path="sinav-tanimlama" element={<SinavTanimlamaPage />} />
+                  </Route>
                   <Route element={<RoleProtectedRoute permission="menu.yoklama-girisi.view" />}>
                     <Route path="yoklama-girisi" element={<AttendanceEntryPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.derslerim.view" />}>
-                    <Route path="not-girisi" element={<Navigate to="/derslerim" replace />} />
+                  <Route element={<RoleProtectedRoute permission="menu.not-girisi.view" />}>
+                    <Route path="not-girisi" element={<NotGirisiListPage />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.not-girisi.view" />}>
                     <Route path="not-girisi/:sectionId" element={<GradeEntryPage />} />

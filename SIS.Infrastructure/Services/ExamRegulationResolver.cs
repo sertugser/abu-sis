@@ -116,6 +116,16 @@ public sealed class ExamRegulationResolver(AppDbContext context) : IExamRegulati
         return new WeightBounds(minMid, maxMid, minFin, maxFin, empty);
     }
 
+    public async Task<ExamCounts> ResolveCourseExamCountsAsync(
+        int courseId, int academicTermId, CancellationToken ct)
+    {
+        var regs = await GetCourseRegulationsAsync(courseId, academicTermId, ct);
+        if (regs is null || regs.Count == 0)
+            return new ExamCounts(0, 0, false);
+        // Birden fazla program → en katı (en yüksek sayı) kısıt
+        return new ExamCounts(regs.Max(r => r.MidtermCount), regs.Max(r => r.FinalCount), true);
+    }
+
     public async Task<LetterPolicy?> ResolveCourseLetterPolicyAsync(
         int courseId, int academicTermId, CancellationToken ct)
     {

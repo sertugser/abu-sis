@@ -125,7 +125,8 @@ public class ExamRegulationResolverTests : IDisposable
 
     private void SeedExamRegulation(int id, int programId,
         decimal minMid = 40m, decimal maxMid = 60m,
-        decimal minFin = 40m, decimal maxFin = 60m)
+        decimal minFin = 40m, decimal maxFin = 60m,
+        int midtermCount = 1, int finalCount = 1)
     {
         _context.ExamRegulations.Add(new ExamRegulation
         {
@@ -136,8 +137,8 @@ public class ExamRegulationResolverTests : IDisposable
             Year = 2024,
             IsActive = true,
             Name = $"Yönerge {id}",
-            MidtermCount = 1,
-            FinalCount = 1,
+            MidtermCount = midtermCount,
+            FinalCount = finalCount,
             MinMidtermWeightPercent = minMid,
             MaxMidtermWeightPercent = maxMid,
             MinFinalWeightPercent = minFin,
@@ -621,6 +622,45 @@ public class ExamRegulationResolverTests : IDisposable
 
         // Assert
         result.Should().BeNull();
+    }
+
+    // ── ResolveCourseExamCountsAsync tests ───────────────────────────────────
+
+    [Fact]
+    public async Task ResolveCourseExamCountsAsync_ReturnsCounts_WhenRegulationExists()
+    {
+        // Arrange — program with MidtermCount=2, FinalCount=1
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        SeedExamRegulation(RegAId, ProgramAId, midtermCount: 2, finalCount: 1);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseExamCountsAsync(CourseId, TermId, default);
+
+        // Assert
+        result.MidtermCount.Should().Be(2);
+        result.FinalCount.Should().Be(1);
+        result.HasRegulation.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResolveCourseExamCountsAsync_ReturnsZerosAndFalse_WhenNoRegulation()
+    {
+        // Arrange — course and program seeded but no ExamRegulation
+        SeedFacultyDeptProgram(ProgramAId);
+        SeedCurriculumAndCourse(ProgramAId, CurriculumAId);
+        SeedTerm();
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _resolver.ResolveCourseExamCountsAsync(CourseId, TermId, default);
+
+        // Assert
+        result.MidtermCount.Should().Be(0);
+        result.FinalCount.Should().Be(0);
+        result.HasRegulation.Should().BeFalse();
     }
 
     public void Dispose() => _context.Dispose();

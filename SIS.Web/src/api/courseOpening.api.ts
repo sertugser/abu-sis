@@ -128,6 +128,10 @@ export async function bulkAssignInstructor(
   return data;
 }
 
+export async function setExamCoordinator(sectionId: number, isCoordinator: boolean): Promise<void> {
+  await apiClient.post(`/course-opening/section/${sectionId}/exam-coordinator`, { isCoordinator });
+}
+
 export async function copyInstructorAssignments(
   request: CopyInstructorAssignmentsRequest,
 ): Promise<CopyInstructorAssignmentsResultDto> {

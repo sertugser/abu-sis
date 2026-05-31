@@ -127,3 +127,15 @@ export function toApiError(error: unknown, fallback: string): ApiError {
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   return toApiError(error, fallback).message;
 }
+
+/**
+ * Basit hata mesajı çıkarıcı: `response.data.error` varsa döner, yoksa fallback.
+ * GradeEntryPage / ScorePasteDialog / ExcelImportDialog tarafından ortak olarak kullanılır.
+ */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const data = (error as { response?: { data?: { error?: string } } }).response?.data;
+    if (data?.error) return data.error;
+  }
+  return fallback;
+}
