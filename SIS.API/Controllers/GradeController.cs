@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SIS.API.Authorization;
@@ -107,7 +108,7 @@ public class GradeController : ControllerBase
 
         // Guard: bileşen ekleme/düzenleme iptal edilmiş dönemde yapılamaz
         if (!await CanMutateSharedGradeConfigurationAsync(section))
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Bu ders birden fazla hoca tarafından veriliyor; ortak sınav/not ayarını yalnızca koordinatör hoca değiştirebilir. Koordinatör, bölüm/admin tarafından Hoca Atama ekranından belirlenir." });
 
         var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
         if (termIsCancelled == true)
@@ -173,7 +174,7 @@ public class GradeController : ControllerBase
             return NotFound(new { error = "Bu section sizin dersleriniz arasinda bulunamadi." });
 
         if (!await CanMutateSharedGradeConfigurationAsync(section))
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Bu ders birden fazla hoca tarafından veriliyor; ortak sınav/not ayarını yalnızca koordinatör hoca değiştirebilir. Koordinatör, bölüm/admin tarafından Hoca Atama ekranından belirlenir." });
 
         var termIsCancelled2 = await GetTermIsCancelledAsync(section.TermId);
         if (termIsCancelled2 == true)
@@ -273,6 +274,8 @@ public class GradeController : ControllerBase
                 StudentNumber = r.Student.StudentNumber,
                 FirstName = user?.FirstName ?? "",
                 LastName = user?.LastName ?? "",
+                ClassYear = r.Student.CompletedSemesters / 2 + 1,
+                EnrollmentType = r.AppliedElectivePoolId != null ? "Seçmeli" : "Zorunlu",
                 LetterGrade = r.Grade?.ToString(),
                 WeightedAverage = weightedAverage,
                 Scores = components.ToDictionary(
@@ -1170,7 +1173,7 @@ private async Task<object> ApplyScoreImportAsync(
             return BadRequest(new { error = "Sonuçlandırılmış derste değiştirilemez. Önce sonuçlandırmayı iptal edin." });
 
         if (!await CanMutateSharedGradeConfigurationAsync(section))
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Bu ders birden fazla hoca tarafından veriliyor; ortak sınav/not ayarını yalnızca koordinatör hoca değiştirebilir. Koordinatör, bölüm/admin tarafından Hoca Atama ekranından belirlenir." });
 
         var termIsCancelled = await GetTermIsCancelledAsync(section.TermId);
         if (termIsCancelled == true)
@@ -2585,7 +2588,7 @@ private async Task<object> ApplyScoreImportAsync(
 
         // Aralıkların tutarlılığını kontrol et (AA > BA > BB > ... > DD)
         if (!await CanMutateSharedGradeConfigurationAsync(section))
-            return Forbid();
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Bu ders birden fazla hoca tarafından veriliyor; ortak sınav/not ayarını yalnızca koordinatör hoca değiştirebilir. Koordinatör, bölüm/admin tarafından Hoca Atama ekranından belirlenir." });
 
         // Sınav yönergesi harf aralıklarını kilitlemişse güncelleme engellenir.
         var policy = await _examRegulationResolver.ResolveCourseLetterPolicyAsync(
@@ -2865,11 +2868,14 @@ private async Task<object> ApplyScoreImportAsync(
         if (!section.InstructorId.HasValue)
             return false;
 
-        return !await _context.CourseSections
+        var hasOtherInstructor = await _context.CourseSections
             .AsNoTracking()
             .AnyAsync(other => other.CourseId == section.CourseId
                 && other.TermId == section.TermId
                 && other.InstructorId != section.InstructorId);
+
+        // Tek hoca (veya hepsi aynı hoca) → serbest. Çok hoca → yalnız koordinatör şube.
+        return !hasOtherInstructor || section.IsExamCoordinator;
     }
 
     /// <summary>

@@ -91,6 +91,8 @@ SaveAttendanceRequest
 ScheduleSuggestionRequestDto
 ScheduleValidationRequestDto
 SetExamAttendanceRequest
+# Exam coordinator toggle: single bool flag (IsCoordinator); endpoint is permission-gated (menu.ogretim-elemani-atama.bulk-assign) + section/department access guard, no free-text/numeric input to validate
+SetExamCoordinatorRequest
 SetUserStatusDto
 SimulateConstraintChangeRequest
 SimulateMoveRequest

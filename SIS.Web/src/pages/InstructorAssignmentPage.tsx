@@ -14,6 +14,7 @@ import {
   useCopyInstructorAssignments,
   useDepartmentInstructors,
   useOpenedCourses,
+  useSetExamCoordinator,
   useUpdateOpenedSection,
 } from '../hooks/useCourseOpening';
 
@@ -49,6 +50,7 @@ export default function InstructorAssignmentPage() {
   const bulkAssignMut = useBulkAssignInstructor(deptId ?? 0, termId ?? 0);
   const updateMut = useUpdateOpenedSection(deptId ?? 0, termId ?? 0);
   const copyMut = useCopyInstructorAssignments(deptId ?? 0, termId ?? 0);
+  const coordinatorMut = useSetExamCoordinator(deptId ?? 0, termId ?? 0);
 
   const availableFaculties = useMemo(() => {
     if (!faculties || !structureDepartments) return [];
@@ -177,6 +179,13 @@ export default function InstructorAssignmentPage() {
     [updateMut],
   );
 
+  const handleSetCoordinator = useCallback(
+    (sectionId: number, isCoordinator: boolean) => {
+      coordinatorMut.mutate({ sectionId, isCoordinator });
+    },
+    [coordinatorMut],
+  );
+
   const handleClearInvisibleSelections = useCallback((visibleIds: number[]) => {
     const visibleSet = new Set(visibleIds);
     setSelectedSectionIds(prev => {
@@ -258,6 +267,7 @@ export default function InstructorAssignmentPage() {
             inlineAssignments={inlineAssignments}
             onInlineAssign={handleInlineAssign}
             onUnassign={handleUnassign}
+            onSetCoordinator={handleSetCoordinator}
             selectedSectionIds={selectedSectionIds}
             onClearInvisibleSelections={handleClearInvisibleSelections}
             onToggleSection={toggleSection}

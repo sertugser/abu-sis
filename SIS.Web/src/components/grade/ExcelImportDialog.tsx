@@ -1,5 +1,7 @@
 // SIS.Web/src/components/grade/ExcelImportDialog.tsx
-// Excel (.xlsx) ile not içe aktarma: dosya seç → önizleme diff → uygula.
+// Excel (.xlsx) ile not içe aktarma: bileşen seç → şablon indir → doldur → yükle → önizleme diff → uygula.
+// NOT: İçe aktarılacak bileşen, yüklenen şablonun içeriğinden (gömülü componentId) belirlenir;
+// bileşen seçici yalnızca doğru şablonu indirmek içindir.
 
 import { useState } from 'react';
 import {
@@ -13,25 +15,49 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { FileSpreadsheet, Upload } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Download, FileSpreadsheet, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/global-toast';
 import { usePreviewImport, useApplyImport } from '../../hooks/useGradeData';
 import { getErrorMessage } from '../../lib/apiError';
-import type { ImportPreviewResponse } from '../../types/grade';
+import type { GradeComponent, ImportPreviewResponse } from '../../types/grade';
 
 interface ExcelImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sectionId: number;
+  components: GradeComponent[];
+  isDownloadingTemplate: boolean;
+  onDownloadTemplate: (componentId: number) => void;
 }
 
-export function ExcelImportDialog({ open, onOpenChange, sectionId }: ExcelImportDialogProps) {
+export function ExcelImportDialog({
+  open,
+  onOpenChange,
+  sectionId,
+  components,
+  isDownloadingTemplate,
+  onDownloadTemplate,
+}: ExcelImportDialogProps) {
   const { showSuccess, showError } = useToast();
   const previewMut = usePreviewImport(sectionId);
   const applyMut = useApplyImport(sectionId);
 
+  // Kullanıcının açık seçimi; geçersiz/boşsa ilk bileşene düşülür (sadece doğru şablonu indirmek için).
+  const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
+
+  const componentId =
+    selectedComponentId != null && components.some((c) => c.id === selectedComponentId)
+      ? selectedComponentId
+      : components[0]?.id ?? null;
 
   const reset = () => {
     setFile(null);
@@ -80,6 +106,42 @@ export function ExcelImportDialog({ open, onOpenChange, sectionId }: ExcelImport
 
         <div className="space-y-4 pt-2">
           <div className="space-y-2">
+            <Label className="text-sm font-medium">Hangi sınav (bileşen)</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={componentId != null ? String(componentId) : undefined}
+                onValueChange={(v) => setSelectedComponentId(Number(v))}
+                disabled={components.length === 0}
+              >
+                <SelectTrigger className="w-full sm:w-80">
+                  <SelectValue placeholder="Bileşen seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  {components.map((comp) => (
+                    <SelectItem key={comp.id} value={String(comp.id)}>
+                      {comp.name} (%{comp.weight})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={componentId == null || isDownloadingTemplate}
+                onClick={() => { if (componentId != null) onDownloadTemplate(componentId); }}
+              >
+                <Download className="h-4 w-4" />
+                {isDownloadingTemplate ? 'İndiriliyor...' : 'Şablon İndir'}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Seçtiğiniz bileşenin şablonunu indirin, doldurun ve aşağıdan yükleyin. İçe aktarılacak bileşen
+              yüklenen şablonun içeriğinden belirlenir.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label className="text-sm font-medium">Excel Dosyası (.xlsx)</Label>
             <Input
               type="file"
@@ -89,14 +151,12 @@ export function ExcelImportDialog({ open, onOpenChange, sectionId }: ExcelImport
                 setPreview(null);
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              Önce aktif bileşen için şablonu indirip doldurun, sonra burada yükleyin.
-            </p>
           </div>
 
           {preview && (
             <div className="rounded-lg border overflow-hidden">
               <div className="flex flex-wrap gap-2 p-4 border-b bg-muted/20">
+                <Badge variant="secondary">Bileşen: {preview.componentName}</Badge>
                 <Badge variant="secondary">Toplam: {preview.totalRows}</Badge>
                 <Badge variant="secondary">Geçerli: {preview.validCount}</Badge>
                 <Badge variant="secondary">Uyarı: {preview.warningCount}</Badge>

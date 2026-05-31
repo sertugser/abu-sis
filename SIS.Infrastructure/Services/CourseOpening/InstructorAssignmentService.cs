@@ -43,6 +43,35 @@ public class InstructorAssignmentService(
         return result;
     }
 
+    public async Task SetExamCoordinatorAsync(int sectionId, bool isCoordinator, CancellationToken ct = default)
+    {
+        var section = await _context.CourseSections
+            .FirstOrDefaultAsync(cs => cs.Id == sectionId, ct)
+            ?? throw new InvalidOperationException($"Şube #{sectionId} bulunamadı.");
+
+        if (isCoordinator)
+        {
+            // Tek-koordinatör değişmezi: aynı course+term'deki diğer section'ları koordinatörlükten çıkar.
+            var others = await _context.CourseSections
+                .Where(cs => cs.CourseId == section.CourseId
+                    && cs.TermId == section.TermId
+                    && cs.Id != section.Id
+                    && cs.IsExamCoordinator)
+                .ToListAsync(ct);
+
+            foreach (var other in others)
+                other.IsExamCoordinator = false;
+
+            section.IsExamCoordinator = true;
+        }
+        else
+        {
+            section.IsExamCoordinator = false;
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
     public async Task<CopyInstructorAssignmentsResultDto> CopyInstructorAssignmentsFromTermAsync(
         CopyInstructorAssignmentsRequest request, CancellationToken ct = default)
     {

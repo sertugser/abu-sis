@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen } from 'lucide-react';
+import { ClipboardEdit, FolderOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -116,6 +116,9 @@ function SectionExamPanel({ section, onExamClick }: SectionExamPanelProps) {
           <table className="w-full min-w-[700px]">
             <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
               <tr>
+                <th className="w-12 px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="sr-only">Not Gir</span>
+                </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Sınav Adı
                 </th>
@@ -150,6 +153,21 @@ function SectionExamPanel({ section, onExamClick }: SectionExamPanelProps) {
                     className="cursor-pointer transition-colors hover:bg-primary/5"
                     onClick={() => onExamClick(sectionId)}
                   >
+                    <td className="px-2 py-3 text-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Not Gir"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExamClick(sectionId);
+                        }}
+                      >
+                        <ClipboardEdit className="h-4 w-4" />
+                        <span className="sr-only">Not Gir</span>
+                      </Button>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium">{exam.componentName}</td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className={TYPE_BADGE[exam.componentType] ?? ''}>
@@ -264,6 +282,9 @@ function ExamOverviewList({ rows, isLoading, isError, onRowClick }: ExamOverview
     <table className="w-full min-w-[700px]">
       <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
         <tr>
+          <th className="w-12 px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="sr-only">Not Gir</span>
+          </th>
           <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Şb.
           </th>
@@ -336,6 +357,21 @@ function ExamOverviewList({ rows, isLoading, isError, onRowClick }: ExamOverview
               className="cursor-pointer transition-colors hover:bg-primary/5"
               onClick={() => onRowClick(dr.sectionId)}
             >
+              <td className="px-2 py-3 text-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  title="Not Gir"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRowClick(dr.sectionId);
+                  }}
+                >
+                  <ClipboardEdit className="h-4 w-4" />
+                  <span className="sr-only">Not Gir</span>
+                </Button>
+              </td>
               <td className="px-4 py-3 text-sm text-muted-foreground">{dr.sectionNumber}</td>
               <td className="px-4 py-3">
                 <span className="font-mono text-sm font-semibold text-primary">
@@ -372,8 +408,7 @@ export default function NotGirisiListPage() {
 
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
   const [facultyFilter, setFacultyFilter] = useState<string>(FACULTY_FILTER_ALL);
-  const [courseCodeFilter, setCourseCodeFilter] = useState('');
-  const [courseNameFilter, setCourseNameFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showKontenjan, setShowKontenjan] = useState(false);
   const [showUnfinalized, setShowUnfinalized] = useState(false);
   const [showAllExams, setShowAllExams] = useState(false);
@@ -400,10 +435,11 @@ export default function NotGirisiListPage() {
     if (facultyFilter !== FACULTY_FILTER_ALL && s.facultyName !== facultyFilter) {
       return false;
     }
-    if (courseCodeFilter.trim() && !includesCi(s.courseCode, courseCodeFilter)) {
-      return false;
-    }
-    if (courseNameFilter.trim() && !includesCi(s.courseName, courseNameFilter)) {
+    if (
+      searchTerm.trim() &&
+      !includesCi(s.courseCode, searchTerm) &&
+      !includesCi(s.courseName, searchTerm)
+    ) {
       return false;
     }
     if (showUnfinalized && s.isFinalized) {
@@ -424,10 +460,11 @@ export default function NotGirisiListPage() {
   const allOverviewRows = overviewQuery.data ?? [];
 
   const filteredOverviewRows = allOverviewRows.filter((r) => {
-    if (courseCodeFilter.trim() && !includesCi(r.courseCode, courseCodeFilter)) {
-      return false;
-    }
-    if (courseNameFilter.trim() && !includesCi(r.courseName, courseNameFilter)) {
+    if (
+      searchTerm.trim() &&
+      !includesCi(r.courseCode, searchTerm) &&
+      !includesCi(r.courseName, searchTerm)
+    ) {
       return false;
     }
     if (showUnfinalized && r.isFinalized) {
@@ -439,7 +476,7 @@ export default function NotGirisiListPage() {
   const terms = termsQuery.data ?? [];
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* ── Filters card ── */}
+      {/* ── Filtre + liste tek kart ── */}
       <Card className="flex flex-col overflow-hidden">
         <InstructorCourseFilters
           terms={terms}
@@ -450,66 +487,61 @@ export default function NotGirisiListPage() {
           onFacultyChange={setFacultyFilter}
           showKontenjan={showKontenjan}
           onShowKontenjanChange={setShowKontenjan}
-          courseCode={courseCodeFilter}
-          onCourseCodeChange={setCourseCodeFilter}
-          courseName={courseNameFilter}
-          onCourseNameChange={setCourseNameFilter}
+          search={searchTerm}
+          onSearchChange={setSearchTerm}
           showUnfinalized={showUnfinalized}
           onShowUnfinalizedChange={setShowUnfinalized}
           showAllExams={showAllExams}
           onShowAllExamsChange={setShowAllExams}
-          onSearch={() => {}}
+        />
+
+        {/* Ders listesi her zaman görünür — "Tüm Sınavları Göster" toggle'ından etkilenmez. */}
+        <InstructorCourseTable
+          sections={filteredSections}
+          totalCount={allSections.length}
+          isLoading={sectionsQuery.isLoading}
+          showKontenjan={showKontenjan}
+          selectedSectionId={selectedSectionId}
+          onSelect={setSelectedSectionId}
         />
       </Card>
 
+      {/* ── Alt alan: "Dersin Sınavları" ── */}
       {showAllExams ? (
-        <>
-          {/* ── Tüm Sınavları Göster (overview) ── */}
-          <Card className="flex flex-col overflow-hidden">
-            <div className="flex flex-col overflow-auto">
-              <ExamOverviewList
-                rows={filteredOverviewRows}
-                isLoading={overviewQuery.isLoading}
-                isError={overviewQuery.isError}
-                onRowClick={goToGradeEntry}
-              />
-            </div>
-          </Card>
-
-          <p className="text-xs text-muted-foreground">
-            Sınav eklemek veya düzenlemek için{' '}
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-xs"
-              onClick={() => navigate(ROUTES.SINAV_TANIMLAMA)}
-            >
-              Sınav Tanımlama
-            </Button>{' '}
-            sayfasını kullanın.
-          </p>
-        </>
+        <Card className="flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-2 border-b border-border/80 bg-muted/20 px-5 py-3">
+            <p className="text-sm font-semibold">Tüm Sınavlar</p>
+            <p className="text-xs text-muted-foreground">
+              Sınav eklemek veya düzenlemek için{' '}
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs"
+                onClick={() => navigate(ROUTES.SINAV_TANIMLAMA)}
+              >
+                Sınav Tanımlama
+              </Button>{' '}
+              sayfasını kullanın.
+            </p>
+          </div>
+          <div className="flex flex-col overflow-auto">
+            <ExamOverviewList
+              rows={filteredOverviewRows}
+              isLoading={overviewQuery.isLoading}
+              isError={overviewQuery.isError}
+              onRowClick={goToGradeEntry}
+            />
+          </div>
+          <ExamStatusLegend />
+        </Card>
+      ) : selectedSection != null ? (
+        /* ── Dersin Sınavları panel (when a course is selected) ── */
+        <SectionExamPanel section={selectedSection} onExamClick={goToGradeEntry} />
       ) : (
-        <>
-          {/* ── Full Proliz course list + pagination ── */}
-          <InstructorCourseTable
-            sections={filteredSections}
-            totalCount={allSections.length}
-            isLoading={sectionsQuery.isLoading}
-            showKontenjan={showKontenjan}
-            selectedSectionId={selectedSectionId}
-            onSelect={setSelectedSectionId}
-          />
-
-          {/* ── Dersin Sınavları panel (when a course is selected) ── */}
-          {selectedSection != null ? (
-            <SectionExamPanel section={selectedSection} onExamClick={goToGradeEntry} />
-          ) : (
-            <div className="flex items-center justify-center rounded-xl border border-dashed border-border py-12 text-sm text-muted-foreground">
-              Yukarıdan bir ders seçerek sınavlarını görüntüleyin ve not girişine geçin.
-            </div>
-          )}
-        </>
+        <div className="flex items-center justify-center rounded-xl border border-dashed border-border py-12 text-sm text-muted-foreground">
+          Yukarıdan bir ders seçin ya da "Tüm Sınavları Göster" ile tüm sınavları
+          listeleyin.
+        </div>
       )}
     </div>
   );

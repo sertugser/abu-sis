@@ -29,6 +29,13 @@ public class CourseSection
     public bool IsActive => Status == CourseSectionStatus.Active;
 
     public bool IsFinalized { get; set; }
+
+    /// <summary>
+    /// Çok-hocalı derste (aynı course+term, farklı hocalı section'lar) ortak sınav/not
+    /// ayarını yalnızca koordinatör section değiştirebilir. Tek-koordinatör değişmezi:
+    /// bir section koordinatör yapılınca aynı course+term'deki diğerleri false olur.
+    /// </summary>
+    public bool IsExamCoordinator { get; set; }
     public bool IsScheduleLocked { get; set; } // true = otomatik scheduling değiştiremez
     public bool IsPinned { get; set; } // true = dışarıdan gelen hoca, saati sabit, optimizasyon değiştiremez
 

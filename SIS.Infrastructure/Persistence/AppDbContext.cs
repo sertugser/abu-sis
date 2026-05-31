@@ -340,6 +340,7 @@ public DbSet<GradingCriteria> GradingCriteria => Set<GradingCriteria>();
         builder.Entity<CourseSection>(e =>
         {
             e.HasIndex(cs => cs.CrossListGroupId);
+            e.Property(cs => cs.IsExamCoordinator).HasDefaultValue(false);
         });
 
         // ── CurriculumCourse (composite PK) ─────────────────────

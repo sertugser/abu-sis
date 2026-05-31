@@ -29,6 +29,8 @@ export interface StudentGradeRow {
   studentNumber: string;
   firstName: string;
   lastName: string;
+  classYear: number;
+  enrollmentType: string;
   letterGrade?: string | null;
   weightedAverage?: number | null;
   scores: Record<number, number | null>;

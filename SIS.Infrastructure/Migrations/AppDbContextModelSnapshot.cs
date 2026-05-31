@@ -1394,6 +1394,11 @@ namespace SIS.Infrastructure.Migrations
                     b.Property<bool>("IsEnrollmentSuspended")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsExamCoordinator")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsFinalized")
                         .HasColumnType("boolean");
 

@@ -10,7 +10,6 @@ import {
   Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { InstructorSection } from '../../api/instructor.api';
@@ -174,7 +173,7 @@ export function InstructorCourseTable({
   const isEmpty = sections.length === 0;
 
   return (
-    <Card className="flex flex-col overflow-hidden">
+    <div className="flex flex-col overflow-hidden">
       {/* Horizontally scrollable table */}
       <div className="overflow-x-auto">
         {isLoading ? (
@@ -272,6 +271,6 @@ export function InstructorCourseTable({
           visibleSections={visibleSections}
         />
       )}
-    </Card>
+    </div>
   );
 }

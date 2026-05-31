@@ -17,4 +17,10 @@ public interface IInstructorAssignmentService
     /// </summary>
     Task<CopyInstructorAssignmentsResultDto> CopyInstructorAssignmentsFromTermAsync(
         CopyInstructorAssignmentsRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Belirtilen section'ı dersin (CourseId+TermId) sınav koordinatörü yapar veya koordinatörlüğünü kaldırır.
+    /// Tek-koordinatör değişmezi: koordinatör yapılırken aynı course+term'deki diğer section'lar koordinatörlükten çıkarılır.
+    /// </summary>
+    Task SetExamCoordinatorAsync(int sectionId, bool isCoordinator, CancellationToken cancellationToken = default);
 }

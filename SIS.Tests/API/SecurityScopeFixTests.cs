@@ -118,7 +118,10 @@ public class SecurityScopeFixTests
             Order = 1
         });
 
-        result.Should().BeOfType<ForbidResult>();
+        // Çok-hocalı derste koordinatör olmayan section ortak config'i değiştiremez:
+        // generic Forbid() yerine net mesajlı 403 ObjectResult döner.
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
         context.GradeComponents.Should().BeEmpty();
     }
 

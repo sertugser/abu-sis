@@ -15,6 +15,7 @@ import {
   deleteAllSectionsHard,
   reactivateSection,
   bulkAssignInstructor,
+  setExamCoordinator,
   copyInstructorAssignments,
   transferStudentsBetweenSections,
   autoSplitCourse,
@@ -219,6 +220,29 @@ export function useBulkAssignInstructor(departmentId: number, termId: number) {
     },
     onError: (error) => {
       showError('Toplu hoca atama başarısız', getApiErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Bir şubenin atanmış hocasını ders+dönem için sınav koordinatörü olarak işaretler/kaldırır.
+ * Backend tek-koordinatör değişmezini uygular; liste invalidate edilince eski koordinatör
+ * otomatik vurgudan düşer, yenisi vurgulanır.
+ */
+export function useSetExamCoordinator(departmentId: number, termId: number) {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useToast();
+  return useMutation({
+    mutationFn: ({ sectionId, isCoordinator }: { sectionId: number; isCoordinator: boolean }) =>
+      setExamCoordinator(sectionId, isCoordinator),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
+      showSuccess(
+        variables.isCoordinator ? 'Sınav koordinatörü atandı' : 'Sınav koordinatörü kaldırıldı',
+      );
+    },
+    onError: (error) => {
+      showError('Sınav koordinatörü güncellenemedi', getApiErrorMessage(error));
     },
   });
 }

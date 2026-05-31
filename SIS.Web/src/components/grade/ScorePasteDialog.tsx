@@ -15,27 +15,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ClipboardPaste, Eye, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/global-toast';
 import { usePastePreview, usePasteApply } from '../../hooks/useGradeData';
 import { getErrorMessage } from '../../lib/apiError';
-import type { ImportPreviewResponse } from '../../types/grade';
+import type { GradeComponent, ImportPreviewResponse } from '../../types/grade';
 
 interface ScorePasteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sectionId: number;
-  componentId: number;
+  components: GradeComponent[];
 }
 
-export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }: ScorePasteDialogProps) {
+export function ScorePasteDialog({ open, onOpenChange, sectionId, components }: ScorePasteDialogProps) {
   const { showSuccess, showError } = useToast();
   const previewMut = usePastePreview(sectionId);
   const applyMut = usePasteApply(sectionId);
 
+  // Kullanıcının açık seçimi; geçersiz/boşsa ilk bileşene düşülür (türetilmiş effectiveComponentId).
+  const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [separator, setSeparator] = useState('');
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
+
+  const componentId =
+    selectedComponentId != null && components.some((c) => c.id === selectedComponentId)
+      ? selectedComponentId
+      : components[0]?.id ?? null;
 
   const reset = () => {
     setText('');
@@ -49,6 +63,10 @@ export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }:
   };
 
   const handlePreview = () => {
+    if (componentId == null) {
+      showError('Bileşen seçilmedi', 'Lütfen aktarılacak sınav bileşenini seçin.');
+      return;
+    }
     if (!text.trim()) {
       showError('Metin boş', 'Lütfen aktarılacak satırları yapıştırın.');
       return;
@@ -63,7 +81,7 @@ export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }:
   };
 
   const handleApply = () => {
-    if (!preview) return;
+    if (!preview || componentId == null) return;
     applyMut.mutate(
       { componentId, text, separator },
       {
@@ -90,6 +108,26 @@ export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }:
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Hangi sınav (bileşen)</Label>
+            <Select
+              value={componentId != null ? String(componentId) : undefined}
+              onValueChange={(v) => { setSelectedComponentId(Number(v)); setPreview(null); }}
+              disabled={components.length === 0}
+            >
+              <SelectTrigger className="w-full sm:w-80">
+                <SelectValue placeholder="Bileşen seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                {components.map((comp) => (
+                  <SelectItem key={comp.id} value={String(comp.id)}>
+                    {comp.name} (%{comp.weight})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
             <div className="space-y-2">
               <Label className="text-sm font-medium">Satırlar (Öğrenci No &lt;ayraç&gt; Not)</Label>
@@ -184,7 +222,7 @@ export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }:
           <Button
             variant="outline"
             onClick={handlePreview}
-            disabled={!text.trim() || previewMut.isPending}
+            disabled={componentId == null || !text.trim() || previewMut.isPending}
             className="gap-1.5"
           >
             <Eye className="h-4 w-4" />

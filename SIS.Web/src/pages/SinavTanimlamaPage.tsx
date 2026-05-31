@@ -276,14 +276,16 @@ export default function SinavTanimlamaPage() {
   return (
     <div className="flex flex-1 flex-col gap-4">
       {/* Section list (Proliz görünümü — ders listesi, filtre yok) */}
-      <InstructorCourseTable
-        sections={sections}
-        totalCount={sections.length}
-        isLoading={isLoading}
-        showKontenjan={true}
-        selectedSectionId={selectedSectionId}
-        onSelect={setSelectedSectionId}
-      />
+      <Card className="flex flex-col overflow-hidden">
+        <InstructorCourseTable
+          sections={sections}
+          totalCount={sections.length}
+          isLoading={isLoading}
+          showKontenjan={true}
+          selectedSectionId={selectedSectionId}
+          onSelect={setSelectedSectionId}
+        />
+      </Card>
 
       {/* Exam table — shown only when a section is selected */}
       {selectedSectionId != null && selectedSection != null ? (

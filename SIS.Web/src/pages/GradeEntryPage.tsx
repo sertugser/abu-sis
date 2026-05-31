@@ -1,29 +1,13 @@
 // SIS.Web/src/pages/GradeEntryPage.tsx
 // Proliz tarzı not giriş ekranı. Sınav tanımı SALT-OKUNUR (tanım Sınav Tanımlama'da).
-// Tüm mevcut hook'lar reuse edilir; yeni: Toplu Not Aktar (paste), toplu katılım, ön izleme.
+// Tüm bileşenler aynı anda düzenlenebilir kolon; Kaydet değişen tüm bileşenleri tek tek gönderir.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  ArrowLeft,
-  Save,
-  CheckCircle,
-  XCircle,
-  Settings,
-  Users,
-  Search,
-  Download,
-  Upload,
-  ClipboardPaste,
-  Eye,
-  EyeOff,
-  Info,
-  Printer,
-} from 'lucide-react';
+import { ArrowLeft, XCircle, Search, Info } from 'lucide-react';
 import {
   useGrades,
   useComponents,
@@ -42,22 +26,38 @@ import { useToast } from '@/components/ui/global-toast';
 import { ButunlemePanel, MazeretPanel } from '../components/grade/MakeupSections';
 import { ClassStatsPanel } from '../components/grade/GradeStatsPanel';
 import { GradeStudentTable } from '../components/grade/GradeStudentTable';
+import { GradeReportDocument } from '../components/grade/GradeReportDocument';
+import { GradeCourseHeader } from '../components/grade/GradeCourseHeader';
+import { GradeToolbar } from '../components/grade/GradeToolbar';
 import { ScorePasteDialog } from '../components/grade/ScorePasteDialog';
 import { ExcelImportDialog } from '../components/grade/ExcelImportDialog';
 import { GradingCriteriaDialog } from '../components/grade/GradingCriteriaDialog';
 import { FinalizeDialog } from '../components/grade/FinalizeDialog';
-import { BulkAttendanceMenu, type BulkAttendanceItem } from '../components/grade/BulkAttendanceMenu';
+import type { BulkAttendanceItem } from '../components/grade/BulkAttendanceMenu';
 import { getErrorMessage } from '../lib/apiError';
-import { COMPONENT_TYPE_LABELS, COMPONENT_TYPE_BADGE_CLASS, resolveGrade } from '../components/grade/gradeDisplay';
+import { resolveGrade } from '../components/grade/gradeDisplay';
 import type {
   ExamAttendance,
   FinalizePreviewItem,
+  GradeComponent,
   GradingCriteria,
+  StudentScore,
 } from '../types/grade';
 
 const DEFAULT_CRITERIA: GradingCriteria = {
   aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
 };
+
+/** Düzenlenmiş puanlar: componentId → (studentId → string). */
+type ScoreEdits = Record<number, Record<number, string>>;
+/** İyimser katılım: componentId → (studentId → attendance). */
+type AttendanceEdits = Record<number, Record<number, ExamAttendance>>;
+
+function isInvalidScore(score: string): boolean {
+  if (score === '') return false;
+  const n = Number(score);
+  return Number.isNaN(n) || n < 0 || n > 100;
+}
 
 export default function GradeEntryPage() {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -81,10 +81,10 @@ export default function GradeEntryPage() {
   const { showError } = useToast();
   const canPublishComponent = hasPermission('menu.not-girisi.publish');
 
-  const [selectedComponentId, setSelectedComponentId] = useState<number | null>(null);
-  const [scores, setScores] = useState<Record<number, string>>({});
+  const [edits, setEdits] = useState<ScoreEdits>({});
+  const [isSavingAll, setIsSavingAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [optimisticAttendance, setOptimisticAttendance] = useState<Record<number, ExamAttendance>>({});
+  const [optimisticAttendance, setOptimisticAttendance] = useState<AttendanceEdits>({});
 
   const [showCriteriaDialog, setShowCriteriaDialog] = useState(false);
   const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
@@ -99,9 +99,10 @@ export default function GradeEntryPage() {
 
   const isFinalized = gradesData?.isFinalized ?? false;
   const currentCriteria = criteria ?? DEFAULT_CRITERIA;
-  const activeComponentId = selectedComponentId ?? components?.[0]?.id ?? null;
-  const totalWeight = components?.reduce((sum, c) => sum + c.weight, 0) ?? 0;
-  const activeComponent = components?.find((c) => c.id === activeComponentId);
+  const componentList: GradeComponent[] = useMemo(() => components ?? [], [components]);
+  const hasComponents = componentList.length > 0;
+  const totalWeight = componentList.reduce((sum, c) => sum + c.weight, 0);
+  const publishedCount = componentList.filter((c) => Boolean(c.publishedAt)).length;
   const hideStatistics = gradesData?.hideStatistics ?? false;
   // Mutlak/Bağıl değerlendirme göstergesi: tip kaynağında alan yok → mutlak varsayılır.
   const isRelative = false;
@@ -111,16 +112,11 @@ export default function GradeEntryPage() {
     [gradesData],
   );
 
+  // Yeni veri yüklenince düzenleme tamponunu temizle (server değerleri tablo tarafından gösterilir).
   useEffect(() => {
-    if (!gradesData || !activeComponentId) return;
-    const next: Record<number, string> = {};
-    gradesData.students.forEach((student) => {
-      const score = student.scores[activeComponentId];
-      next[student.studentId] = score != null ? String(score) : '';
-    });
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetched veriden form state'i başlatma; bilinçli senkron
-    setScores(next);
-  }, [gradesData, activeComponentId]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetched veri değişince edit tamponunu sıfırla; bilinçli senkron
+    setEdits({});
+  }, [gradesData]);
 
   // Auto-enable the letter-grade column the first time we learn the section is finalized.
   // Guarded by a ref so a subsequent user toggle-off is not overridden on re-render.
@@ -156,40 +152,60 @@ export default function GradeEntryPage() {
     );
   }
 
-  const selectComponent = (compId: number) => {
-    setSelectedComponentId(compId);
-    const next: Record<number, string> = {};
-    gradesData.students.forEach((s) => {
-      const score = s.scores[compId];
-      next[s.studentId] = score != null ? String(score) : '';
-    });
-    setScores(next);
-    setSearchTerm('');
-  };
-
-  const handleScoreChange = (studentId: number, value: string) => {
-    setScores((prev) => ({ ...prev, [studentId]: value }));
-  };
-
-  const handleSave = () => {
-    if (!activeComponentId) return;
-    const invalidEntry = Object.entries(scores).find(([, score]) => {
-      if (score === '') return false;
-      const numericScore = Number(score);
-      return Number.isNaN(numericScore) || numericScore < 0 || numericScore > 100;
-    });
-    if (invalidEntry) {
-      showError('Geçersiz not', 'Notlar 0 ile 100 arasında olmalıdır.');
-      return;
-    }
-    const grades = Object.entries(scores).map(([studentId, score]) => ({
-      studentId: Number(studentId),
-      score: score === '' ? null : Number(score),
+  const handleScoreChange = (componentId: number, studentId: number, value: string) => {
+    setEdits((prev) => ({
+      ...prev,
+      [componentId]: { ...prev[componentId], [studentId]: value },
     }));
-    submitGradesMut.mutate(
-      { componentId: activeComponentId, grades },
-      { onError: (err: unknown) => showError('Kaydedilemedi', getErrorMessage(err, 'Notlar kaydedilemedi.')) },
-    );
+  };
+
+  /** Bir bileşenin değişen puanlarını, server değerleriyle karşılaştırarak çıkarır. */
+  const collectChangedGrades = (componentId: number): StudentScore[] => {
+    const componentEdits = edits[componentId];
+    if (!componentEdits) return [];
+    const changed: StudentScore[] = [];
+    for (const [studentIdStr, value] of Object.entries(componentEdits)) {
+      const studentId = Number(studentIdStr);
+      const student = gradesData.students.find((s) => s.studentId === studentId);
+      if (!student) continue;
+      const persisted = student.scores[componentId];
+      const persistedStr = persisted != null ? String(persisted) : '';
+      if (value === persistedStr) continue;
+      changed.push({ studentId, score: value === '' ? null : Number(value) });
+    }
+    return changed;
+  };
+
+  const handleSave = async () => {
+    if (!components || components.length === 0) return;
+
+    // Tüm düzenlemeler 0-100 aralığında mı?
+    for (const componentEdits of Object.values(edits)) {
+      for (const value of Object.values(componentEdits)) {
+        if (isInvalidScore(value)) {
+          showError('Geçersiz not', 'Notlar 0 ile 100 arasında olmalıdır.');
+          return;
+        }
+      }
+    }
+
+    const componentsToSave = components
+      .map((comp) => ({ componentId: comp.id, grades: collectChangedGrades(comp.id) }))
+      .filter((item) => item.grades.length > 0);
+
+    if (componentsToSave.length === 0) return;
+
+    setIsSavingAll(true);
+    try {
+      for (const item of componentsToSave) {
+        await submitGradesMut.mutateAsync(item);
+      }
+      setEdits({});
+    } catch (err: unknown) {
+      showError('Kaydedilemedi', getErrorMessage(err, 'Notlar kaydedilemedi.'));
+    } finally {
+      setIsSavingAll(false);
+    }
   };
 
   const handleFinalize = () => {
@@ -216,14 +232,14 @@ export default function GradeEntryPage() {
     });
   };
 
-  const handleDownloadTemplate = () => {
-    if (!activeComponentId) return;
-    downloadTemplateMut.mutate(activeComponentId, {
+  const handleDownloadTemplate = (componentId: number) => {
+    const component = componentList.find((c) => c.id === componentId);
+    downloadTemplateMut.mutate(componentId, {
       onSuccess: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${gradesData.courseCode}-${activeComponent?.name ?? 'grades'}-template.xlsx`;
+        a.download = `${gradesData.courseCode}-${component?.name ?? 'grades'}-template.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -233,43 +249,59 @@ export default function GradeEntryPage() {
     });
   };
 
-  const handleAttendanceChange = (studentId: number, attendance: ExamAttendance) => {
-    if (!activeComponentId || isFinalized) return;
-    setOptimisticAttendance((prev) => ({ ...prev, [studentId]: attendance }));
+  const handleAttendanceChange = (componentId: number, studentId: number, attendance: ExamAttendance) => {
+    if (isFinalized) return;
+    setOptimisticAttendance((prev) => ({
+      ...prev,
+      [componentId]: { ...prev[componentId], [studentId]: attendance },
+    }));
     setAttendanceMut.mutate(
-      { componentId: activeComponentId, items: [{ studentId, attendance }] },
+      { componentId, items: [{ studentId, attendance }] },
       {
         onSettled: () => {
           setOptimisticAttendance((prev) => {
-            const next = { ...prev };
-            delete next[studentId];
-            return next;
+            const forComponent = { ...prev[componentId] };
+            delete forComponent[studentId];
+            return { ...prev, [componentId]: forComponent };
           });
         },
+        onError: (err: unknown) => showError('İşaretlenemedi', getErrorMessage(err, 'Katılım işaretlenemedi.')),
       },
     );
   };
 
-  const handleBulkAttendance = (items: BulkAttendanceItem[]) => {
-    if (!activeComponentId || isFinalized || items.length === 0) return;
+  const handleBulkAttendance = (componentId: number, items: BulkAttendanceItem[]) => {
+    if (isFinalized || items.length === 0) return;
     setOptimisticAttendance((prev) => {
-      const next = { ...prev };
-      items.forEach((it) => { next[it.studentId] = it.attendance; });
-      return next;
+      const forComponent = { ...prev[componentId] };
+      items.forEach((it) => { forComponent[it.studentId] = it.attendance; });
+      return { ...prev, [componentId]: forComponent };
     });
     setAttendanceMut.mutate(
-      { componentId: activeComponentId, items },
+      { componentId, items },
       {
         onSettled: () => {
           setOptimisticAttendance((prev) => {
-            const next = { ...prev };
-            items.forEach((it) => { delete next[it.studentId]; });
-            return next;
+            const forComponent = { ...prev[componentId] };
+            items.forEach((it) => { delete forComponent[it.studentId]; });
+            return { ...prev, [componentId]: forComponent };
           });
         },
         onError: (err: unknown) => showError('İşaretlenemedi', getErrorMessage(err, 'Toplu katılım işaretlenemedi.')),
       },
     );
+  };
+
+  const handlePublishComponent = (componentId: number) => {
+    publishComponentMut.mutate(componentId, {
+      onError: (err: unknown) => showError('İlan edilemedi', getErrorMessage(err, 'Bileşen ilan edilemedi.')),
+    });
+  };
+
+  const handleUnpublishComponent = (componentId: number) => {
+    unpublishComponentMut.mutate(componentId, {
+      onError: (err: unknown) => showError('Geri alınamadı', getErrorMessage(err, 'İlan geri alınamadı.')),
+    });
   };
 
   const filteredStudents = gradesData.students.filter((s) => {
@@ -278,211 +310,52 @@ export default function GradeEntryPage() {
     return `${s.studentNumber} ${s.firstName} ${s.lastName}`.toLowerCase().includes(q);
   });
 
-  const activePublished = Boolean(activeComponent?.publishedAt);
-
   return (
-    <div className="flex flex-col gap-4 flex-1">
+    <>
+    <div className="flex flex-col gap-4 flex-1 print:hidden">
 
-      {/* ═══ HEADER — Ders Bilgileri ═══ */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/not-girisi')} title="Listeye dön">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <span className="font-mono text-lg font-bold text-primary">{gradesData.courseCode}</span>
-            <span className="text-lg font-semibold text-foreground">{gradesData.courseName}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 mt-1 pl-12">
-            {!hideStatistics && (
-              <>
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Users className="h-3.5 w-3.5" />
-                  {gradesData.students.length} öğrenci
-                </span>
-                <span className="text-muted-foreground">·</span>
-              </>
-            )}
-            <Badge variant="secondary" className="text-xs">
-              {isFinalized ? 'Kesinleştirilmiş' : 'Kesinleştirilmemiş'}
-            </Badge>
-            <span className="text-muted-foreground">·</span>
-            <Badge variant="outline" className="text-xs" title="Değerlendirme yöntemi (admin tarafından belirlenir)">
-              Değerlendirme: {isRelative ? 'Bağıl' : 'Mutlak'}
-            </Badge>
-            {/* Ek Bilgiler — seçili sınav */}
-            {activeComponent && (
-              <>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-sm text-foreground">
-                  <span className="font-medium">{activeComponent.name}</span>
-                  <span className="text-muted-foreground"> (%{activeComponent.weight})</span>
-                  {' — '}
-                  <span className={activePublished ? 'text-emerald-600 font-medium' : 'text-muted-foreground'}>
-                    {activePublished ? 'İlan Edildi' : 'İlan Edilmedi'}
-                  </span>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <Link
-          to="/sinav-tanimlama"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-        >
-          <Info className="h-3.5 w-3.5" />
-          Sınav tanımları Sınav Tanımlama'da
-        </Link>
-      </div>
-
-      {/* ═══ BİLEŞEN SEÇİCİ (salt-okunur sekmeler) ═══ */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {components?.map((comp) => {
-          const isActive = activeComponentId === comp.id;
-          const isPublished = Boolean(comp.publishedAt);
-          return (
-            <button
-              key={comp.id}
-              onClick={() => selectComponent(comp.id)}
-              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted/50 text-foreground hover:bg-muted'
-              }`}
-              title={isPublished ? `İlan edildi: ${new Date(comp.publishedAt!).toLocaleString('tr-TR')}` : 'İlan edilmedi (öğrenci notu/istatistiği göremez)'}
-            >
-              <span
-                aria-hidden
-                className={`inline-block h-2 w-2 rounded-full ${
-                  isPublished ? 'bg-emerald-500' : isActive ? 'bg-primary-foreground/40' : 'bg-muted-foreground/40'
-                }`}
-              />
-              <span>{comp.name}</span>
-              <span className={`font-mono text-xs ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                %{comp.weight}
-              </span>
-              {comp.type && comp.type !== 'Other' && (
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                  isActive ? 'bg-primary-foreground/15 text-primary-foreground/80' : COMPONENT_TYPE_BADGE_CLASS[comp.type]
-                }`}>
-                  {COMPONENT_TYPE_LABELS[comp.type]}
-                </span>
-              )}
-            </button>
-          );
-        })}
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className={`text-sm font-mono font-semibold ${
-            totalWeight === 100 ? 'text-emerald-600' : totalWeight > 100 ? 'text-red-600' : 'text-muted-foreground'
-          }`}>
-            Toplam: %{totalWeight}{totalWeight === 100 && ' ✓'}
-          </span>
-        </div>
-      </div>
+      {/* ═══ Tek kart: Ders Bilgileri + Araç çubuğu ═══ */}
+      <div className="rounded-xl border bg-card divide-y">
+      <GradeCourseHeader
+        courseCode={gradesData.courseCode}
+        courseName={gradesData.courseName}
+        studentCount={gradesData.students.length}
+        hideStatistics={hideStatistics}
+        isFinalized={isFinalized}
+        isRelative={isRelative}
+        totalWeight={totalWeight}
+        publishedCount={publishedCount}
+        componentCount={componentList.length}
+        onBack={() => navigate('/not-girisi')}
+      />
 
       {/* ═══ ARAÇ ÇUBUĞU ═══ */}
-      {activeComponentId && (
-        <div className="flex flex-wrap items-center gap-2">
-          {!isFinalized && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setShowPasteDialog(true)} className="gap-1.5 text-sm">
-                <ClipboardPaste className="h-4 w-4" /> Toplu Not Aktar
-              </Button>
-              <BulkAttendanceMenu
-                students={gradesData.students}
-                componentId={activeComponentId}
-                onBulkSet={handleBulkAttendance}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadTemplate}
-                disabled={downloadTemplateMut.isPending}
-                className="gap-1.5 text-sm"
-              >
-                <Download className="h-4 w-4" />
-                {downloadTemplateMut.isPending ? 'İndiriliyor...' : 'Şablon'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowImportDialog(true)} className="gap-1.5 text-sm">
-                <Upload className="h-4 w-4" /> Excel Yükle
-              </Button>
-            </>
-          )}
-
-          <Button
-            variant={showPreviousGrade ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowPreviousGrade((v) => !v)}
-            className="gap-1.5 text-sm"
-          >
-            <Eye className="h-4 w-4" /> Önceki Harf Notu
-          </Button>
-          <Button
-            variant={showPreview ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowPreview((v) => !v)}
-            className="gap-1.5 text-sm"
-          >
-            <Eye className="h-4 w-4" /> Ön İzleme
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 text-sm">
-            <Printer className="h-4 w-4" /> Yazdır
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCriteriaDialog(true)}
-            className="gap-1.5 text-sm"
-            disabled={isFinalized}
-          >
-            <Settings className="h-4 w-4" /> Harf Aralığı
-          </Button>
-
-          {canPublishComponent && (
-            activePublished ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => unpublishComponentMut.mutate(activeComponentId)}
-                disabled={publishComponentMut.isPending || unpublishComponentMut.isPending}
-                className="gap-1.5 text-sm"
-                title={`İlan: ${activeComponent?.publishedAt ? new Date(activeComponent.publishedAt).toLocaleString('tr-TR') : ''} — geri al`}
-              >
-                <EyeOff className="h-4 w-4" /> İlanı Geri Al
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => publishComponentMut.mutate(activeComponentId)}
-                disabled={publishComponentMut.isPending || unpublishComponentMut.isPending}
-                className="gap-1.5 text-sm border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
-                title="Öğrenci bu bileşenin notunu ve sınıf istatistiklerini görmeye başlar"
-              >
-                <Eye className="h-4 w-4" /> İlan Et
-              </Button>
-            )
-          )}
-
-          {isFinalized ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUnfinalize}
-              disabled={unfinalizeMut.isPending}
-              className="gap-1.5 text-sm"
-            >
-              <XCircle className="h-4 w-4" /> Geri Al
-            </Button>
-          ) : (
-            <Button size="sm" onClick={() => setShowFinalizeDialog(true)} className="gap-1.5 text-sm">
-              <CheckCircle className="h-4 w-4" /> Kesinleştir
-            </Button>
-          )}
+      {hasComponents && (
+        <div className="px-4 py-3">
+        <GradeToolbar
+          students={gradesData.students}
+          components={componentList}
+          isFinalized={isFinalized}
+          showPreview={showPreview}
+          showPreviousGrade={showPreviousGrade}
+          isSaving={isSavingAll || submitGradesMut.isPending}
+          isDownloadingTemplate={downloadTemplateMut.isPending}
+          isUnfinalizePending={unfinalizeMut.isPending}
+          onTogglePreview={() => setShowPreview((v) => !v)}
+          onTogglePreviousGrade={() => setShowPreviousGrade((v) => !v)}
+          onOpenCriteria={() => setShowCriteriaDialog(true)}
+          onPrint={() => window.print()}
+          onOpenPaste={() => setShowPasteDialog(true)}
+          onBulkAttendance={handleBulkAttendance}
+          onDownloadTemplate={handleDownloadTemplate}
+          onOpenImport={() => setShowImportDialog(true)}
+          onSave={handleSave}
+          onFinalize={() => setShowFinalizeDialog(true)}
+          onUnfinalize={handleUnfinalize}
+        />
         </div>
       )}
+      </div>
 
       {/* ═══ SINIF İSTATİSTİKLERİ ═══ */}
       {!hideStatistics && weightedAverageScores.length > 0 && (
@@ -495,7 +368,7 @@ export default function GradeEntryPage() {
       {/* ═══ ANA İÇERİK — Not Tablosu ═══ */}
       <Card className="flex-1">
         <CardContent className="p-0">
-          {!activeComponentId ? (
+          {!hasComponents ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <p className="text-base font-medium text-foreground mb-2">Henüz değerlendirme tanımlanmamış</p>
               <p className="text-sm text-muted-foreground mb-5 max-w-md">
@@ -509,34 +382,23 @@ export default function GradeEntryPage() {
             </div>
           ) : (
             <>
-              {/* Arama + Kaydet */}
-              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/20">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                    <Input
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Öğrenci ara..."
-                      className="pl-9 w-64 h-9 text-sm"
-                    />
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {activeComponent?.name} — %{activeComponent?.weight} ağırlık
-                  </span>
+              {/* Arama */}
+              <div className="flex items-center px-4 py-3 border-b bg-muted/20">
+                <div className="relative">
+                  <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Öğrenci ara..."
+                    className="pl-9 w-64 h-9 text-sm"
+                  />
                 </div>
-                {!isFinalized && (
-                  <Button size="sm" onClick={handleSave} disabled={submitGradesMut.isPending} className="gap-1.5">
-                    <Save className="h-4 w-4" />
-                    {submitGradesMut.isPending ? 'Kaydediliyor...' : 'Kaydet'}
-                  </Button>
-                )}
               </div>
 
               <GradeStudentTable
                 students={filteredStudents}
-                componentId={activeComponentId}
-                scores={scores}
+                components={componentList}
+                scores={edits}
                 optimisticAttendance={optimisticAttendance}
                 isFinalized={isFinalized}
                 readOnly={false}
@@ -544,8 +406,12 @@ export default function GradeEntryPage() {
                 showPreviousGrade={showPreviousGrade}
                 showPreview={showPreview}
                 isRelative={isRelative}
+                canPublishComponent={canPublishComponent}
+                isPublishPending={publishComponentMut.isPending || unpublishComponentMut.isPending}
                 onScoreChange={handleScoreChange}
                 onAttendanceChange={handleAttendanceChange}
+                onPublishComponent={handlePublishComponent}
+                onUnpublishComponent={handleUnpublishComponent}
               />
 
               {filteredStudents.length === 0 && searchTerm.trim() && (
@@ -594,16 +460,34 @@ export default function GradeEntryPage() {
         onClose={() => { setShowFinalizeDialog(false); setFinalizeResults(null); }}
       />
 
-      <ExcelImportDialog open={showImportDialog} onOpenChange={setShowImportDialog} sectionId={id} />
+      <ExcelImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        sectionId={id}
+        components={componentList}
+        isDownloadingTemplate={downloadTemplateMut.isPending}
+        onDownloadTemplate={handleDownloadTemplate}
+      />
 
-      {activeComponentId && (
-        <ScorePasteDialog
-          open={showPasteDialog}
-          onOpenChange={setShowPasteDialog}
-          sectionId={id}
-          componentId={activeComponentId}
-        />
-      )}
+      <ScorePasteDialog
+        open={showPasteDialog}
+        onOpenChange={setShowPasteDialog}
+        sectionId={id}
+        components={componentList}
+      />
     </div>
+
+    {/* ═══ YAZDIR — resmi not listesi belgesi (sadece print'te görünür) ═══ */}
+    {hasComponents && (
+      <GradeReportDocument
+        courseCode={gradesData.courseCode}
+        courseName={gradesData.courseName}
+        students={gradesData.students}
+        components={componentList}
+        criteria={currentCriteria}
+        isFinalized={isFinalized}
+      />
+    )}
+    </>
   );
 }
