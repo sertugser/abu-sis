@@ -37,6 +37,41 @@ const TYPE_BADGE: Record<string, string> = {
   Other: 'bg-slate-50 text-slate-600 border-slate-200',
 };
 
+/** "Fakülte / Program" cell — shows only the non-empty parts */
+function FacultyProgramCell({ facultyName, programName }: { facultyName: string; programName: string }) {
+  const parts = [facultyName, programName].filter(Boolean);
+  if (parts.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="text-xs leading-tight">
+      {parts.length === 2 ? (
+        <>
+          <span className="font-medium">{facultyName}</span>
+          <span className="mx-1 text-muted-foreground">·</span>
+          <span className="text-muted-foreground">{programName}</span>
+        </>
+      ) : (
+        <span>{parts[0]}</span>
+      )}
+    </span>
+  );
+}
+
+/** Z/S mandatory badge */
+function MandatoryBadge({ isMandatory }: { isMandatory: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className={
+        isMandatory
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-mono text-[11px] px-1.5 py-0'
+          : 'bg-slate-50 text-slate-500 border-slate-200 font-mono text-[11px] px-1.5 py-0'
+      }
+    >
+      {isMandatory ? 'Z' : 'S'}
+    </Badge>
+  );
+}
+
 // ── delete confirm dialog ─────────────────────────────────────
 function extractDeleteError(err: unknown): string {
   if (err && typeof err === 'object') {
@@ -62,7 +97,6 @@ function DeleteConfirmDialog({
     <Dialog
       open={target !== null}
       onOpenChange={(v) => {
-        // Fix 3: keep dialog open on error; only allow close via button or success
         if (!v && deleteMut.isError) return;
         onOpenChange(v);
       }}
@@ -75,7 +109,6 @@ function DeleteConfirmDialog({
           <span className="font-medium text-foreground">{target?.componentName}</span> sınavı
           silinecek. Bu işlem geri alınamaz.
         </p>
-        {/* Fix 3: surface delete error inline */}
         {deleteMut.isError && (
           <p className="text-sm text-destructive">{extractDeleteError(deleteMut.error)}</p>
         )}
@@ -95,6 +128,27 @@ function DeleteConfirmDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── status legend ─────────────────────────────────────────────
+function ExamStatusLegend() {
+  return (
+    <div className="flex items-center gap-3 border-t border-border/60 px-5 py-2.5 bg-muted/10">
+      <span className="text-xs text-muted-foreground font-medium mr-1">Lejant:</span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
+        <span className="text-xs text-muted-foreground">İlan Edildi</span>
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" />
+        <span className="text-xs text-muted-foreground">Sonuçlandırıldı</span>
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-400" />
+        <span className="text-xs text-muted-foreground">Bekliyor</span>
+      </span>
+    </div>
   );
 }
 
@@ -224,6 +278,9 @@ function ExamTable({
         )}
       </div>
 
+      {/* Status legend */}
+      <ExamStatusLegend />
+
       {/* Dialogs */}
       <SinavEkleDialog
         open={dialogOpen}
@@ -279,7 +336,9 @@ export default function SinavTanimlamaPage() {
             Sınav tanımlamak için bir ders/şube seçin
           </p>
         </div>
-        <div className="flex flex-col overflow-auto">
+
+        {/* Horizontally scrollable table */}
+        <div className="overflow-x-auto">
           {isLoading ? (
             <div className="space-y-2 p-4">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -294,14 +353,19 @@ export default function SinavTanimlamaPage() {
               </p>
             </div>
           ) : (
-            <table className="w-full min-w-[480px]">
+            <table className="w-full min-w-[900px]">
               <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Şb.</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Kodu</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Adı</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Durum</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Şb.</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Kodu</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Adı</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">T+U</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Z</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Krd</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fakülte / Program</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Durum</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/80">
@@ -313,13 +377,26 @@ export default function SinavTanimlamaPage() {
                       className={`cursor-pointer transition-colors hover:bg-primary/5 ${isSelected ? 'bg-primary/8' : ''}`}
                       onClick={() => setSelectedSectionId(s.sectionId)}
                     >
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{s.sectionNumber}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 text-right text-sm tabular-nums text-muted-foreground">{s.sectionNumber}</td>
+                      <td className="px-3 py-2.5">
                         <span className="font-mono text-sm font-semibold text-primary">{s.courseCode}</span>
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium">{s.courseName}</td>
-                      <td className="px-4 py-3 text-center text-sm">{s.ects}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5 text-sm font-medium">{s.courseName}</td>
+                      <td className="px-3 py-2.5 text-center text-sm tabular-nums text-muted-foreground">
+                        {s.theoryHours}+{s.labHours}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <MandatoryBadge isMandatory={s.isMandatory} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-sm tabular-nums">{s.nationalCredit}</td>
+                      <td className="px-3 py-2.5 text-right text-sm tabular-nums">{s.ects}</td>
+                      <td className="px-3 py-2.5">
+                        <FacultyProgramCell facultyName={s.facultyName} programName={s.programName} />
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-sm tabular-nums text-muted-foreground">
+                        {s.enrolledCount}/{s.capacity}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
                         <Badge
                           variant="outline"
                           className={s.isFinalized
