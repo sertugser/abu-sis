@@ -164,6 +164,7 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
 
         var counts = await _resolver.ResolveCourseExamCountsAsync(section.CourseId, section.TermId, ct);
         var bounds = await _resolver.ResolveCourseWeightBoundsAsync(section.CourseId, section.TermId, ct);
+        var announceDeadlineDays = await _config.GetIntAsync("Exam.AnnounceDeadlineDays", 7, ct);
 
         var classrooms = await _context.Classrooms
             .AsNoTracking()
@@ -179,7 +180,8 @@ public class SectionExamController(AppDbContext context, ISystemConfigProvider c
             counts.FinalCount,
             bounds?.MinMidterm, bounds?.MaxMidterm, bounds?.MinFinal, bounds?.MaxFinal,
             components,
-            classrooms));
+            classrooms,
+            announceDeadlineDays));
     }
 
     private async Task<CourseSection?> GetAuthorizedSectionAsync(int sectionId, CancellationToken ct)
@@ -316,4 +318,5 @@ public record ExamConfigDto(
     bool HasRegulation, int MidtermCount, int FinalCount,
     decimal? MinMidtermWeight, decimal? MaxMidtermWeight, decimal? MinFinalWeight, decimal? MaxFinalWeight,
     IReadOnlyList<ExamConfigComponentDto> Components,
-    IReadOnlyList<ExamConfigClassroomDto> Classrooms);
+    IReadOnlyList<ExamConfigClassroomDto> Classrooms,
+    int AnnounceDeadlineDays);

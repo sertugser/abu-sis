@@ -41,6 +41,8 @@ public class SectionExamControllerTests : IDisposable
         _configMock = new Mock<ISystemConfigProvider>();
         _configMock.Setup(c => c.GetIntAsync("Exam.DefaultDurationMinutes", 60, It.IsAny<CancellationToken>()))
             .ReturnsAsync(60);
+        _configMock.Setup(c => c.GetIntAsync("Exam.AnnounceDeadlineDays", 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(7);
 
         _resolverMock = new Mock<IExamRegulationResolver>();
         _resolverMock
@@ -327,6 +329,7 @@ public class SectionExamControllerTests : IDisposable
         dto.FinalCount.Should().Be(1);
         dto.Components.Should().ContainSingle(c => c.Name == "Vize");
         dto.Classrooms.Should().HaveCount(2);
+        dto.AnnounceDeadlineDays.Should().Be(7);
     }
 
     [Fact]

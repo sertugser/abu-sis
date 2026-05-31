@@ -55,4 +55,5 @@ export interface ExamConfig {
   maxFinalWeight: number | null;
   components: ExamConfigComponent[];
   classrooms: ExamConfigClassroom[];
+  announceDeadlineDays: number;
 }
