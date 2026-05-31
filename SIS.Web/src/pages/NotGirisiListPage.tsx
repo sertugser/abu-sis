@@ -4,17 +4,7 @@ import { FolderOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   useInstructorSections,
   useInstructorTerms,
@@ -23,11 +13,12 @@ import { useExamsOverview } from '../hooks/useGradeData';
 import type { InstructorSection } from '../api/instructor.api';
 import type { ExamOverviewRow, ExamOverviewComponent } from '../types/grade';
 import { ROUTES } from '../lib/constants';
+import {
+  InstructorCourseFilters,
+  FACULTY_FILTER_ALL,
+} from '../components/instructor/InstructorCourseFilters';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-const TERM_FILTER_ACTIVE = 'active';
-const FACULTY_FILTER_ALL = 'all';
 
 function formatExamDate(iso: string | null): string {
   if (!iso) return '—';
@@ -410,121 +401,28 @@ export default function NotGirisiListPage() {
   });
 
   const terms = termsQuery.data ?? [];
-  const termSelectValue = selectedTermId === null ? TERM_FILTER_ACTIVE : String(selectedTermId);
-
   return (
     <div className="flex flex-1 flex-col gap-4">
       {/* ── Content card (filtreler + liste tek kart) ── */}
       <Card className="flex flex-col overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-border/80 bg-muted/20 p-3">
-          {/* Üst satır — alanlar */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="filter-term" className="text-xs text-muted-foreground">
-                Dönem
-              </Label>
-              <Select
-                value={termSelectValue}
-                onValueChange={(value) =>
-                  setSelectedTermId(value === TERM_FILTER_ACTIVE ? null : Number(value))
-                }
-              >
-                <SelectTrigger id="filter-term" className="h-9 w-[200px]">
-                  <SelectValue placeholder="Aktif Dönem" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={TERM_FILTER_ACTIVE}>Aktif Dönem</SelectItem>
-                  {terms.map((term) => (
-                    <SelectItem key={term.id} value={String(term.id)}>
-                      {term.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="filter-faculty" className="text-xs text-muted-foreground">
-                Fakülte Türü
-              </Label>
-              <Select value={facultyFilter} onValueChange={setFacultyFilter}>
-                <SelectTrigger id="filter-faculty" className="h-9 w-[200px]">
-                  <SelectValue placeholder="Tümü" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={FACULTY_FILTER_ALL}>Tümü</SelectItem>
-                  {facultyOptions.map((faculty) => (
-                    <SelectItem key={faculty} value={faculty}>
-                      {faculty}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="filter-course-code" className="text-xs text-muted-foreground">
-                Ders Kodu
-              </Label>
-              <Input
-                id="filter-course-code"
-                value={courseCodeFilter}
-                onChange={(e) => setCourseCodeFilter(e.target.value)}
-                placeholder="Ders kodu"
-                className="h-9 w-[180px]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="filter-course-name" className="text-xs text-muted-foreground">
-                Ders Adı
-              </Label>
-              <Input
-                id="filter-course-name"
-                value={courseNameFilter}
-                onChange={(e) => setCourseNameFilter(e.target.value)}
-                placeholder="Ders adı"
-                className="h-9 w-[180px]"
-              />
-            </div>
-          </div>
-
-          {/* Alt satır — anahtarlar */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="show-kontenjan"
-                checked={showKontenjan}
-                onCheckedChange={setShowKontenjan}
-              />
-              <Label htmlFor="show-kontenjan" className="cursor-pointer text-sm">
-                Kontenjan Göster
-              </Label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Switch
-                id="show-unfinalized"
-                checked={showUnfinalized}
-                onCheckedChange={setShowUnfinalized}
-              />
-              <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
-                Sonuçlanmayan Dersleri Göster
-              </Label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Switch
-                id="show-all-exams"
-                checked={showAllExams}
-                onCheckedChange={setShowAllExams}
-              />
-              <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
-                Tüm Sınavları Göster
-              </Label>
-            </div>
-          </div>
-        </div>
+        <InstructorCourseFilters
+          terms={terms}
+          selectedTermId={selectedTermId}
+          onTermChange={setSelectedTermId}
+          facultyOptions={facultyOptions}
+          facultyFilter={facultyFilter}
+          onFacultyChange={setFacultyFilter}
+          showKontenjan={showKontenjan}
+          onShowKontenjanChange={setShowKontenjan}
+          courseCode={courseCodeFilter}
+          onCourseCodeChange={setCourseCodeFilter}
+          courseName={courseNameFilter}
+          onCourseNameChange={setCourseNameFilter}
+          showUnfinalized={showUnfinalized}
+          onShowUnfinalizedChange={setShowUnfinalized}
+          showAllExams={showAllExams}
+          onShowAllExamsChange={setShowAllExams}
+        />
 
         <div className="flex flex-col overflow-auto">
           {showAllExams ? (
