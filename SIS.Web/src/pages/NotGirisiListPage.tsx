@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FolderOpen, Search } from 'lucide-react';
+import { FolderOpen, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -360,54 +360,39 @@ export default function NotGirisiListPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* ── Toolbar / filters ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Ders kodu veya ders adı ile ara…"
-            className="pl-9 text-[15px]"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Switch
-            id="show-unfinalized"
-            checked={showUnfinalized}
-            onCheckedChange={setShowUnfinalized}
-          />
-          <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
-            Sonuçlanmayan Dersleri Göster
-          </Label>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Switch
-            id="show-all-exams"
-            checked={showAllExams}
-            onCheckedChange={setShowAllExams}
-          />
-          <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
-            Tüm Sınavları Göster
-          </Label>
-        </div>
-      </div>
-
-      {/* ── Content card ── */}
+      {/* ── Content card (arama + filtreler + liste tek kart) ── */}
       <Card className="flex flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-border/80 bg-muted/20 px-5 py-3">
-          <BookOpen className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="text-sm font-semibold">
-              {showAllExams ? 'Sınav Listesi' : 'Derslerim'}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {showAllExams
-                ? 'Not girişi yapmak için bir sınava tıklayın'
-                : 'Not girişi yapmak için bir derse tıklayın'}
-            </p>
+        <div className="flex flex-wrap items-center gap-3 border-b border-border/80 bg-muted/20 p-3">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Ders kodu veya ders adı ile ara…"
+              className="pl-9 text-[15px]"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-unfinalized"
+              checked={showUnfinalized}
+              onCheckedChange={setShowUnfinalized}
+            />
+            <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
+              Sonuçlanmayan Dersleri Göster
+            </Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-all-exams"
+              checked={showAllExams}
+              onCheckedChange={setShowAllExams}
+            />
+            <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
+              Tüm Sınavları Göster
+            </Label>
           </div>
         </div>
 
