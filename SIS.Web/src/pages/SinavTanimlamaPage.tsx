@@ -315,26 +315,18 @@ export default function SinavTanimlamaPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* Search + count */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Ders kodu veya ders adı ile ara…"
-            className="pl-9 text-[15px]"
-          />
-        </div>
-      </div>
-
-      {/* Section list */}
+      {/* Section list — arama + ders listesi tek kart */}
       <Card className="flex flex-col overflow-hidden">
-        <div className="border-b border-border/80 bg-muted/20 px-5 py-3">
-          <p className="text-sm font-semibold">Derslerim</p>
-          <p className="text-xs text-muted-foreground">
-            Sınav tanımlamak için bir ders/şube seçin
-          </p>
+        <div className="border-b border-border/80 bg-muted/20 p-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Ders kodu veya ders adı ile ara…"
+              className="pl-9 text-[15px]"
+            />
+          </div>
         </div>
 
         {/* Horizontally scrollable table */}
