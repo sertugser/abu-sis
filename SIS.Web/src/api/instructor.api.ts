@@ -51,6 +51,10 @@ export interface InstructorSection {
   ects: number;
   theoryHours: number;
   labHours: number;
+  nationalCredit: number;
+  facultyName: string;
+  programName: string;
+  isMandatory: boolean;
   capacity: number;
   enrolledCount: number;
   availableSeats: number;

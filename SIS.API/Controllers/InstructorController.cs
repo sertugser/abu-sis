@@ -292,10 +292,22 @@ public class InstructorController : ControllerBase
 
         var sections = await _context.CourseSections
             .Include(cs => cs.Course)
+                .ThenInclude(c => c.Department!)
+                    .ThenInclude(d => d.Faculty)
             .Include(cs => cs.Classroom)
             .Include(cs => cs.Registrations)
             .Where(cs => cs.InstructorId == instructor.Id && cs.TermId == term.Id)
             .ToListAsync();
+
+        // Batched compulsory lookup — single query, no N+1
+        var courseIds = sections.Select(s => s.CourseId).Distinct().ToList();
+        var compulsoryCourseIds = (await _context.CurriculumCourses
+            .AsNoTracking()
+            .Where(cc => courseIds.Contains(cc.CourseId) && cc.IsCompulsory)
+            .Select(cc => cc.CourseId)
+            .Distinct()
+            .ToListAsync())
+            .ToHashSet();
 
         // Load SectionSchedule records for schedule display
         var mySectionIds = sections.Select(s => s.Id).ToList();
@@ -337,6 +349,10 @@ public class InstructorController : ControllerBase
             Ects = s.Course.Ects,
             TheoryHours = s.Course.TheoryHours,
             LabHours = s.Course.LabHours,
+            NationalCredit = s.Course.NationalCredit,
+            FacultyName = s.Course.Department != null ? s.Course.Department.Faculty.Name : "",
+            ProgramName = s.Course.Department != null ? s.Course.Department.Name : "",
+            IsMandatory = compulsoryCourseIds.Contains(s.CourseId),
             Capacity = s.Capacity,
             EnrolledCount = s.EnrolledCount,
             AvailableSeats = Math.Max(0, s.Capacity - s.EnrolledCount),

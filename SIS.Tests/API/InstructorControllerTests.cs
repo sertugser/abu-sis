@@ -279,6 +279,90 @@ public class InstructorControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task GetMySections_SectionWithCompulsoryCurriculumCourse_IsMandatoryTrue()
+    {
+        await using var context = CreateContext();
+        SeedInstructor(context, instructorId: 7, userId: 42);
+
+        // Seed an active term
+        context.AcademicTerms.Add(new AcademicTerm
+        {
+            Id = 1,
+            Year = 2025,
+            TermType = TermType.Fall,
+            Name = "2025-26 Güz",
+            ShortName = "25-26G",
+            EnglishName = "Fall 2025-26",
+            ShortEnglishName = "F25",
+            TermStart = new DateTime(2025, 9, 1),
+            TermEnd = new DateTime(2026, 1, 31),
+            IsActivated = true
+        });
+
+        // Seed a course with a department
+        context.Courses.Add(new Course
+        {
+            Id = 10,
+            Code = "BM301",
+            Name = "Veri Yapıları",
+            DepartmentId = 1,
+            Ects = 6,
+            TheoryHours = 3,
+            LabHours = 1,
+            NationalCredit = 3
+        });
+
+        // Seed an academic program and curriculum
+        context.AcademicPrograms.Add(new AcademicProgram
+        {
+            Id = 1,
+            DepartmentId = 1,
+            Name = "Bilgisayar Mühendisliği",
+            Code = "BM",
+            DegreeLevel = DegreeLevel.Bachelor
+        });
+        context.Curricula.Add(new Curriculum
+        {
+            Id = 1,
+            ProgramId = 1,
+            Version = "2022",
+            Name = "2022 Müfredatı",
+            IsActive = true
+        });
+        context.CurriculumCourses.Add(new CurriculumCourse
+        {
+            CurriculumId = 1,
+            CourseId = 10,
+            IsCompulsory = true,
+            SuggestedSemester = 5
+        });
+
+        // Seed the section taught by the instructor
+        context.CourseSections.Add(new CourseSection
+        {
+            Id = 20,
+            CourseId = 10,
+            TermId = 1,
+            InstructorId = 7,
+            Capacity = 40,
+            Status = CourseSectionStatus.Active
+        });
+
+        await context.SaveChangesAsync();
+
+        var controller = CreateController(context, Mock.Of<ISchedulingService>(), userId: 42);
+
+        var result = await controller.GetMySections();
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var body = okResult.Value!;
+        var sections = (System.Collections.IEnumerable)body.GetType().GetProperty("Sections")!.GetValue(body)!;
+        var section = sections.Cast<object>().Single();
+        var isMandatory = (bool)section.GetType().GetProperty("IsMandatory")!.GetValue(section)!;
+        isMandatory.Should().BeTrue();
+    }
+
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
