@@ -56,7 +56,7 @@ interface Props {
     internalQuota?: number | null,
     externalQuota?: number | null,
   ) => void;
-  onCloseSection: (sectionId: number) => void;
+  onCloseSection: (sectionId: number, label?: string) => void;
   onReactivateSection: (sectionId: number) => Promise<unknown>;
   updatePending: boolean;
   closePending: boolean;
@@ -179,7 +179,9 @@ export function CourseManagementDialog({
 
   const handleCloseConfirmed = () => {
     if (!selectedSection) return;
-    onCloseSection(selectedSection.sectionId);
+    // Toast'ta hangi şube olduğunu göstermek için "KOD — N. şube" etiketi geçilir.
+    const label = `${selectedSection.courseCode} — ${selectedSection.sectionNumber}. şube`;
+    onCloseSection(selectedSection.sectionId, label);
     setMode('list');
   };
 

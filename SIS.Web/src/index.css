@@ -226,6 +226,34 @@
 .animate-pulse-soft    { animation: pulse-soft 2s ease-in-out infinite; }
 .animate-bell-drop     { animation: bell-drop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: top right; }
 .animate-toast-countdown { animation: toast-countdown 5s linear both; transform-origin: left; }
+
+/* sonner özel toast'larının alt geri-sayım çubuğu. Süre inline (animation-duration)
+   verilir; sonner toaster bölgesi hover'dayken tüm sayaçlar (ve çubuklar) duraklar. */
+.toast-progress {
+  transform-origin: left;
+  opacity: 0.45;
+  animation-name: toast-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+[data-sonner-toaster]:hover .toast-progress { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-progress { display: none; }
+}
+
+/* Başarı toast'ı açılırken tik bir kez "çizilir" (pathLength=1 normalize). */
+@keyframes toast-check-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.toast-check-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: toast-check-draw 0.42s cubic-bezier(0.65, 0, 0.35, 1) 0.08s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-check-path { animation: none; stroke-dashoffset: 0; }
+}
 .animate-bell-shake    { animation: bell-shake 0.7s ease-in-out; transform-origin: top center; }
 
 /* Staggered children — cards, list items */

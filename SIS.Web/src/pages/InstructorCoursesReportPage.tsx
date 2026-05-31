@@ -13,6 +13,7 @@ import DepartmentOperationsLayout from '@/components/academic-operations/Departm
 import { resolveInitialDepartmentId } from '@/components/academic-operations/utils';
 import { cn } from '@/lib/utils';
 import { getAcademicOperationsErrorMessage } from '../api/academicOperations.api';
+import { printHtmlTable } from '../lib/printTable';
 import { useAcademicOperationsContext } from '../hooks/useAcademicOperations';
 import { useDepartmentInstructors, useInstructorWorkload } from '../hooks/useCourseOpening';
 import { useActiveTerm } from '../hooks/useActiveTerm';
@@ -106,72 +107,30 @@ export default function InstructorCoursesReportPage() {
       : selectedDepartment
         ? `${selectedDepartment.departmentCode} - ${selectedDepartment.departmentName}`
         : 'Tümü';
-    const generatedAt = new Date().toLocaleString('tr-TR');
-    const rows = sorted.map(instructor => `
-      <tr>
-        <td>${escapeHtml(instructor.fullName)}</td>
-        <td>${escapeHtml(instructor.departmentName || '-')}</td>
-        <td class="number">${instructor.assignedWeeklyHours}</td>
-        <td class="number">${instructor.maxWeeklyHours}</td>
-        <td class="number">${instructor.instructorId}</td>
-      </tr>
-    `).join('');
 
-    const printWindow = window.open('', '_blank', 'width=1120,height=820,noopener,noreferrer');
-    if (!printWindow) return;
-
-    printWindow.document.open();
-    printWindow.document.write(`
-      <!doctype html>
-      <html lang="tr">
-        <head>
-          <meta charset="utf-8" />
-          <title>Ders Veren Öğretim Elemanları</title>
-          <style>
-            @page { size: A4 landscape; margin: 14mm; }
-            * { box-sizing: border-box; }
-            body { margin: 0; color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 11px; }
-            h1 { margin: 0 0 8px; font-size: 20px; }
-            .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 16px; }
-            .meta div { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; }
-            .label { display: block; margin-bottom: 3px; color: #6b7280; font-size: 9px; text-transform: uppercase; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #d1d5db; padding: 6px 7px; text-align: left; vertical-align: top; }
-            th { background: #f3f4f6; font-size: 10px; }
-            .number { text-align: right; font-variant-numeric: tabular-nums; }
-            .footer { margin-top: 12px; color: #6b7280; font-size: 9px; }
-          </style>
-        </head>
-        <body>
-          <h1>Ders Veren Öğretim Elemanları</h1>
-          <div class="meta">
-            <div><span class="label">Bölüm</span>${escapeHtml(departmentLabel)}</div>
-            <div><span class="label">Dönem</span>${escapeHtml(activeTerm?.name ?? '-')}</div>
-            <div><span class="label">Kayıt</span>${sorted.length}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Öğretim Elemanı</th>
-                <th>Bölüm</th>
-                <th>Atanan Saat</th>
-                <th>Maks Saat</th>
-                <th>Personel ID</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="footer">Oluşturulma zamanı: ${escapeHtml(generatedAt)}</div>
-          <script>
-            window.addEventListener('load', () => {
-              window.focus();
-              setTimeout(() => window.print(), 150);
-            });
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    printHtmlTable({
+      title: 'Ders Veren Öğretim Elemanları',
+      orientation: 'landscape',
+      meta: [
+        { label: 'Bölüm', value: departmentLabel },
+        { label: 'Dönem', value: activeTerm?.name ?? '-' },
+        { label: 'Kayıt', value: String(sorted.length) },
+      ],
+      columns: [
+        { header: 'Öğretim Elemanı' },
+        { header: 'Bölüm' },
+        { header: 'Atanan Saat', align: 'right' },
+        { header: 'Maks Saat', align: 'right' },
+        { header: 'Personel ID', align: 'right' },
+      ],
+      rows: sorted.map(instructor => [
+        instructor.fullName,
+        instructor.departmentName || '-',
+        instructor.assignedWeeklyHours,
+        instructor.maxWeeklyHours,
+        instructor.instructorId,
+      ]),
+    });
   }
 
   return (
@@ -304,15 +263,6 @@ export default function InstructorCoursesReportPage() {
       </div>
     </DepartmentOperationsLayout>
   );
-}
-
-function escapeHtml(value: string | number | null | undefined) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 function StatCard({

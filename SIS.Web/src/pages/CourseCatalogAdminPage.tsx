@@ -702,7 +702,7 @@ function CourseDetailDialog({ courseId, allCourses, onClose, onDeleted, onDuplic
       showWarning(
         'Değişiklikler kaydedilemedi',
         `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
-        { center: true, durationMs: 10000 },
+        { durationMs: 8000 },
       );
       return;
     }
@@ -1491,7 +1491,7 @@ function CreateCourseDialog({ onClose, onCreated, template }: CreateDialogProps)
       showWarning(
         'Ders oluşturulamadı',
         `${missing.length} zorunlu alan eksik: ${missing.join(', ')}. Lütfen tamamlayıp tekrar deneyin.`,
-        { center: true, durationMs: 10000 },
+        { durationMs: 8000 },
       );
       return;
     }

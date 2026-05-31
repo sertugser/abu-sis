@@ -75,7 +75,7 @@ import StudentNumberChangePage from './pages/StudentNumberChangePage';
 import StudentPromotionPage from './pages/StudentPromotionPage';
 import BulkAdvisorAssignmentPage from './pages/BulkAdvisorAssignmentPage';
 import BulkCurriculumAssignmentPage from './pages/BulkCurriculumAssignmentPage';
-import CourseRegistrationEditPage from './pages/CourseRegistrationEditPage';
+import CourseRegistrationApprovalPage from './pages/CourseRegistrationApprovalPage';
 import LetterGradeEditPage from './pages/LetterGradeEditPage';
 // ── Yönetim → Kullanıcı İşlemleri (placeholder) ──
 import UserPermissionGroupsPage from './pages/UserPermissionGroupsPage';
@@ -134,11 +134,10 @@ export default function App() {
                   {/* RBAC: yetki yetersiz olduğunda RoleProtectedRoute buraya yönlendirir */}
                   <Route path="forbidden" element={<ForbiddenPage />} />
 
-                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
-                    {/* Onay/düzenleme işlevi Ders Kayıt Düzenleme sayfasına taşındı;
-                        eski danışman paneli rotaları oraya yönlenir. */}
-                    <Route path="danisman-paneli" element={<Navigate to="/ders-kayit-duzenleme" replace />} />
-                    <Route path="danismanpaneli" element={<Navigate to="/ders-kayit-duzenleme" replace />} />
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-onay.view" />}>
+                    {/* Onay/düzenleme işlevi Ders Kayıt Onay sayfasına taşındı; eski rotalar oraya yönlenir. */}
+                    <Route path="danisman-paneli" element={<Navigate to="/ders-kayit-onay" replace />} />
+                    <Route path="danismanpaneli" element={<Navigate to="/ders-kayit-onay" replace />} />
                   </Route>
 
                   {/* Herkesin erişebildiği sayfalar */}
@@ -303,8 +302,9 @@ export default function App() {
                   <Route element={<RoleProtectedRoute permission="menu.toplu-mufredat-atama.view" />}>
                     <Route path="toplu-mufredat-atama" element={<BulkCurriculumAssignmentPage />} />
                   </Route>
-                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-duzenleme.view" />}>
-                    <Route path="ders-kayit-duzenleme" element={<CourseRegistrationEditPage />} />
+                  <Route element={<RoleProtectedRoute permission="menu.ders-kayit-onay.view" />}>
+                    <Route path="ders-kayit-onay" element={<CourseRegistrationApprovalPage />} />
+                    <Route path="ders-kayit-duzenleme" element={<Navigate to="/ders-kayit-onay" replace />} />
                   </Route>
                   <Route element={<RoleProtectedRoute permission="menu.harf-notu-duzenleme.view" />}>
                     <Route path="harf-notu-duzenleme" element={<LetterGradeEditPage />} />

@@ -4,7 +4,7 @@ import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, XCircle, AlertTriangle, BookOpen, ChevronDown, GraduationCap, ScrollText, TrendingUp, ListChecks, RotateCcw } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, BookOpen, ChevronDown, GraduationCap, ScrollText, TrendingUp, ListChecks, RotateCcw, Printer } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAdvisorStudents, usePendingApprovals, useApproveStudent, useRejectStudent } from '../../hooks/useAdvisor';
@@ -26,6 +26,8 @@ import { SelectedCoursesGrid } from '../registration/v2/SelectedCoursesGrid';
 import { RegistrationSummaryBar } from '../registration/v2/RegistrationSummaryBar';
 import AdvisorStudentInfoDialogs, { type AdvisorInfoView } from './AdvisorStudentInfoDialogs';
 import { PLAN_STATUS_LABELS, PLAN_STATUS_VARIANTS } from './planStatus';
+import { downloadAdvisorRegistrationPlanPdf } from '../../api/advisor.api';
+import { useToast } from '@/components/ui/global-toast';
 
 interface Props {
   studentId: number | null;
@@ -48,6 +50,7 @@ function deriveDefaultParity(termType: string): ParityFilter {
 export default function AdvisorStudentDetailModal({ studentId, open, onOpenChange }: Props) {
   const { data: advisees = [] } = useAdvisorStudents();
   const { data: pendingData } = usePendingApprovals();
+  const { showError } = useToast();
 
   const [actionError, setActionError] = useState('');
   const [checkErrors, setCheckErrors] = useState<ValidationError[]>([]);
@@ -231,10 +234,10 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <ResizableDialogContent
-        defaultWidth={920}
-        defaultHeight={700}
-        minWidth={560}
-        minHeight={460}
+        defaultWidth={1240}
+        defaultHeight={860}
+        minWidth={680}
+        minHeight={520}
         className="flex flex-col p-0"
       >
         <DialogTitle className="sr-only">{name} — Ders Kaydı</DialogTitle>
@@ -255,6 +258,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
             <InfoLine label="Bağlı Olunan Müfredat" value={row?.curriculumVersion || '—'} />
             <InfoLine label="Öğrenim Süre Durum" value={row?.studyDurationStatus || '—'} />
             <InfoLine label="Genel Ortalama" value={cgpa != null ? cgpa.toFixed(2) : '—'} />
+            <InfoLine label="Borç Durumu" value={catalog?.student.financialStatus ?? '—'} />
           </div>
 
           {/* Ek İşlemler / Diğer İşlemler menüleri (Proliz) */}
@@ -266,10 +270,21 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem disabled><BookOpen className="mr-2 h-4 w-4" /> Ders Programı <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
-                <DropdownMenuItem disabled><BookOpen className="mr-2 h-4 w-4" /> Bölüm Ders Programı <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setInfoView('timetable')}><BookOpen className="mr-2 h-4 w-4" /> Ders Programı</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setInfoView('department-schedule')}><BookOpen className="mr-2 h-4 w-4" /> Bölüm Ders Programı</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setInfoView('curriculum')}><GraduationCap className="mr-2 h-4 w-4" /> Müfredat Durumu</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setInfoView('history')}><BookOpen className="mr-2 h-4 w-4" /> Ders Kayıt Geçmişi</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  if (studentId == null) return;
+                  try {
+                    const blob = await downloadAdvisorRegistrationPlanPdf(studentId);
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                  } catch (err) {
+                    showError('Yazdırma başarısız', err instanceof Error ? err.message : 'PDF oluşturulamadı.');
+                  }
+                }}><Printer className="mr-2 h-4 w-4" /> Yazdır</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled><ScrollText className="mr-2 h-4 w-4" /> Ders Kayıt Mesajları <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setInfoView('curriculum')}><RotateCcw className="mr-2 h-4 w-4" /> Tekrar Durum Göster</DropdownMenuItem>
@@ -287,7 +302,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                 <DropdownMenuItem onClick={() => setInfoView('transcript')}><ScrollText className="mr-2 h-4 w-4" /> Transkript</DropdownMenuItem>
                 <DropdownMenuItem disabled><ScrollText className="mr-2 h-4 w-4" /> Mezuniyet Transkripti <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setInfoView('gpa')}><TrendingUp className="mr-2 h-4 w-4" /> Dönem Ortalamaları</DropdownMenuItem>
-                <DropdownMenuItem disabled><ScrollText className="mr-2 h-4 w-4" /> Transkript Senaryosu <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setInfoView('transcript-scenario')}><ScrollText className="mr-2 h-4 w-4" /> Transkript Senaryosu</DropdownMenuItem>
                 <DropdownMenuItem disabled><GraduationCap className="mr-2 h-4 w-4" /> Akademik Faaliyetler <span className="ml-auto text-[10px] text-muted-foreground">yakında</span></DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -435,6 +450,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                 <SelectedCoursesGrid
                   selectedCourses={catalog.selectedCourses}
                   registrationActionsOpen={true}
+                  allowAdvisorDrop={true}
                   onRemove={handleRemove}
                   removingId={removingId}
                   removeError={removeError}

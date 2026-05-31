@@ -135,13 +135,13 @@ public static class RolePermissionSeed
                 "menu.raporlarim.view",
                 "menu.duyurular.view",
                 "menu.danisman-ders-kisitlari.view",
-                "menu.ders-kayit-duzenleme.view",
+                "menu.ders-kayit-onay.view",
                 "menu.ogrenci-rehberi.view",
                 "menu.sifre-degistir.view",
 
                 // ── Action permissions (21) ──
-                "menu.ders-kayit-duzenleme.approve",
-                "menu.ders-kayit-duzenleme.reject",
+                "menu.ders-kayit-onay.approve",
+                "menu.ders-kayit-onay.reject",
                 "menu.danisman-ders-kisitlari.create",
                 "menu.danisman-ders-kisitlari.edit",
                 "menu.danisman-ders-kisitlari.delete",

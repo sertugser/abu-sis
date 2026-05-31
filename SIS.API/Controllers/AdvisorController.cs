@@ -7,6 +7,8 @@ using SIS.Application.Common.Services;
 using SIS.Application.CourseRegistration.DTOs;
 using SIS.Application.CourseRegistration.Services;
 using SIS.Application.GpaCalculation.Services;
+using SIS.Application.Scheduling.Services;
+using SIS.Application.StudentCard.DTOs;
 using SIS.Application.StudentCard.Services;
 using SIS.Domain.Entities;
 using SIS.Domain.Enums;
@@ -25,6 +27,10 @@ public class AdvisorController : ControllerBase
     private readonly ICurriculumStatusService _curriculumStatus;
     private readonly IStudentTranscriptService _transcript;
     private readonly IGpaCalculationService _gpa;
+    private readonly IStudentTimetableService _timetable;
+    private readonly IDepartmentScheduleService _departmentSchedule;
+    private readonly ITranscriptScenarioService _transcriptScenario;
+    private readonly IRegistrationPlanPdfService _planPdf;
 
     public AdvisorController(
         ICourseRegistrationService registrationService,
@@ -32,7 +38,11 @@ public class AdvisorController : ControllerBase
         ISystemConfigProvider systemConfig,
         ICurriculumStatusService curriculumStatus,
         IStudentTranscriptService transcript,
-        IGpaCalculationService gpa)
+        IGpaCalculationService gpa,
+        IStudentTimetableService timetable,
+        IDepartmentScheduleService departmentSchedule,
+        ITranscriptScenarioService transcriptScenario,
+        IRegistrationPlanPdfService planPdf)
     {
         _registrationService = registrationService;
         _context = context;
@@ -40,10 +50,14 @@ public class AdvisorController : ControllerBase
         _curriculumStatus = curriculumStatus;
         _transcript = transcript;
         _gpa = gpa;
+        _timetable = timetable;
+        _departmentSchedule = departmentSchedule;
+        _transcriptScenario = transcriptScenario;
+        _planPdf = planPdf;
     }
 
     [HttpGet("pending-approvals")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetPendingApprovals()
     {
         var calculationMethod = await _systemConfig.GetStringAsync("Instructor.AdvisingCalculationMethod", "standard");
@@ -68,7 +82,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpGet("students")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetAdvisorStudents(CancellationToken cancellationToken = default)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -91,6 +105,8 @@ public class AdvisorController : ControllerBase
                 StudentId = student.Id,
                 student.StudentNumber,
                 StudentName = user.FirstName + " " + user.LastName,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
                 ProgramName = academicProgram.Name,
                 FacultyName = academicProgram.Department.Faculty.Name,
                 CurriculumName = program.Curriculum.Name,
@@ -147,6 +163,8 @@ public class AdvisorController : ControllerBase
                 a.StudentId,
                 a.StudentNumber,
                 a.StudentName,
+                a.FirstName,
+                a.LastName,
                 a.ProgramName,
                 a.FacultyName,
                 CurriculumVersion = curriculumDisplay,
@@ -170,7 +188,7 @@ public class AdvisorController : ControllerBase
     /// Öğretim üyesi profili olmayan kullanıcı için sıfırlanmış kart döner (401 değil).
     /// </summary>
     [HttpGet("dashboard-stats")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetDashboardStats(CancellationToken cancellationToken = default)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -236,7 +254,7 @@ public class AdvisorController : ControllerBase
     /// mevcut dönem kayıtları (öğrenci adına düzenleme için).
     /// </summary>
     [HttpGet("students/{studentId:int}/registrations")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetStudentRegistrations(int studentId)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -249,7 +267,7 @@ public class AdvisorController : ControllerBase
 
     /// <summary>GET .../course-history — danışanın aldığı dersler / ders kayıt geçmişi (Proliz "Aldığı Dersler").</summary>
     [HttpGet("students/{studentId:int}/course-history")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetStudentCourseHistory(int studentId)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -259,7 +277,7 @@ public class AdvisorController : ControllerBase
 
     /// <summary>GET .../curriculum-status — danışanın müfredat durumu (Proliz "Müfredat Durumu").</summary>
     [HttpGet("students/{studentId:int}/curriculum-status")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetStudentCurriculumStatus(int studentId, CancellationToken ct)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -272,7 +290,7 @@ public class AdvisorController : ControllerBase
 
     /// <summary>GET .../transcript — danışanın transkripti (Proliz "Transkript").</summary>
     [HttpGet("students/{studentId:int}/transcript")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetStudentTranscript(int studentId, CancellationToken ct)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -285,7 +303,7 @@ public class AdvisorController : ControllerBase
 
     /// <summary>GET .../term-gpa — danışanın dönem ortalamaları geçmişi (Proliz "Dönem Ortalamaları").</summary>
     [HttpGet("students/{studentId:int}/term-gpa")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetStudentTermGpa(int studentId)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -300,7 +318,7 @@ public class AdvisorController : ControllerBase
     /// akışı (ApproveStudentRegistrationsAsync) eklenen dersi de Active'e çevirir.
     /// </summary>
     [HttpPost("students/{studentId:int}/add")]
-    [RequirePermission("menu.ders-kayit-duzenleme.approve")]
+    [RequirePermission("menu.ders-kayit-onay.approve")]
     public async Task<IActionResult> AddCourseForStudent(int studentId, [FromBody] RegistrationPlanItemDto dto)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -319,7 +337,7 @@ public class AdvisorController : ControllerBase
     /// DELETE api/advisor/students/{studentId}/registrations/{registrationId} — öğrenci adına ders çıkar.
     /// </summary>
     [HttpDelete("students/{studentId:int}/registrations/{registrationId:int}")]
-    [RequirePermission("menu.ders-kayit-duzenleme.approve")]
+    [RequirePermission("menu.ders-kayit-onay.approve")]
     public async Task<IActionResult> DropCourseForStudent(int studentId, int registrationId)
     {
         var guard = await EnsureAdviseeAsync(studentId);
@@ -334,7 +352,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpPost("approve")]
-    [RequirePermission("menu.ders-kayit-duzenleme.approve")]
+    [RequirePermission("menu.ders-kayit-onay.approve")]
     public async Task<IActionResult> Approve([FromBody] ApprovalActionDto dto)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -350,7 +368,7 @@ public class AdvisorController : ControllerBase
     }
 
     [HttpPost("reject")]
-    [RequirePermission("menu.ders-kayit-duzenleme.reject")]
+    [RequirePermission("menu.ders-kayit-onay.reject")]
     public async Task<IActionResult> Reject([FromBody] ApprovalActionDto dto)
     {
         var instructorId = await GetInstructorIdAsync();
@@ -363,6 +381,73 @@ public class AdvisorController : ControllerBase
             return BadRequest(result);
 
         return Ok(result);
+    }
+
+    /// <summary>GET .../timetable/terms — advisee'nin kayıtlı olduğu dönemler.</summary>
+    [HttpGet("students/{studentId:int}/timetable/terms")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> GetStudentTimetableTerms(int studentId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        return Ok(await _timetable.GetEnrolledTermsAsync(studentId, ct));
+    }
+
+    /// <summary>GET .../timetable?termId= — advisee haftalık ders programı.</summary>
+    [HttpGet("students/{studentId:int}/timetable")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> GetStudentTimetable(int studentId, [FromQuery] int? termId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        return Ok(await _timetable.GetTimetableAsync(studentId, termId, ct));
+    }
+
+    /// <summary>GET .../department-schedule/context — advisee bölüm ders programı dropdown/default'ları.</summary>
+    [HttpGet("students/{studentId:int}/department-schedule/context")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> GetStudentDeptScheduleContext(int studentId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        try { return Ok(await _departmentSchedule.GetContextAsync(studentId, ct)); }
+        catch (InvalidOperationException ex) { return NotFound(new { error = ex.Message }); }
+    }
+
+    /// <summary>GET .../department-schedule?termId=&programId=&classYear= — advisee bölüm haftalık programı.</summary>
+    [HttpGet("students/{studentId:int}/department-schedule")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> GetStudentDeptSchedule(
+        int studentId, [FromQuery] int termId, [FromQuery] int programId, [FromQuery] int classYear, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        if (termId <= 0 || programId <= 0)
+            return BadRequest(new { error = "Geçerli termId ve programId gönderilmelidir." });
+        try { return Ok(await _departmentSchedule.GetScheduleAsync(studentId, termId, programId, classYear, ct)); }
+        catch (UnauthorizedAccessException ex) { return StatusCode(403, new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return NotFound(new { error = ex.Message }); }
+    }
+
+    /// <summary>POST .../transcript-scenario — advisee what-if hesabı (saf; guard sahiplik için).</summary>
+    [HttpPost("students/{studentId:int}/transcript-scenario")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> CalculateStudentScenario(int studentId, [FromBody] TranscriptScenarioRequestDto request)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        return Ok(_transcriptScenario.Calculate(request));
+    }
+
+    /// <summary>GET .../registration-plan/pdf — advisee kayıt planı PDF.</summary>
+    [HttpGet("students/{studentId:int}/registration-plan/pdf")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
+    public async Task<IActionResult> GetStudentRegistrationPlanPdf(int studentId, CancellationToken ct)
+    {
+        var guard = await EnsureAdviseeAsync(studentId);
+        if (guard != null) return guard;
+        var bytes = await _planPdf.GenerateAsync(studentId, ct);
+        return File(bytes, "application/pdf", $"ders-kayit-plani-{studentId}.pdf");
     }
 
     /// <summary>

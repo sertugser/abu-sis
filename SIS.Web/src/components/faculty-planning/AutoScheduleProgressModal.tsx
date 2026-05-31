@@ -28,12 +28,6 @@ const FAILURE_LABELS: Record<string, string> = {
   ConstraintRelax: 'Kısıt ihlali',
 };
 
-const SEARCH_STRATEGY_LABELS: Record<string, string> = {
-  auto: 'Otomatik',
-  fixed: 'Sabit',
-  portfolio: 'Portföy',
-};
-
 export type ProgressStage = 'idle' | 'started' | 'v2-building-request' | 'v2-solving' | 'complete' | 'failed';
 
 interface ScheduleProgressEvent {
@@ -237,17 +231,6 @@ export function AutoScheduleProgressModal({
   }, [open, targetProgress.percent]);
 
   // ── Tahmini kalan süre ──
-  // Sadece localStorage history varsa tahmin gösterilir. İlk kullanımda
-  // anlamsız bir sabit (örn. "45s") göstermek yerine sayacın boş kalmasını tercih ediyoruz.
-  const estimatedRemaining = useMemo(() => {
-    if (targetProgress.stage === 'complete' || targetProgress.stage === 'failed') return null;
-    const avg = avgDurationRef.current;
-    if (avg == null) return null; // history yoksa tahmin yok
-    const fromPercent = displayPercent > 0 ? avg * (100 - displayPercent) / 100 : avg;
-    const fromElapsed = Math.max(0, avg - elapsedSec);
-    return Math.max(fromPercent, fromElapsed);
-  }, [displayPercent, elapsedSec, targetProgress.stage]);
-
   // ── Aksiyonlar ──
   const handleCancelClick = () => {
     // Eğer hızlı bitti veya başlamadı, direkt kapat
@@ -344,9 +327,6 @@ export function AutoScheduleProgressModal({
               </div>
               <div className="text-right text-xs font-mono tabular-nums whitespace-nowrap">
                 <span className="font-medium text-slate-700">{fmtSec(elapsedSec)}</span>
-                {!isComplete && !isFailed && estimatedRemaining != null && estimatedRemaining > 0 && (
-                  <span className="text-slate-400"> · ~{fmtSec(estimatedRemaining)} kaldı</span>
-                )}
               </div>
             </div>
           </div>
@@ -605,17 +585,6 @@ function ResultPanel({
                 {stats.distinctCourseCount} ders
               </span>
             </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-[10px]">
-              Motor: {stats.engine || 'v2-ortools'}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              Arama: {SEARCH_STRATEGY_LABELS[stats.searchStrategy] ?? stats.searchStrategy ?? 'auto'}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              UNSAT core: {stats.unsatCoreEnabled ? 'Açık' : 'Kapalı'}
-            </Badge>
           </div>
         </div>
 

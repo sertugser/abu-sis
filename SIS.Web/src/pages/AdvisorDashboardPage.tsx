@@ -87,7 +87,7 @@ export default function AdvisorDashboardPage() {
           hint={s.pendingApprovalCount > 0 ? 'İncelemek için tıklayın' : 'Bekleyen plan yok'}
           accent="border-l-amber-500"
           icon={<ClipboardList className="h-5 w-5 text-amber-500" />}
-          onClick={() => navigate('/ders-kayit-duzenleme')}
+          onClick={() => navigate('/ders-kayit-onay')}
         />
         <StatCard
           label="Riskli Öğrenci"
@@ -109,7 +109,7 @@ export default function AdvisorDashboardPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card
           className="cursor-pointer border-border transition-all hover:shadow-md"
-          onClick={() => navigate('/ders-kayit-duzenleme')}
+          onClick={() => navigate('/ders-kayit-onay')}
         >
           <CardContent className="flex items-center justify-between gap-3 p-5">
             <div className="flex items-center gap-3">

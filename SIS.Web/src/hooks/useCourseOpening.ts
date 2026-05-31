@@ -334,13 +334,14 @@ export function useCloseSection(departmentId: number, termId: number) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useToast();
   return useMutation({
-    mutationFn: (sectionId: number) => closeSection(sectionId),
-    onSuccess: () => {
+    // label: çağıran tarafça verilen "KOD — N. şube" etiketi (toast'ta hangi şube olduğunu gösterir).
+    mutationFn: ({ sectionId }: { sectionId: number; label?: string }) => closeSection(sectionId),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.courseOpeningList(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
-      showSuccess('Şube kapatıldı');
+      showSuccess('Şube kapatıldı', variables.label);
     },
     onError: (error) => {
       showError('Şube kapatılamadı', getApiErrorMessage(error));
@@ -376,7 +377,11 @@ export function useCloseAllSections(departmentId: number, termId: number) {
  * useCloseAllSections'tan farkı: geri alınamaz, ders "hiç açılmamış" gibi olur.
  * Backend safety: aktif/tamamlanmış kayıt, değerlendirme veya yoklama varsa reddedilir.
  */
-export function useDeleteAllSectionsHard(departmentId: number, termId: number) {
+export function useDeleteAllSectionsHard(
+  departmentId: number,
+  termId: number,
+  options?: { silent?: boolean },
+) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useToast();
   return useMutation({
@@ -386,6 +391,9 @@ export function useDeleteAllSectionsHard(departmentId: number, termId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.curriculumCoursesForOpening(departmentId, termId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.forecastDepartmentSummary(departmentId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.academicPlanningSummary(departmentId, termId) });
+      // silent: toplu silme akışı döngü sonunda tek özet toast gösterir (ders adlı).
+      // Burada per-ders toast atılmaz; aksi halde tekrarlı + bilgisiz kart yığını oluşur.
+      if (options?.silent) return;
       const deleted = result?.deletedSectionCount ?? 0;
       const detail =
         deleted === 0
@@ -396,6 +404,8 @@ export function useDeleteAllSectionsHard(departmentId: number, termId: number) {
       showSuccess('Ders bu dönemden kaldırıldı', detail);
     },
     onError: (error) => {
+      // silent modda hata, çağıran (panel) tarafından mutateAsync catch'inde toplanır.
+      if (options?.silent) return;
       showError('Ders kaldırılamadı', getApiErrorMessage(error));
     },
   });

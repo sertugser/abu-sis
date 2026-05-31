@@ -23,6 +23,8 @@ interface Props {
   removingId: number | null;
   /** Drop error (if any). */
   removeError?: string | null;
+  /** Danışman bağlamı: Pending/Active dersler de çıkarılabilsin (backend asAdvisor izinli). Default false. */
+  allowAdvisorDrop?: boolean;
 }
 
 export function SelectedCoursesGrid({
@@ -31,9 +33,15 @@ export function SelectedCoursesGrid({
   onRemove,
   removingId,
   removeError,
+  allowAdvisorDrop = false,
 }: Props) {
   function canDrop(status: string): boolean {
-    return (status === 'Draft' || status === 'Rejected') && registrationActionsOpen;
+    if (!registrationActionsOpen) return false;
+    if (allowAdvisorDrop) {
+      return status === 'Draft' || status === 'Rejected'
+        || status === 'PendingAdvisorApproval' || status === 'Active';
+    }
+    return status === 'Draft' || status === 'Rejected';
   }
 
   return (

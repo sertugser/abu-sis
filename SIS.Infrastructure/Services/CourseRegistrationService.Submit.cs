@@ -280,7 +280,7 @@ public partial class CourseRegistrationService
                     NotificationType.RegistrationSubmittedForApproval,
                     "Ders kaydı onay bekliyor",
                     $"{student.StudentNumber} numaralı öğrenci {registrations.Count} dersini onayınıza gönderdi.",
-                    link: "/ders-kayit-duzenleme",
+                    link: "/ders-kayit-onay",
                     severity: NotificationSeverity.Info,
                     entityRef: $"student:{student.Id}");
             }

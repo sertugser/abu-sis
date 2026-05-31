@@ -42,7 +42,7 @@ export const ROUTES = {
   STUDENT_PROMOTION: '/sinif-atlatma-islemleri',
   BULK_ADVISOR_ASSIGNMENT: '/toplu-danisman-atama',
   BULK_CURRICULUM_ASSIGNMENT: '/toplu-mufredat-atama',
-  COURSE_REGISTRATION_EDIT: '/ders-kayit-duzenleme',
+  COURSE_REGISTRATION_EDIT: '/ders-kayit-onay',
   LETTER_GRADE_EDIT: '/harf-notu-duzenleme',
   // ── Yönetim → Kullanıcı İşlemleri ──
   USER_PERMISSION_GROUPS: '/kullanici-yetki-gruplari',
@@ -221,7 +221,7 @@ export const IMPLEMENTED_ROUTES = new Set([
   '/sinif-atlatma-islemleri',
   '/toplu-danisman-atama',
   '/toplu-mufredat-atama',
-  '/ders-kayit-duzenleme',
+  '/ders-kayit-onay',
   '/harf-notu-duzenleme',
   '/kullanici-yetki-gruplari',
   '/kullanici-rapor-gruplari',

@@ -1,22 +1,34 @@
+import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, GraduationCap, BookOpen, ScrollText, TrendingUp } from 'lucide-react';
+import { TimetableView } from '@/components/scheduling/TimetableView';
+import { DepartmentScheduleWeekGrid } from '@/components/scheduling/DepartmentScheduleWeekGrid';
+import { TranscriptScenarioView } from '@/components/scenario/TranscriptScenarioView';
 import {
   useAdvisorStudentCourseHistory,
   useAdvisorStudentCurriculumStatus,
   useAdvisorStudentTranscript,
   useAdvisorStudentTermGpa,
+  useAdvisorStudentTimetableTerms,
+  useAdvisorStudentTimetable,
+  useAdvisorStudentDeptScheduleContext,
+  useAdvisorStudentDeptSchedule,
 } from '../../hooks/useAdvisor';
+import { calculateAdvisorTranscriptScenario } from '../../api/advisor.api';
 
-export type AdvisorInfoView = 'curriculum' | 'history' | 'transcript' | 'gpa' | null;
+export type AdvisorInfoView = 'curriculum' | 'history' | 'transcript' | 'gpa' | 'timetable' | 'department-schedule' | 'transcript-scenario' | null;
 
 const VIEW_META: Record<Exclude<AdvisorInfoView, null>, { title: string; icon: React.ReactNode }> = {
   curriculum: { title: 'Müfredat Durumu', icon: <GraduationCap className="h-5 w-5 text-primary" /> },
   history: { title: 'Aldığı Dersler / Ders Kayıt Geçmişi', icon: <BookOpen className="h-5 w-5 text-primary" /> },
   transcript: { title: 'Transkript', icon: <ScrollText className="h-5 w-5 text-primary" /> },
   gpa: { title: 'Dönem Ortalamaları', icon: <TrendingUp className="h-5 w-5 text-primary" /> },
+  timetable: { title: 'Ders Programı', icon: <BookOpen className="h-5 w-5 text-primary" /> },
+  'department-schedule': { title: 'Bölüm Ders Programı', icon: <BookOpen className="h-5 w-5 text-primary" /> },
+  'transcript-scenario': { title: 'Transkript Senaryosu', icon: <ScrollText className="h-5 w-5 text-primary" /> },
 };
 
 interface Props {
@@ -49,6 +61,9 @@ export default function AdvisorStudentInfoDialogs({ studentId, view, onClose }: 
           {view === 'history' && <HistoryView studentId={studentId} active={open} />}
           {view === 'transcript' && <TranscriptView studentId={studentId} active={open} />}
           {view === 'gpa' && <GpaView studentId={studentId} active={open} />}
+          {view === 'timetable' && <TimetableViewWrapper studentId={studentId} active={open} />}
+          {view === 'department-schedule' && <DeptScheduleViewWrapper studentId={studentId} active={open} />}
+          {view === 'transcript-scenario' && <ScenarioViewWrapper studentId={studentId} active={open} />}
         </div>
       </ResizableDialogContent>
     </Dialog>
@@ -234,6 +249,65 @@ function GpaView({ studentId, active }: { studentId: number | null; active: bool
         </tbody>
       </table>
     </div>
+  );
+}
+
+function TimetableViewWrapper({ studentId, active }: { studentId: number | null; active: boolean }) {
+  const { data: terms = [] } = useAdvisorStudentTimetableTerms(studentId, active);
+  const [termId, setTermId] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (termId === undefined && terms.length > 0) {
+      setTermId((terms.find(t => t.isDefault) ?? terms[0]).termId);
+    }
+  }, [terms, termId]);
+  const { data, isLoading, isError } = useAdvisorStudentTimetable(studentId, termId, active);
+  return (
+    <TimetableView
+      sections={data?.sections ?? []}
+      slots={data?.slots}
+      lunchBreakStart={data?.lunchBreakStart}
+      lunchBreakEnd={data?.lunchBreakEnd}
+      terms={terms.map(t => ({ termId: t.termId, label: t.label }))}
+      selectedTermId={termId}
+      onTermChange={setTermId}
+      isLoading={isLoading}
+      isError={isError}
+    />
+  );
+}
+
+function DeptScheduleViewWrapper({ studentId, active }: { studentId: number | null; active: boolean }) {
+  const { data: ctx, isLoading: ctxLoading } = useAdvisorStudentDeptScheduleContext(studentId, active);
+  const [termId, setTermId] = useState<number | undefined>(undefined);
+  const [programId, setProgramId] = useState<number | undefined>(undefined);
+  const [classYear, setClassYear] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (ctx && termId === undefined) {
+      setTermId((ctx.terms.find(t => t.isDefault) ?? ctx.terms[0])?.termId);
+      setProgramId(ctx.programId);
+      setClassYear(ctx.defaultClassYear);
+    }
+  }, [ctx, termId]);
+  const { data, isLoading, isError } = useAdvisorStudentDeptSchedule(studentId, termId, programId, classYear, active);
+  if (ctxLoading || isLoading) return <Loading />;
+  if (isError) return <ErrorBox msg="Bölüm ders programı yüklenemedi." />;
+  if (!data) return <ErrorBox msg="Program bulunamadı." />;
+  return <DepartmentScheduleWeekGrid data={data} />;
+}
+
+function ScenarioViewWrapper({ studentId, active }: { studentId: number | null; active: boolean }) {
+  const transcript = useAdvisorStudentTranscript(studentId, active);
+  const curriculum = useAdvisorStudentCurriculumStatus(studentId, active);
+  return (
+    <TranscriptScenarioView
+      studentName={transcript.data?.fullName ?? ''}
+      transcript={transcript.data}
+      curriculumStatus={curriculum.data}
+      isLoading={transcript.isLoading || curriculum.isLoading}
+      isError={transcript.isError || curriculum.isError}
+      calculate={(req) => calculateAdvisorTranscriptScenario(studentId!, req)}
+      isCurriculumLoading={curriculum.isLoading}
+    />
   );
 }
 
