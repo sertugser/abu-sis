@@ -1,6 +1,6 @@
 // Ortak yazdırma yardımcısı — bir tabloyu temiz bir yazdırma penceresinde basar.
 // Sayfanın kendisini (sidebar/üst bar dahil) DEĞİL, yalnız verilen başlık + tabloyu basar.
-// Mevcut sayfalardaki kopyalanmış window.open(...).document.write(...) desenini tek yere toplar.
+// Sayfalara kopyalanmış "popup açıp document.write et" yazdırma desenini tek yere toplar.
 
 export interface PrintTableColumn {
   header: string;
@@ -32,16 +32,13 @@ function alignClass(align: PrintTableColumn['align']): string {
   return '';
 }
 
-/**
- * Temiz bir popup açar, başlık + meta + tabloyu yazar ve yazdırma diyaloğunu tetikler.
- * Popup engellenirse sessizce false döner (çağıran isterse kullanıcıyı uyarır).
- */
-export function printHtmlTable(options: PrintTableOptions): boolean {
-  const { title, meta = [], columns, rows, orientation = 'landscape' } = options;
+// Yazdırma diyaloğunu tetiklemeden önce içeriğin (CSS) yerleşmesi için kısa gecikme.
+const PRINT_TRIGGER_DELAY_MS = 50;
+// afterprint bazı tarayıcılarda tetiklenmez; iframe'i temizlemek için yedek zaman aşımı.
+const PRINT_CLEANUP_FALLBACK_MS = 1000;
 
-  // NOT: 'noopener' VERİLMEZ — verilirse window.open null döner, içerik yazılamaz (boş about:blank).
-  const win = window.open('', '_blank', 'width=1120,height=820');
-  if (!win) return false;
+function buildPrintDocument(options: PrintTableOptions): string {
+  const { title, meta = [], columns, rows, orientation = 'landscape' } = options;
 
   const metaHtml = meta.length > 0
     ? `<div class="meta">${meta
@@ -62,8 +59,7 @@ export function printHtmlTable(options: PrintTableOptions): boolean {
     )
     .join('');
 
-  win.document.open();
-  win.document.write(`
+  return `
     <!doctype html>
     <html lang="tr">
       <head>
@@ -93,15 +89,65 @@ export function printHtmlTable(options: PrintTableOptions): boolean {
           <tbody>${bodyHtml}</tbody>
         </table>
         <div class="footer">Oluşturulma zamanı: ${escapeHtml(new Date().toLocaleString('tr-TR'))}</div>
-        <script>
-          window.addEventListener('load', () => {
-            window.focus();
-            setTimeout(() => window.print(), 150);
-          });
-        </script>
       </body>
     </html>
-  `);
-  win.document.close();
+  `;
+}
+
+/**
+ * Gizli bir iframe oluşturup başlık + meta + tabloyu içine yazar ve yazdırma
+ * diyaloğunu tetikler. Popup (window.open) yerine iframe kullanılır: popup
+ * engelleyicilere takılmaz ve reverse-tabnabbing yüzeyini tamamen ortadan kaldırır
+ * (içerik tamamen escape edilmiş, kendi ürettiğimiz HTML'dir). Iframe, yazdırma
+ * sonrası (afterprint) ya da yedek zaman aşımıyla DOM'dan temizlenir.
+ * Ortam tarayıcı değilse ya da iframe belgesine erişilemezse false döner.
+ */
+export function printHtmlTable(options: PrintTableOptions): boolean {
+  if (typeof document === 'undefined') return false;
+
+  const documentHtml = buildPrintDocument(options);
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  document.body.appendChild(iframe);
+
+  const frameWindow = iframe.contentWindow;
+  const frameDoc = frameWindow?.document;
+  if (!frameWindow || !frameDoc) {
+    iframe.remove();
+    return false;
+  }
+
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    iframe.remove();
+  };
+  frameWindow.addEventListener('afterprint', cleanup);
+
+  frameDoc.open();
+  frameDoc.write(documentHtml);
+  frameDoc.close();
+
+  const triggerPrint = () => {
+    frameWindow.focus();
+    frameWindow.print();
+    window.setTimeout(cleanup, PRINT_CLEANUP_FALLBACK_MS);
+  };
+
+  if (frameDoc.readyState === 'complete') {
+    window.setTimeout(triggerPrint, PRINT_TRIGGER_DELAY_MS);
+  } else {
+    frameWindow.addEventListener('load', () => window.setTimeout(triggerPrint, PRINT_TRIGGER_DELAY_MS));
+  }
+
   return true;
 }

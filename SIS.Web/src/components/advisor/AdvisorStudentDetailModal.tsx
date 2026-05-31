@@ -279,7 +279,7 @@ export default function AdvisorStudentDetailModal({ studentId, open, onOpenChang
                   try {
                     const blob = await downloadAdvisorRegistrationPlanPdf(studentId);
                     const url = URL.createObjectURL(blob);
-                    window.open(url, '_blank');
+                    window.open(url, '_blank', 'noopener,noreferrer');
                     setTimeout(() => URL.revokeObjectURL(url), 10_000);
                   } catch (err) {
                     showError('Yazdırma başarısız', err instanceof Error ? err.message : 'PDF oluşturulamadı.');
