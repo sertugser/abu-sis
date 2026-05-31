@@ -347,16 +347,16 @@ export default function SinavTanimlamaPage() {
             <table className="w-full min-w-[900px]">
               <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
                 <tr>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Şb.</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Kodu</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Adı</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">T+U</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Z</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Krd</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fakülte / Program</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Durum</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Şb.</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Kodu</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Adı</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">T+U</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Z</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Krd</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fakülte / Program</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Durum</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/80">
@@ -368,26 +368,26 @@ export default function SinavTanimlamaPage() {
                       className={`cursor-pointer transition-colors hover:bg-primary/5 ${isSelected ? 'bg-primary/8' : ''}`}
                       onClick={() => setSelectedSectionId(s.sectionId)}
                     >
-                      <td className="px-3 py-2.5 text-right text-sm tabular-nums text-muted-foreground">{s.sectionNumber}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">{s.sectionNumber}</td>
+                      <td className="px-4 py-3">
                         <span className="font-mono text-sm font-semibold text-primary">{s.courseCode}</span>
                       </td>
-                      <td className="px-3 py-2.5 text-sm font-medium">{s.courseName}</td>
-                      <td className="px-3 py-2.5 text-center text-sm tabular-nums text-muted-foreground">
+                      <td className="px-4 py-3 text-sm font-medium">{s.courseName}</td>
+                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
                         {s.theoryHours}+{s.labHours}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-4 py-3 text-center">
                         <MandatoryBadge isMandatory={s.isMandatory} />
                       </td>
-                      <td className="px-3 py-2.5 text-right text-sm tabular-nums">{s.nationalCredit}</td>
-                      <td className="px-3 py-2.5 text-right text-sm tabular-nums">{s.ects}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3 text-center text-sm tabular-nums">{s.nationalCredit}</td>
+                      <td className="px-4 py-3 text-center text-sm tabular-nums">{s.ects}</td>
+                      <td className="px-4 py-3">
                         <FacultyProgramCell facultyName={s.facultyName} programName={s.programName} />
                       </td>
-                      <td className="px-3 py-2.5 text-center text-sm tabular-nums text-muted-foreground">
+                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
                         {s.enrolledCount}/{s.capacity}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-4 py-3 text-center">
                         <Badge
                           variant="outline"
                           className={s.isFinalized
