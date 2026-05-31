@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Dialog, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ResizableDialogContent from '@/components/ui/resizable-dialog';
 import { Loader2, Lock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -315,28 +315,25 @@ export function SinavEkleDialog({
         minWidth={480}
         className="flex flex-col overflow-hidden p-0"
       >
-        {/* a11y: Radix requires a DialogTitle (görsel başlık banner'da) */}
-        <DialogTitle className="sr-only">Sınav İşlemleri</DialogTitle>
-
-        {/* Renkli başlık banner'ı — sürükleme değil, görsel öğe.
-            Sağda pr-28 ile üst-sağ kapat/tam ekran butonlarına yer bırakır. */}
-        <div className="shrink-0 bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 pr-28 text-white">
-          <span className="flex items-center gap-2 text-sm font-semibold">
+        {/* Sistem standardı başlık — sağ-üstte ResizableDialogContent'in kapat/tam-ekran
+            butonlarına pr-28 ile yer bırakır. */}
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-3 pr-28">
+          <DialogTitle className="flex flex-wrap items-baseline gap-x-2 text-base">
             Sınav İşlemleri
             {cfg && (
-              <span className="truncate font-normal text-indigo-100">
+              <span className="text-sm font-normal text-muted-foreground">
                 — {cfg.courseCode} {cfg.courseName}
               </span>
             )}
-          </span>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         {config.isLoading ? (
-          <div className="flex items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-6 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor…
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 pb-6">
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
               {/* Row 1: Sınav Tipi | Sınav Şablon Adı */}
               <Field label="Sınav Tipi">
