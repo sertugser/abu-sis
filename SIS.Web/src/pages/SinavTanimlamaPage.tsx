@@ -20,20 +20,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  useInstructorSections,
-  useInstructorTerms,
-} from '../hooks/useInstructorSections';
+import { useInstructorSections } from '../hooks/useInstructorSections';
 import {
   useSectionExams,
   useDeleteSectionExam,
   useExamConfig,
 } from '../hooks/useSectionExams';
 import { SinavEkleDialog } from '../components/sinav-tanimlama/SinavEkleDialog';
-import {
-  InstructorCourseFilters,
-  FACULTY_FILTER_ALL,
-} from '../components/instructor/InstructorCourseFilters';
 import type { InstructorSection } from '../api/instructor.api';
 import type { SectionExam } from '../types/sectionExam';
 
@@ -51,10 +44,6 @@ function formatExamDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function includesCi(value: string, query: string): boolean {
-  return value.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 type AnnounceStatus =
@@ -478,95 +467,35 @@ function PaginationBar({
 
 // ── main page ─────────────────────────────────────────────────
 export default function SinavTanimlamaPage() {
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
-  const [facultyFilter, setFacultyFilter] = useState<string>(FACULTY_FILTER_ALL);
-  const [courseCodeFilter, setCourseCodeFilter] = useState('');
-  const [courseNameFilter, setCourseNameFilter] = useState('');
-  const [showKontenjan, setShowKontenjan] = useState(false);
-  const [showUnfinalized, setShowUnfinalized] = useState(false);
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
-  const termsQuery = useInstructorTerms();
-  const { data, isLoading } = useInstructorSections(selectedTermId);
-
+  const { data, isLoading } = useInstructorSections();
   const sections = useMemo(() => data?.sections ?? [], [data]);
-  const terms = termsQuery.data ?? [];
 
-  // Distinct, non-empty faculty names (drives the Fakülte Türü select).
-  const facultyOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(sections.map((s) => s.facultyName).filter((name) => name.length > 0)),
-      ).sort((a, b) => a.localeCompare(b, 'tr')),
-    [sections],
-  );
-
-  const filtered = useMemo(
-    () =>
-      sections.filter((s) => {
-        if (facultyFilter !== FACULTY_FILTER_ALL && s.facultyName !== facultyFilter) {
-          return false;
-        }
-        if (courseCodeFilter.trim() && !includesCi(s.courseCode, courseCodeFilter)) {
-          return false;
-        }
-        if (courseNameFilter.trim() && !includesCi(s.courseName, courseNameFilter)) {
-          return false;
-        }
-        if (showUnfinalized && s.isFinalized) {
-          return false;
-        }
-        return true;
-      }),
-    [sections, facultyFilter, courseCodeFilter, courseNameFilter, showUnfinalized],
-  );
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(sections.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const visibleSections = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const visibleSections = sections.slice(pageStart, pageStart + PAGE_SIZE);
 
   const selectedSection = sections.find((s) => s.sectionId === selectedSectionId) ?? null;
-
-  // Reset to first page whenever the filter result set changes.
   const handlePageChange = (p: number) => setPage(Math.min(Math.max(1, p), pageCount));
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* Section list — Proliz filtre + ders listesi tek kart */}
+      {/* Section list (Proliz görünümü — ders listesi, filtre yok) */}
       <Card className="flex flex-col overflow-hidden">
-        <InstructorCourseFilters
-          terms={terms}
-          selectedTermId={selectedTermId}
-          onTermChange={(id) => { setSelectedTermId(id); setPage(1); }}
-          facultyOptions={facultyOptions}
-          facultyFilter={facultyFilter}
-          onFacultyChange={(v) => { setFacultyFilter(v); setPage(1); }}
-          showKontenjan={showKontenjan}
-          onShowKontenjanChange={setShowKontenjan}
-          courseCode={courseCodeFilter}
-          onCourseCodeChange={(v) => { setCourseCodeFilter(v); setPage(1); }}
-          courseName={courseNameFilter}
-          onCourseNameChange={(v) => { setCourseNameFilter(v); setPage(1); }}
-          showUnfinalized={showUnfinalized}
-          onShowUnfinalizedChange={(v) => { setShowUnfinalized(v); setPage(1); }}
-          onSearch={() => { /* live filter — button is cosmetic (Proliz parity) */ }}
-        />
-
         {/* Horizontally scrollable table */}
         <div className="overflow-x-auto">
           {isLoading ? (
             <div className="space-y-2 p-4">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : sections.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
               <FolderOpen className="mb-3 h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm font-medium text-muted-foreground">
-                {sections.length === 0
-                  ? 'Bu dönem size atanmış ders bulunmamaktadır.'
-                  : 'Filtreye uyan ders bulunamadı.'}
+                Bu dönem size atanmış ders bulunmamaktadır.
               </p>
             </div>
           ) : (
@@ -582,9 +511,7 @@ export default function SinavTanimlamaPage() {
                   <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fakülte</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Program</th>
-                  {showKontenjan && (
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
-                  )}
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Durumu</th>
                 </tr>
               </thead>
@@ -616,11 +543,9 @@ export default function SinavTanimlamaPage() {
                       <td className="px-4 py-3 text-xs leading-tight text-muted-foreground">
                         {s.programName || '—'}
                       </td>
-                      {showKontenjan && (
-                        <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
-                          {s.enrolledCount}/{s.capacity}
-                        </td>
-                      )}
+                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
+                        {s.enrolledCount}/{s.capacity}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <Badge
                           variant="outline"
@@ -641,9 +566,9 @@ export default function SinavTanimlamaPage() {
         </div>
 
         {/* Pagination bar */}
-        {!isLoading && filtered.length > 0 && (
+        {!isLoading && sections.length > 0 && (
           <PaginationBar
-            filteredCount={filtered.length}
+            filteredCount={sections.length}
             totalCount={sections.length}
             page={currentPage}
             pageCount={pageCount}
