@@ -1,16 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  CalendarCheck,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Copy,
   FolderOpen,
   Loader2,
   Pencil,
   Plus,
-  Printer,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,13 +20,14 @@ import {
   useExamConfig,
 } from '../hooks/useSectionExams';
 import { SinavEkleDialog } from '../components/sinav-tanimlama/SinavEkleDialog';
+import { InstructorCourseTable } from '../components/instructor/InstructorCourseTable';
+import { computeAnnounceStatus } from '../components/instructor/examStatusUtils';
+import {
+  AnnounceStatusCell,
+  ExamStatusLegend,
+} from '../components/instructor/examStatus';
 import type { InstructorSection } from '../api/instructor.api';
 import type { SectionExam } from '../types/sectionExam';
-
-// ── constants ─────────────────────────────────────────────────
-const PAGE_SIZE = 10;
-const MS_PER_HOUR = 1000 * 60 * 60;
-const MS_PER_DAY = MS_PER_HOUR * 24;
 
 // ── helpers ───────────────────────────────────────────────────
 function formatExamDate(iso: string): string {
@@ -44,32 +38,6 @@ function formatExamDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-type AnnounceStatus =
-  | { kind: 'announced' }
-  | { kind: 'countdown'; days: number; hours: number }
-  | { kind: 'overdue' };
-
-/**
- * Pure announce-status helper.
- * deadline = examDate − announceDeadlineDays. Compared against `now`.
- */
-function computeAnnounceStatus(
-  examDateIso: string,
-  isAnnounced: boolean,
-  announceDeadlineDays: number,
-  now: number,
-): AnnounceStatus {
-  if (isAnnounced) return { kind: 'announced' };
-
-  const deadline = new Date(examDateIso).getTime() - announceDeadlineDays * MS_PER_DAY;
-  const remaining = deadline - now;
-  if (remaining <= 0) return { kind: 'overdue' };
-
-  const days = Math.floor(remaining / MS_PER_DAY);
-  const hours = Math.floor((remaining % MS_PER_DAY) / MS_PER_HOUR);
-  return { kind: 'countdown', days, hours };
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -83,22 +51,6 @@ const TYPE_BADGE: Record<string, string> = {
   Final: 'bg-violet-50 text-violet-700 border-violet-200',
   Other: 'bg-slate-50 text-slate-600 border-slate-200',
 };
-
-/** Z/S mandatory badge */
-function MandatoryBadge({ isMandatory }: { isMandatory: boolean }) {
-  return (
-    <Badge
-      variant="outline"
-      className={
-        isMandatory
-          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-mono text-[11px] px-1.5 py-0'
-          : 'bg-slate-50 text-slate-500 border-slate-200 font-mono text-[11px] px-1.5 py-0'
-      }
-    >
-      {isMandatory ? 'Z' : 'S'}
-    </Badge>
-  );
-}
 
 // ── delete confirm dialog ─────────────────────────────────────
 function extractDeleteError(err: unknown): string {
@@ -156,49 +108,6 @@ function DeleteConfirmDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── status legend (3-item) ────────────────────────────────────
-function ExamStatusLegend() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/60 px-5 py-2.5 bg-muted/10">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-        <span className="text-xs text-muted-foreground">İlan Edildi</span>
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" />
-        <span className="text-xs text-muted-foreground">Sonuçlandırıldı</span>
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" />
-        <span className="text-xs text-muted-foreground">Sınav İlan Süresi Geçti</span>
-      </span>
-    </div>
-  );
-}
-
-// ── announce-status cell ──────────────────────────────────────
-function AnnounceStatusCell({ status }: { status: AnnounceStatus }) {
-  if (status.kind === 'announced') {
-    return (
-      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-        İlan Edildi
-      </Badge>
-    );
-  }
-  if (status.kind === 'overdue') {
-    return (
-      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-        Sınav İlan Süresi Geçti
-      </Badge>
-    );
-  }
-  return (
-    <span className="text-xs text-amber-700">
-      İlan için son {status.days}g {status.hours}s
-    </span>
   );
 }
 
@@ -355,228 +264,26 @@ function ExamTable({
   );
 }
 
-// ── pagination bar ────────────────────────────────────────────
-function buildClipboardText(sections: InstructorSection[]): string {
-  const header = ['Şb.', 'Ders Kodu', 'Ders Adı', 'Fakülte', 'Program', 'Durum'].join('\t');
-  const rows = sections.map((s) =>
-    [
-      s.sectionNumber,
-      s.courseCode,
-      s.courseName,
-      s.facultyName,
-      s.programName,
-      s.isFinalized ? 'Kesinleşti' : 'Aktif',
-    ].join('\t'),
-  );
-  return [header, ...rows].join('\n');
-}
-
-function PaginationBar({
-  filteredCount,
-  totalCount,
-  page,
-  pageCount,
-  onPageChange,
-  visibleSections,
-}: {
-  filteredCount: number;
-  totalCount: number;
-  page: number;
-  pageCount: number;
-  onPageChange: (p: number) => void;
-  visibleSections: InstructorSection[];
-}) {
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(buildClipboardText(visibleSections));
-  };
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/80 bg-muted/20 px-4 py-2.5">
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          title="Yazdır"
-          onClick={() => window.print()}
-        >
-          <Printer className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          title="Listeyi kopyala"
-          onClick={handleCopy}
-        >
-          <Copy className="h-4 w-4" />
-        </Button>
-        <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-          {filteredCount} / {totalCount} ders
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          title="İlk sayfa"
-          disabled={page <= 1}
-          onClick={() => onPageChange(1)}
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          title="Önceki sayfa"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="px-2 text-xs text-muted-foreground tabular-nums">
-          Sayfa {page} / {pageCount}
-        </span>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          title="Sonraki sayfa"
-          disabled={page >= pageCount}
-          onClick={() => onPageChange(page + 1)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          title="Son sayfa"
-          disabled={page >= pageCount}
-          onClick={() => onPageChange(pageCount)}
-        >
-          <ChevronsRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── main page ─────────────────────────────────────────────────
 export default function SinavTanimlamaPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useInstructorSections();
   const sections = useMemo(() => data?.sections ?? [], [data]);
 
-  const pageCount = Math.max(1, Math.ceil(sections.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const visibleSections = sections.slice(pageStart, pageStart + PAGE_SIZE);
-
   const selectedSection = sections.find((s) => s.sectionId === selectedSectionId) ?? null;
-  const handlePageChange = (p: number) => setPage(Math.min(Math.max(1, p), pageCount));
 
   return (
     <div className="flex flex-1 flex-col gap-4">
       {/* Section list (Proliz görünümü — ders listesi, filtre yok) */}
-      <Card className="flex flex-col overflow-hidden">
-        {/* Horizontally scrollable table */}
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="space-y-2 p-4">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
-          ) : sections.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-              <FolderOpen className="mb-3 h-10 w-10 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">
-                Bu dönem size atanmış ders bulunmamaktadır.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full min-w-[960px]">
-              <thead className="sticky top-0 z-10 border-b border-border/80 bg-muted/40">
-                <tr>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Şb.</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Kodu</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Adı</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">T+U</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Z</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Krd</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">AKTS</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fakülte</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Program</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kon</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ders Durumu</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/80">
-                {visibleSections.map((s: InstructorSection) => {
-                  const isSelected = s.sectionId === selectedSectionId;
-                  return (
-                    <tr
-                      key={s.sectionId}
-                      className={`cursor-pointer transition-colors hover:bg-primary/5 ${isSelected ? 'bg-primary/8' : ''}`}
-                      onClick={() => setSelectedSectionId(s.sectionId)}
-                    >
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">{s.sectionNumber}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-sm font-semibold text-primary">{s.courseCode}</span>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium">{s.courseName}</td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
-                        {s.theoryHours}+{s.labHours}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <MandatoryBadge isMandatory={s.isMandatory} />
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums">{s.nationalCredit}</td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums">{s.ects}</td>
-                      <td className="px-4 py-3 text-xs leading-tight">
-                        {s.facultyName || <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs leading-tight text-muted-foreground">
-                        {s.programName || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
-                        {s.enrolledCount}/{s.capacity}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge
-                          variant="outline"
-                          className={s.isFinalized
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 inline-flex items-center gap-1'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 inline-flex items-center gap-1'}
-                        >
-                          <CalendarCheck className="h-3 w-3" />
-                          {s.isFinalized ? 'Kesinleşti' : 'Aktif'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination bar */}
-        {!isLoading && sections.length > 0 && (
-          <PaginationBar
-            filteredCount={sections.length}
-            totalCount={sections.length}
-            page={currentPage}
-            pageCount={pageCount}
-            onPageChange={handlePageChange}
-            visibleSections={visibleSections}
-          />
-        )}
-      </Card>
+      <InstructorCourseTable
+        sections={sections}
+        totalCount={sections.length}
+        isLoading={isLoading}
+        showKontenjan={true}
+        selectedSectionId={selectedSectionId}
+        onSelect={setSelectedSectionId}
+      />
 
       {/* Exam table — shown only when a section is selected */}
       {selectedSectionId != null && selectedSection != null ? (
