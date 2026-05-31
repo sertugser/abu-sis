@@ -1278,14 +1278,14 @@
 
 ## Öğrenci İşlemleri
 
-### Ders Kayıt Düzenleme
+### Ders Kayıt Onay
 
 | | |
 |---|---|
-| **Route** | `/ders-kayit-duzenleme` |
-| **Dosya** | `SIS.Web/src/pages/CourseRegistrationEditPage.tsx` |
+| **Route** | `/ders-kayit-onay` (eski `/ders-kayit-duzenleme` → redirect) |
+| **Dosya** | `SIS.Web/src/pages/CourseRegistrationApprovalPage.tsx` |
 | **Roller** | advisor, systemAdmin |
-| **Modal sayısı** | 0 (Dialog: 0, Sheet: 0, AlertDialog: 0) |
+| **Modal sayısı** | 1 (AdvisorStudentDetailModal — satır ikonundan açılan onay modalı) |
 
 ---
 

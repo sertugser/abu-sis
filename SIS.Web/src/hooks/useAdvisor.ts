@@ -12,6 +12,10 @@ import {
   getAdvisorStudentCurriculumStatus,
   getAdvisorStudentTranscript,
   getAdvisorStudentTermGpa,
+  getAdvisorStudentTimetableTerms,
+  getAdvisorStudentTimetable,
+  getAdvisorStudentDeptScheduleContext,
+  getAdvisorStudentDeptSchedule,
 } from '../api/advisor.api';
 
 export function usePendingApprovals() {
@@ -75,6 +79,40 @@ export function useAdvisorStudentTermGpa(studentId: number | null, enabled: bool
     queryKey: ['advisor', 'student-term-gpa', studentId],
     queryFn: () => getAdvisorStudentTermGpa(studentId!),
     enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentTimetableTerms(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'timetable-terms', studentId],
+    queryFn: () => getAdvisorStudentTimetableTerms(studentId!),
+    enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentTimetable(studentId: number | null, termId: number | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'timetable', studentId, termId],
+    queryFn: () => getAdvisorStudentTimetable(studentId!, termId),
+    enabled: studentId != null && enabled && termId !== undefined,
+  });
+}
+
+export function useAdvisorStudentDeptScheduleContext(studentId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['advisor', 'dept-schedule-context', studentId],
+    queryFn: () => getAdvisorStudentDeptScheduleContext(studentId!),
+    enabled: studentId != null && enabled,
+  });
+}
+
+export function useAdvisorStudentDeptSchedule(
+  studentId: number | null, termId: number | undefined, programId: number | undefined, classYear: number | undefined, enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['advisor', 'dept-schedule', studentId, termId, programId, classYear],
+    queryFn: () => getAdvisorStudentDeptSchedule(studentId!, termId!, programId!, classYear!),
+    enabled: studentId != null && enabled && termId !== undefined && programId !== undefined && classYear !== undefined,
   });
 }
 

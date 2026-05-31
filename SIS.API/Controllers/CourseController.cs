@@ -183,7 +183,7 @@ public class CourseController : ControllerBase
 
     /// <summary>GET api/course/registration-catalog/{studentId} — danışman öğrenci-adına.</summary>
     [HttpGet("registration-catalog/{studentId:int}")]
-    [RequirePermission("menu.ders-kayit-duzenleme.view")]
+    [RequirePermission("menu.ders-kayit-onay.view")]
     public async Task<IActionResult> GetRegistrationCatalogForAdvisor(int studentId, CancellationToken ct)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

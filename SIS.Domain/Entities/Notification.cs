@@ -20,7 +20,7 @@ public class Notification
     public string Title { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
 
-    /// <summary>Tıklanınca gidilecek frontend route'u (ör. "/ders-kayit-duzenleme?studentId=42"). Opsiyonel.</summary>
+    /// <summary>Tıklanınca gidilecek frontend route'u (ör. "/ders-kayit-onay?studentId=42"). Opsiyonel.</summary>
     public string? Link { get; set; }
 
     /// <summary>İlgili kaydın referansı (ör. "registration:42"). Gruplama/dedup için opsiyonel.</summary>

@@ -308,9 +308,9 @@ public static class PermissionSeed
         ("menu.toplu-danisman-atama.assign",             PermissionCategory.Menu, "Tek/toplu danışman ataması"),
         ("menu.toplu-mufredat-atama.view",               PermissionCategory.Menu, "Toplu müfredat atama sayfası"),
         ("menu.toplu-mufredat-atama.assign",             PermissionCategory.Menu, "Toplu müfredat ataması"),
-        ("menu.ders-kayit-duzenleme.view",               PermissionCategory.Menu, "Advisor pending-approvals + öğrenciler"),
-        ("menu.ders-kayit-duzenleme.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
-        ("menu.ders-kayit-duzenleme.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
+        ("menu.ders-kayit-onay.view",               PermissionCategory.Menu, "Danışman ders kayıt onay listesi + öğrenciler"),
+        ("menu.ders-kayit-onay.approve",            PermissionCategory.Menu, "Ders kayıt onaylama"),
+        ("menu.ders-kayit-onay.reject",             PermissionCategory.Menu, "Ders kayıt reddetme"),
         ("menu.harf-notu-duzenleme.view",                PermissionCategory.Menu, "Harf notu düzenleme sayfası"),
 
         // ═══════════════════════════════════════════════════════════════════════════
