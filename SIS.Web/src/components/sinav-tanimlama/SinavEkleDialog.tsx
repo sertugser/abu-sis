@@ -248,10 +248,9 @@ export function SinavEkleDialog({
   // disabled (Proliz: the same template should not define a second exam).
   // Exclude the component being edited so its own template stays selectable.
   const usedTemplateNames = useMemo(() => {
-    const editingName = allComponents.find((c) => c.id === editingComponentId)?.name;
     return new Set(
       allComponents
-        .filter((c) => c.id !== editingComponentId && c.name !== editingName)
+        .filter((c) => c.id !== editingComponentId)
         .map((c) => c.name),
     );
   }, [allComponents, editingComponentId]);
@@ -344,7 +343,9 @@ export function SinavEkleDialog({
                 ) : (
                   <Select
                     value={form.componentType as ExamType}
-                    onValueChange={(v) => set('componentType', v as ExamType)}
+                    onValueChange={(v) => {
+                      if (v === 'Midterm' || v === 'Final') set('componentType', v);
+                    }}
                   >
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue />

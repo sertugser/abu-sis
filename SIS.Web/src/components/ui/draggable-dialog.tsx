@@ -79,10 +79,12 @@ const DraggableDialogContent = React.forwardRef<
         dragOrigin.current = null;
         window.removeEventListener('pointermove', handleMove);
         window.removeEventListener('pointerup', handleUp);
+        window.removeEventListener('pointercancel', handleUp);
       };
 
       window.addEventListener('pointermove', handleMove);
       window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleUp);
     },
     [offset.x, offset.y, clamp],
   );
@@ -102,6 +104,10 @@ const DraggableDialogContent = React.forwardRef<
         style={{
           transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`,
         }}
+        // Suppress the Radix a11y warning about a missing DialogDescription.
+        // Draggable dialogs embed their own title-bar description; callers that
+        // want a description can override this via props spread below.
+        aria-describedby={undefined}
         className={cn(
           'fixed left-[50%] top-[50%] z-50 w-full max-w-lg gap-0 overflow-hidden border bg-card shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 rounded-xl',
           className,
