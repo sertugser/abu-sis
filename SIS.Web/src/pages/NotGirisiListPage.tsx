@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen, Search } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,13 +8,26 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { useInstructorSections } from '../hooks/useInstructorSections';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  useInstructorSections,
+  useInstructorTerms,
+} from '../hooks/useInstructorSections';
 import { useExamsOverview } from '../hooks/useGradeData';
 import type { InstructorSection } from '../api/instructor.api';
 import type { ExamOverviewRow, ExamOverviewComponent } from '../types/grade';
 import { ROUTES } from '../lib/constants';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
+
+const TERM_FILTER_ACTIVE = 'active';
+const FACULTY_FILTER_ALL = 'all';
 
 function formatExamDate(iso: string | null): string {
   if (!iso) return '—';
@@ -27,9 +40,8 @@ function formatExamDate(iso: string | null): string {
   });
 }
 
-function matchesSearch(code: string, name: string, q: string): boolean {
-  const lower = q.toLowerCase();
-  return `${code} ${name}`.toLowerCase().includes(lower);
+function includesCi(value: string, query: string): boolean {
+  return value.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 // ── section list view (default) ────────────────────────────────────────────────
@@ -39,10 +51,18 @@ interface SectionListProps {
   totalCount: number;
   isLoading: boolean;
   isError: boolean;
+  showKontenjan: boolean;
   onRowClick: (sectionId: number) => void;
 }
 
-function SectionList({ sections, totalCount, isLoading, isError, onRowClick }: SectionListProps) {
+function SectionList({
+  sections,
+  totalCount,
+  isLoading,
+  isError,
+  showKontenjan,
+  onRowClick,
+}: SectionListProps) {
   if (isLoading) {
     return (
       <div className="space-y-2 p-4">
@@ -93,6 +113,11 @@ function SectionList({ sections, totalCount, isLoading, isError, onRowClick }: S
           <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Öğrenci
           </th>
+          {showKontenjan && (
+            <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Kon
+            </th>
+          )}
           <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Durum
           </th>
@@ -112,6 +137,11 @@ function SectionList({ sections, totalCount, isLoading, isError, onRowClick }: S
             <td className="px-4 py-3 text-sm font-medium">{s.courseName}</td>
             <td className="px-4 py-3 text-center text-sm">{s.ects}</td>
             <td className="px-4 py-3 text-center text-sm">{s.enrolledCount}</td>
+            {showKontenjan && (
+              <td className="px-4 py-3 text-center text-sm text-muted-foreground">
+                {s.enrolledCount}/{s.capacity}
+              </td>
+            )}
             <td className="px-4 py-3 text-center">
               <Badge
                 variant="outline"
@@ -319,12 +349,17 @@ function ExamOverviewList({ rows, isLoading, isError, onRowClick }: ExamOverview
 export default function NotGirisiListPage() {
   const navigate = useNavigate();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
+  const [facultyFilter, setFacultyFilter] = useState<string>(FACULTY_FILTER_ALL);
+  const [courseCodeFilter, setCourseCodeFilter] = useState('');
+  const [courseNameFilter, setCourseNameFilter] = useState('');
+  const [showKontenjan, setShowKontenjan] = useState(false);
   const [showUnfinalized, setShowUnfinalized] = useState(false);
   const [showAllExams, setShowAllExams] = useState(false);
 
-  const sectionsQuery = useInstructorSections();
-  const overviewQuery = useExamsOverview();
+  const termsQuery = useInstructorTerms();
+  const sectionsQuery = useInstructorSections(selectedTermId);
+  const overviewQuery = useExamsOverview(selectedTermId ?? undefined);
 
   const handleRowClick = (sectionId: number) => {
     navigate(`${ROUTES.GRADE_ENTRY}/${sectionId}`);
@@ -334,8 +369,19 @@ export default function NotGirisiListPage() {
 
   const allSections = sectionsQuery.data?.sections ?? [];
 
+  // Distinct faculty names from loaded sections (drives the Fakülte Türü select).
+  const facultyOptions = Array.from(
+    new Set(allSections.map((s) => s.facultyName).filter((name) => name.length > 0)),
+  ).sort((a, b) => a.localeCompare(b, 'tr'));
+
   const filteredSections = allSections.filter((s) => {
-    if (searchTerm.trim() && !matchesSearch(s.courseCode, s.courseName, searchTerm)) {
+    if (facultyFilter !== FACULTY_FILTER_ALL && s.facultyName !== facultyFilter) {
+      return false;
+    }
+    if (courseCodeFilter.trim() && !includesCi(s.courseCode, courseCodeFilter)) {
+      return false;
+    }
+    if (courseNameFilter.trim() && !includesCi(s.courseName, courseNameFilter)) {
       return false;
     }
     if (showUnfinalized && s.isFinalized) {
@@ -345,11 +391,16 @@ export default function NotGirisiListPage() {
   });
 
   // ── exam overview mode ─────────────────────────────────
+  // Not: ExamOverviewRow'da facultyName yok — fakülte filtresi yalnız varsayılan
+  // section listesine uygulanır, "Tüm Sınavları Göster" görünümünde atlanır.
 
   const allOverviewRows = overviewQuery.data ?? [];
 
   const filteredOverviewRows = allOverviewRows.filter((r) => {
-    if (searchTerm.trim() && !matchesSearch(r.courseCode, r.courseName, searchTerm)) {
+    if (courseCodeFilter.trim() && !includesCi(r.courseCode, courseCodeFilter)) {
+      return false;
+    }
+    if (courseNameFilter.trim() && !includesCi(r.courseName, courseNameFilter)) {
       return false;
     }
     if (showUnfinalized && r.isFinalized) {
@@ -358,41 +409,120 @@ export default function NotGirisiListPage() {
     return true;
   });
 
+  const terms = termsQuery.data ?? [];
+  const termSelectValue = selectedTermId === null ? TERM_FILTER_ACTIVE : String(selectedTermId);
+
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* ── Content card (arama + filtreler + liste tek kart) ── */}
+      {/* ── Content card (filtreler + liste tek kart) ── */}
       <Card className="flex flex-col overflow-hidden">
-        <div className="flex flex-wrap items-center gap-3 border-b border-border/80 bg-muted/20 p-3">
-          <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Ders kodu veya ders adı ile ara…"
-              className="pl-9 text-[15px]"
-            />
+        <div className="flex flex-col gap-3 border-b border-border/80 bg-muted/20 p-3">
+          {/* Üst satır — alanlar */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-term" className="text-xs text-muted-foreground">
+                Dönem
+              </Label>
+              <Select
+                value={termSelectValue}
+                onValueChange={(value) =>
+                  setSelectedTermId(value === TERM_FILTER_ACTIVE ? null : Number(value))
+                }
+              >
+                <SelectTrigger id="filter-term" className="h-9 w-[200px]">
+                  <SelectValue placeholder="Aktif Dönem" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TERM_FILTER_ACTIVE}>Aktif Dönem</SelectItem>
+                  {terms.map((term) => (
+                    <SelectItem key={term.id} value={String(term.id)}>
+                      {term.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-faculty" className="text-xs text-muted-foreground">
+                Fakülte Türü
+              </Label>
+              <Select value={facultyFilter} onValueChange={setFacultyFilter}>
+                <SelectTrigger id="filter-faculty" className="h-9 w-[200px]">
+                  <SelectValue placeholder="Tümü" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FACULTY_FILTER_ALL}>Tümü</SelectItem>
+                  {facultyOptions.map((faculty) => (
+                    <SelectItem key={faculty} value={faculty}>
+                      {faculty}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-course-code" className="text-xs text-muted-foreground">
+                Ders Kodu
+              </Label>
+              <Input
+                id="filter-course-code"
+                value={courseCodeFilter}
+                onChange={(e) => setCourseCodeFilter(e.target.value)}
+                placeholder="Ders kodu"
+                className="h-9 w-[180px]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-course-name" className="text-xs text-muted-foreground">
+                Ders Adı
+              </Label>
+              <Input
+                id="filter-course-name"
+                value={courseNameFilter}
+                onChange={(e) => setCourseNameFilter(e.target.value)}
+                placeholder="Ders adı"
+                className="h-9 w-[180px]"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Switch
-              id="show-unfinalized"
-              checked={showUnfinalized}
-              onCheckedChange={setShowUnfinalized}
-            />
-            <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
-              Sonuçlanmayan Dersleri Göster
-            </Label>
-          </div>
+          {/* Alt satır — anahtarlar */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-kontenjan"
+                checked={showKontenjan}
+                onCheckedChange={setShowKontenjan}
+              />
+              <Label htmlFor="show-kontenjan" className="cursor-pointer text-sm">
+                Kontenjan Göster
+              </Label>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Switch
-              id="show-all-exams"
-              checked={showAllExams}
-              onCheckedChange={setShowAllExams}
-            />
-            <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
-              Tüm Sınavları Göster
-            </Label>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-unfinalized"
+                checked={showUnfinalized}
+                onCheckedChange={setShowUnfinalized}
+              />
+              <Label htmlFor="show-unfinalized" className="cursor-pointer text-sm">
+                Sonuçlanmayan Dersleri Göster
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-all-exams"
+                checked={showAllExams}
+                onCheckedChange={setShowAllExams}
+              />
+              <Label htmlFor="show-all-exams" className="cursor-pointer text-sm">
+                Tüm Sınavları Göster
+              </Label>
+            </div>
           </div>
         </div>
 
@@ -410,6 +540,7 @@ export default function NotGirisiListPage() {
               totalCount={allSections.length}
               isLoading={sectionsQuery.isLoading}
               isError={sectionsQuery.isError}
+              showKontenjan={showKontenjan}
               onRowClick={handleRowClick}
             />
           )}
