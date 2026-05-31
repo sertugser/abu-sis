@@ -450,7 +450,10 @@ export function SinavEkleDialog({
                     </span>
                   )}
                   <span className="ml-auto text-xs text-muted-foreground">
-                    En fazla %{maxBound ?? '—'} · Kullanılan %{usedOfType} · Kalan %{Math.max(0, remainingWeight)}
+                    {cfg?.hasRegulation && maxBound != null
+                      ? `Yönerge (admin): en fazla %${maxBound}`
+                      : 'Yönerge sınırı tanımlı değil'}
+                    {' · '}Kullanılan %{usedOfType} · Kalan %{Math.max(0, remainingWeight)}
                   </span>
                 </div>
                 {weightOutOfBounds && (
