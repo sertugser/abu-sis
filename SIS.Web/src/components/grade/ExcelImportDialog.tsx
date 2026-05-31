@@ -16,20 +16,13 @@ import { Badge } from '@/components/ui/badge';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/global-toast';
 import { usePreviewImport, useApplyImport } from '../../hooks/useGradeData';
+import { getErrorMessage } from '../../lib/apiError';
 import type { ImportPreviewResponse } from '../../types/grade';
 
 interface ExcelImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sectionId: number;
-}
-
-function getErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
-    if (data?.error) return data.error;
-  }
-  return fallback;
 }
 
 export function ExcelImportDialog({ open, onOpenChange, sectionId }: ExcelImportDialogProps) {

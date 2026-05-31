@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { ClipboardPaste, Eye, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/global-toast';
 import { usePastePreview, usePasteApply } from '../../hooks/useGradeData';
+import { getErrorMessage } from '../../lib/apiError';
 import type { ImportPreviewResponse } from '../../types/grade';
 
 interface ScorePasteDialogProps {
@@ -25,14 +26,6 @@ interface ScorePasteDialogProps {
   onOpenChange: (open: boolean) => void;
   sectionId: number;
   componentId: number;
-}
-
-function getErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
-    if (data?.error) return data.error;
-  }
-  return fallback;
 }
 
 export function ScorePasteDialog({ open, onOpenChange, sectionId, componentId }: ScorePasteDialogProps) {

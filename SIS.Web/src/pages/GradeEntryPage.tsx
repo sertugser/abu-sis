@@ -2,7 +2,7 @@
 // Proliz tarzı not giriş ekranı. Sınav tanımı SALT-OKUNUR (tanım Sınav Tanımlama'da).
 // Tüm mevcut hook'lar reuse edilir; yeni: Toplu Not Aktar (paste), toplu katılım, ön izleme.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +47,7 @@ import { ExcelImportDialog } from '../components/grade/ExcelImportDialog';
 import { GradingCriteriaDialog } from '../components/grade/GradingCriteriaDialog';
 import { FinalizeDialog } from '../components/grade/FinalizeDialog';
 import { BulkAttendanceMenu, type BulkAttendanceItem } from '../components/grade/BulkAttendanceMenu';
+import { getErrorMessage } from '../lib/apiError';
 import { COMPONENT_TYPE_LABELS, COMPONENT_TYPE_BADGE_CLASS, resolveGrade } from '../components/grade/gradeDisplay';
 import type {
   ExamAttendance,
@@ -57,14 +58,6 @@ import type {
 const DEFAULT_CRITERIA: GradingCriteria = {
   aaMin: 91, baMin: 81, bbMin: 71, cbMin: 61, ccMin: 55, dcMin: 50, ddMin: 45,
 };
-
-function getErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
-    if (data?.error) return data.error;
-  }
-  return fallback;
-}
 
 export default function GradeEntryPage() {
   const { sectionId } = useParams<{ sectionId: string }>();
@@ -100,6 +93,9 @@ export default function GradeEntryPage() {
   const [showPasteDialog, setShowPasteDialog] = useState(false);
   const [showPreviousGrade, setShowPreviousGrade] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // Tracks whether we have already auto-enabled showPreviousGrade for a finalized section,
+  // so a deliberate user toggle-off is not immediately overridden on re-render.
+  const autoEnabledPreviousGradeRef = useRef(false);
 
   const isFinalized = gradesData?.isFinalized ?? false;
   const currentCriteria = criteria ?? DEFAULT_CRITERIA;
@@ -125,6 +121,15 @@ export default function GradeEntryPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetched veriden form state'i başlatma; bilinçli senkron
     setScores(next);
   }, [gradesData, activeComponentId]);
+
+  // Auto-enable the letter-grade column the first time we learn the section is finalized.
+  // Guarded by a ref so a subsequent user toggle-off is not overridden on re-render.
+  useEffect(() => {
+    if (gradesData?.isFinalized && !autoEnabledPreviousGradeRef.current) {
+      autoEnabledPreviousGradeRef.current = true;
+      setShowPreviousGrade(true);
+    }
+  }, [gradesData?.isFinalized]);
 
   if (gradesLoading) {
     return (
