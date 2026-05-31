@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react';
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import {
+  DraggableDialog,
+  DraggableDialogContent,
+  DraggableDialogTitleBar,
+} from '@/components/ui/draggable-dialog';
+import { Loader2, Lock, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { SectionExam } from '../../types/sectionExam';
 import type { GradeComponentType } from '../../types/grade';
 import { useExamConfig, useSaveSectionExam, useUpsertComponent } from '../../hooks/useSectionExams';
@@ -85,6 +89,43 @@ function extractErrorMessage(err: unknown): string {
   return 'Kaydedilemedi.';
 }
 
+// ── Exam-name templates derived from admin counts (no new entity) ────
+interface ExamTemplate {
+  name: string;
+  shortName: string;
+}
+
+const GENERIC_TEMPLATES: ExamTemplate[] = [
+  { name: '1. Ara Sınav', shortName: 'V1' },
+  { name: '2. Ara Sınav', shortName: 'V2' },
+  { name: 'Yarıyıl Sonu Sınavı', shortName: 'F' },
+];
+
+function buildTemplates(
+  examType: ExamType,
+  hasRegulation: boolean,
+  midtermCount: number,
+  finalCount: number,
+): ExamTemplate[] {
+  if (!hasRegulation || (midtermCount === 0 && finalCount === 0)) {
+    return GENERIC_TEMPLATES;
+  }
+  if (examType === 'Midterm') {
+    return Array.from({ length: midtermCount }, (_, i) => ({
+      name: `${i + 1}. Ara Sınav`,
+      shortName: `V${i + 1}`,
+    }));
+  }
+  // Final
+  if (finalCount > 1) {
+    return Array.from({ length: finalCount }, (_, i) => ({
+      name: `${i + 1}. Yarıyıl Sonu Sınavı`,
+      shortName: `F${i + 1}`,
+    }));
+  }
+  return [{ name: 'Yarıyıl Sonu Sınavı', shortName: 'F' }];
+}
+
 export function SinavEkleDialog({
   open, onOpenChange, sectionId, editTarget,
 }: SinavEkleDialogProps) {
@@ -94,12 +135,15 @@ export function SinavEkleDialog({
 
   const [form, setForm] = useState<FormState>(emptyForm());
   const [prevKey, setPrevKey] = useState<string | null>(null);
+  // Whether the edit target's shortName has been seeded from config yet. Reset
+  // with the dialog key so a re-open re-seeds; flipped to true once config
+  // resolves (config may be cached → seeds in the same pass, or arrive later).
+  const [shortNameSeeded, setShortNameSeeded] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // prev-key reset pattern (same as ExamRegulationFormDialog).
-  // Fix 1: when config is already cached, seed shortName immediately so no
-  // separate effect is needed. When config has not yet loaded, shortName starts
-  // empty and the effect below fills it once the query resolves.
+  // prev-key reset pattern (same as ExamRegulationFormDialog). Seeds the form
+  // from the edit target (or empties it) whenever the dialog opens for a new
+  // target. shortName is seeded from config if it is already cached.
   const key = `${open}-${editTarget?.id ?? 'new'}`;
   if (open && key !== prevKey) {
     setPrevKey(key);
@@ -107,6 +151,7 @@ export function SinavEkleDialog({
     if (editTarget) {
       const cachedShortName =
         config.data?.components.find((c) => c.id === editTarget.gradeComponentId)?.shortName ?? '';
+      setShortNameSeeded(config.data != null);
       setForm({
         componentType: editTarget.componentType,
         name: editTarget.componentName,
@@ -119,28 +164,28 @@ export function SinavEkleDialog({
         isAnnouncedToStudents: editTarget.isAnnouncedToStudents,
       });
     } else {
+      setShortNameSeeded(true);
       setForm(emptyForm());
     }
   }
 
-  // Fix 1 (late-load path): when config finishes loading after the dialog opened,
-  // fill shortName if it is still empty (user has not typed yet).
-  useEffect(() => {
-    if (!editTarget || !config.data) return;
+  // Late-load path: config resolved after the dialog opened for an edit target.
+  // Seed shortName if the user has not typed one yet. Render-phase (no effect)
+  // to avoid a cascading setState-in-effect render.
+  if (open && editTarget && config.data && !shortNameSeeded) {
     const matched = config.data.components.find((c) => c.id === editTarget.gradeComponentId);
-    if (!matched) return;
-    setForm((f) => ({
-      ...f,
-      shortName: f.shortName === '' ? matched.shortName : f.shortName,
-    }));
-  }, [editTarget, config.data]);
+    setShortNameSeeded(true);
+    if (matched) {
+      setForm((f) => (f.shortName === '' ? { ...f, shortName: matched.shortName } : f));
+    }
+  }
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   // ── Derived limits from config ─────────────────────────────
   const cfg = config.data;
-  const allComponents = cfg?.components ?? [];
+  const allComponents = useMemo(() => cfg?.components ?? [], [cfg]);
   // For count/weight limits, map componentType to the Midterm|Final axis.
   const examTypeForLimits = componentTypeToExamType(form.componentType);
   const existingOfType = allComponents.filter((c) => c.type === form.componentType);
@@ -159,9 +204,20 @@ export function SinavEkleDialog({
   const minBound = examTypeForLimits === 'Midterm' ? (cfg?.minMidtermWeight ?? null) : (cfg?.minFinalWeight ?? null);
   const maxBound = examTypeForLimits === 'Midterm' ? (cfg?.maxMidtermWeight ?? null) : (cfg?.maxFinalWeight ?? null);
 
-  const weightNum = Number(form.weight);
+  // ── Kilitli (admin-pinned weight) ────────────────────────────
+  // When the regulation pins min == max for this type the weight cannot be
+  // chosen — it is read-only and forced to that value.
+  const isWeightLocked =
+    !!cfg?.hasRegulation && minBound != null && maxBound != null && minBound === maxBound;
+
+  // Effective weight string: when locked it is forced to the pinned bound,
+  // otherwise it is whatever the user typed. Derived (no effect) so there is no
+  // cascading render.
+  const weightValue = isWeightLocked && minBound != null ? String(minBound) : form.weight;
+
+  const weightNum = Number(weightValue);
   const weightValid = !isNaN(weightNum) && weightNum > 0 && weightNum <= 100;
-  const weightOutOfBounds = cfg?.hasRegulation && weightValid && (
+  const weightOutOfBounds = cfg?.hasRegulation && !isWeightLocked && weightValid && (
     (minBound != null && weightNum < minBound) ||
     (maxBound != null && weightNum > maxBound)
   );
@@ -173,6 +229,38 @@ export function SinavEkleDialog({
     if (maxBound != null) return `Bu değer yönerge üst sınırını (%${maxBound}) aşıyor.`;
     return '';
   }
+
+  // Full hint: En fazla / Kullanılan / Kalan (Proliz parity).
+  const usedOfType = otherOfType.reduce((sum, c) => sum + c.weight, 0);
+
+  // ── Sınav Şablon Adı (derive from admin counts) ──────────────
+  const templates = useMemo(
+    () => buildTemplates(
+      examTypeForLimits,
+      !!cfg?.hasRegulation,
+      cfg?.midtermCount ?? 0,
+      cfg?.finalCount ?? 0,
+    ),
+    [examTypeForLimits, cfg?.hasRegulation, cfg?.midtermCount, cfg?.finalCount],
+  );
+
+  // Templates already consumed by another component of the matching name are
+  // disabled (Proliz: the same template should not define a second exam).
+  // Exclude the component being edited so its own template stays selectable.
+  const usedTemplateNames = useMemo(() => {
+    const editingName = allComponents.find((c) => c.id === editingComponentId)?.name;
+    return new Set(
+      allComponents
+        .filter((c) => c.id !== editingComponentId && c.name !== editingName)
+        .map((c) => c.name),
+    );
+  }, [allComponents, editingComponentId]);
+
+  const applyTemplate = (templateName: string) => {
+    const t = templates.find((tpl) => tpl.name === templateName);
+    if (!t) return;
+    setForm((f) => ({ ...f, name: t.name, shortName: t.shortName }));
+  };
 
   const canSubmit =
     form.name.trim() !== '' &&
@@ -222,203 +310,262 @@ export function SinavEkleDialog({
 
   const isPending = upsertComponentMut.isPending || saveSectionExamMut.isPending;
 
+  const selectedClassrooms = (cfg?.classrooms ?? []).filter((c) => form.classroomIds.includes(c.id));
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{editTarget ? 'Sınav Düzenle' : 'Sınav Ekle'}</DialogTitle>
-          {cfg && (
-            <p className="text-xs text-muted-foreground">
-              {cfg.courseCode} — {cfg.courseName}
-            </p>
-          )}
-        </DialogHeader>
+    <DraggableDialog open={open} onOpenChange={onOpenChange}>
+      <DraggableDialogContent className="max-w-2xl">
+        {/* Colored, draggable title bar */}
+        <DraggableDialogTitleBar className="bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-white">
+          <span className="flex items-center gap-2">
+            Sınav İşlemleri
+            {cfg && (
+              <span className="truncate font-normal text-indigo-100">
+                — {cfg.courseCode} {cfg.courseName}
+              </span>
+            )}
+          </span>
+        </DraggableDialogTitleBar>
 
         {config.isLoading ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor…
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Sınav Tipi */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Sınav Tipi</Label>
-              {/* Fix 2: In edit mode the type is fixed after creation — disable the select.
-                  In create mode only Midterm/Final are offered. */}
-              {editTarget ? (
-                <div className="flex h-9 items-center rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground">
-                  {form.componentType === 'Midterm' ? 'Ara Sınav'
-                    : form.componentType === 'Final' ? 'Yarıyıl Sonu'
-                    : 'Diğer'}
-                  <span className="ml-1.5 text-xs">(değiştirilemez)</span>
-                </div>
-              ) : (
-                <Select
-                  value={form.componentType as ExamType}
-                  onValueChange={(v) => set('componentType', v as ExamType)}
-                >
+          <div className="max-h-[75vh] overflow-y-auto px-4 py-3">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              {/* Row 1: Sınav Tipi | Sınav Şablon Adı */}
+              <Field label="Sınav Tipi">
+                {editTarget ? (
+                  <div className="flex h-9 items-center gap-1.5 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                    <TypeBadge type={form.componentType} />
+                    <span className="text-xs text-muted-foreground">(değiştirilemez)</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={form.componentType as ExamType}
+                    onValueChange={(v) => set('componentType', v as ExamType)}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Midterm">
+                        Ara Sınav
+                        {cfg?.hasRegulation && cfg.midtermCount > 0 && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">(maks. {cfg.midtermCount})</span>
+                        )}
+                      </SelectItem>
+                      <SelectItem value="Final">
+                        Yarıyıl Sonu
+                        {cfg?.hasRegulation && cfg.finalCount > 0 && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">(maks. {cfg.finalCount})</span>
+                        )}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </Field>
+
+              <Field label="Sınav Şablon Adı" hint={editTarget ? 'opsiyonel' : undefined}>
+                <Select value="" onValueChange={applyTemplate}>
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue />
+                    <SelectValue placeholder="Şablondan seç…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Midterm">
-                      Ara Sınav
-                      {cfg?.hasRegulation && cfg.midtermCount > 0 && (
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          (maks. {cfg.midtermCount})
-                        </span>
-                      )}
-                    </SelectItem>
-                    <SelectItem value="Final">
-                      Yarıyıl Sonu
-                      {cfg?.hasRegulation && cfg.finalCount > 0 && (
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          (maks. {cfg.finalCount})
-                        </span>
-                      )}
-                    </SelectItem>
+                    {templates.map((t) => {
+                      const used = usedTemplateNames.has(t.name);
+                      return (
+                        <SelectItem key={t.name} value={t.name} disabled={used}>
+                          {t.name}
+                          <span className="ml-1.5 text-xs text-muted-foreground">{t.shortName}</span>
+                          {used && <span className="ml-1.5 text-xs text-amber-600">(kullanıldı)</span>}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
-              )}
-              {isAtLimit && (
-                <p className="text-xs text-amber-600">
-                  Bu tür için izin verilen sınav sayısına ({limitCount}) ulaşıldı. Devam edebilirsiniz ancak yönerge sınırını aşacaksınız.
-                </p>
-              )}
-            </div>
+              </Field>
 
-            {/* Sınav Adı */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Sınav Adı</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                placeholder="örn. 1. Ara Sınav"
-                className="h-9 text-sm"
-              />
-            </div>
+              {/* Row 2: Sınav Adı | Kısa Ad */}
+              <Field label="Sınav Adı">
+                <Input
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  placeholder="örn. 1. Ara Sınav"
+                  className="h-9 text-sm"
+                />
+              </Field>
+              <Field label="Kısa Ad">
+                <Input
+                  value={form.shortName}
+                  onChange={(e) => set('shortName', e.target.value)}
+                  placeholder="örn. V1"
+                  className="h-9 text-sm"
+                  maxLength={20}
+                />
+              </Field>
 
-            {/* Kısa Ad */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Kısa Ad</Label>
-              <Input
-                value={form.shortName}
-                onChange={(e) => set('shortName', e.target.value)}
-                placeholder="örn. V1"
-                className="h-9 text-sm"
-                maxLength={20}
-              />
-            </div>
+              {/* Row 3: Tarih ve Saat | Süre */}
+              <Field label="Tarih ve Saat">
+                <Input
+                  type="datetime-local"
+                  value={form.dateLocal}
+                  onChange={(e) => set('dateLocal', e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </Field>
+              <Field label="Süre (dakika)">
+                <Input
+                  type="number"
+                  min={1}
+                  value={form.durationMinutes}
+                  onChange={(e) => set('durationMinutes', e.target.value)}
+                  placeholder="örn. 90 (opsiyonel)"
+                  className="h-9 text-sm"
+                />
+              </Field>
 
-            {/* Etki Oranı */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Etki Oranı (%)</Label>
-                <span className="text-xs text-muted-foreground">
-                  Kalan: %{Math.max(0, remainingWeight)}
-                  {/* Fix 4: show bounds label only when at least one bound exists */}
-                  {(minBound != null || maxBound != null) && (
-                    <>
-                      {' · Yönerge: '}
-                      {minBound != null && maxBound != null
-                        ? `%${minBound}–%${maxBound}`
-                        : minBound != null
-                          ? `en az %${minBound}`
-                          : `en çok %${maxBound}`}
-                    </>
+              {/* Row 4: Etki Oranı + Kilitli + full hint (spans both columns) */}
+              <div className="sm:col-span-2">
+                <Label className="mb-1 block text-xs font-medium text-muted-foreground">Etki Oranı (%)</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={weightValue}
+                    onChange={(e) => set('weight', e.target.value)}
+                    className="h-9 w-28 text-sm"
+                    placeholder="örn. 40"
+                    readOnly={isWeightLocked}
+                    disabled={isWeightLocked}
+                  />
+                  {isWeightLocked && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                      <Lock className="h-3 w-3" /> Kilitli
+                    </span>
                   )}
-                </span>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    En fazla %{maxBound ?? '—'} · Kullanılan %{usedOfType} · Kalan %{Math.max(0, remainingWeight)}
+                  </span>
+                </div>
+                {weightOutOfBounds && (
+                  <p className="mt-1 text-xs text-amber-600">{buildBoundsMessage()}</p>
+                )}
+                {isAtLimit && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Bu tür için izin verilen sınav sayısına ({limitCount}) ulaşıldı. Devam edebilirsiniz ancak yönerge sınırını aşacaksınız.
+                  </p>
+                )}
               </div>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                value={form.weight}
-                onChange={(e) => set('weight', e.target.value)}
-                className="h-9 text-sm"
-                placeholder="örn. 40"
-              />
-              {weightOutOfBounds && (
-                <p className="text-xs text-amber-600">{buildBoundsMessage()}</p>
-              )}
+
+              {/* Row 5 (full width): Derslikler */}
+              <div className="sm:col-span-2">
+                <Label className="mb-1 block text-xs font-medium text-muted-foreground">Derslikler</Label>
+                <ClassroomMultiSelect
+                  classrooms={cfg?.classrooms ?? []}
+                  value={form.classroomIds}
+                  onChange={(ids) => set('classroomIds', ids)}
+                />
+                {selectedClassrooms.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {selectedClassrooms.map((c) => (
+                      <span
+                        key={c.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                      >
+                        {c.name}
+                        <button
+                          type="button"
+                          aria-label={`${c.name} kaldır`}
+                          onClick={() => set('classroomIds', form.classroomIds.filter((id) => id !== c.id))}
+                          className="text-indigo-400 hover:text-indigo-700"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 6 (full width): Açıklama */}
+              <div className="sm:col-span-2">
+                <Label className="mb-1 block text-xs font-medium text-muted-foreground">Açıklama</Label>
+                <Textarea
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  placeholder="Opsiyonel açıklama"
+                  rows={2}
+                  className="min-h-0 resize-none text-sm"
+                />
+              </div>
             </div>
 
-            {/* Tarih + Saat */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Tarih ve Saat</Label>
-              <Input
-                type="datetime-local"
-                value={form.dateLocal}
-                onChange={(e) => set('dateLocal', e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-
-            {/* Süre */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Süre (dakika)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={form.durationMinutes}
-                onChange={(e) => set('durationMinutes', e.target.value)}
-                placeholder="örn. 90 (opsiyonel)"
-                className="h-9 text-sm"
-              />
-            </div>
-
-            {/* Derslikler */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Derslikler</Label>
-              <ClassroomMultiSelect
-                classrooms={cfg?.classrooms ?? []}
-                value={form.classroomIds}
-                onChange={(ids) => set('classroomIds', ids)}
-              />
-            </div>
-
-            {/* Açıklama */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Açıklama</Label>
-              <textarea
-                value={form.description}
-                onChange={(e) => set('description', e.target.value)}
-                placeholder="Opsiyonel açıklama"
-                rows={2}
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              />
-            </div>
-
-            {/* İlan */}
-            <div className="flex items-center gap-3 rounded-lg border p-3">
+            {/* Announce switch — single inline row, not a card */}
+            <div className="mt-3 flex items-center gap-2.5 border-t pt-3">
               <Switch
                 checked={form.isAnnouncedToStudents}
                 onCheckedChange={(v) => set('isAnnouncedToStudents', v)}
+                className="data-[state=checked]:bg-emerald-500"
               />
-              <div>
-                <Label className="text-sm font-medium">Öğrencilere ilan et</Label>
-                <p className="text-xs text-muted-foreground">
-                  Açılırsa öğrenciler sınav bilgisini görebilir.
-                </p>
-              </div>
+              <Label className="text-sm font-medium">Öğrencilere ilan et</Label>
+              <span className="text-xs text-muted-foreground">Açılırsa öğrenciler sınav bilgisini görebilir.</span>
+            </div>
+
+            {submitError && (
+              <p className="mt-3 text-sm text-destructive">{submitError}</p>
+            )}
+
+            {/* Footer */}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+                İptal
+              </Button>
+              <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Kaydet
+              </Button>
             </div>
           </div>
         )}
+      </DraggableDialogContent>
+    </DraggableDialog>
+  );
+}
 
-        {submitError && (
-          <p className="text-sm text-destructive">{submitError}</p>
-        )}
+// ── small presentational helpers ────────────────────────────────
+interface FieldProps {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            İptal
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || isPending}>
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Kaydet
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+function Field({ label, hint, children }: FieldProps) {
+  return (
+    <div>
+      <Label className="mb-1 flex items-center justify-between text-xs font-medium text-muted-foreground">
+        <span>{label}</span>
+        {hint && <span className="font-normal italic">{hint}</span>}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function TypeBadge({ type }: { type: GradeComponentType }) {
+  const label = type === 'Midterm' ? 'Ara Sınav' : type === 'Final' ? 'Yarıyıl Sonu' : 'Diğer';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+        type === 'Midterm' && 'bg-indigo-100 text-indigo-700',
+        type === 'Final' && 'bg-violet-100 text-violet-700',
+        type === 'Other' && 'bg-slate-100 text-slate-700',
+      )}
+    >
+      {label}
+    </span>
   );
 }
